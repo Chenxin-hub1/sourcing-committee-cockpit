@@ -1,6 +1,6 @@
 # Windows 免安装运行（没有管理员权限、装不了 Docker 时用）
 
-`python/` 是 Python 3.12 官方免安装版 + 全部依赖库（与 `backend/uv.lock` 同版本），解压即用，不改注册表、不需要管理员。仓库根目录的 `start.bat` 用它启动服务，监听 8031 端口。
+`python/` 是 Python 3.12 官方免安装版 + 全部依赖库（与 `backend/uv.lock` 同版本），解压即用，不改注册表、不需要管理员。仓库根目录的 `start.bat` 用它启动服务，端口取 `.env` 的 `SC_PORT`（默认 8031；IT 配好域名后改成 80，地址就是 `http://sourcing-cockpit.zf-lifetec.com/`，不带端口号）。
 
 ## 首次启动
 
