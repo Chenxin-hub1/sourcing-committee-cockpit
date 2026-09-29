@@ -8,7 +8,7 @@ if not exist "%~dp0.env" (
   pause
   exit /b 1
 )
-echo Sourcing Committee Cockpit is starting on http://localhost:8062/
+echo Sourcing Committee Cockpit is starting on http://localhost:8031/
 echo Keep this window open. Close it (or press Ctrl+C) to stop the service.
-"%~dp0windows-portable\python\python.exe" -m uvicorn app.main:app --host 0.0.0.0 --port 8062 --workers 1
+"%~dp0windows-portable\python\python.exe" -m uvicorn app.main:app --host 0.0.0.0 --port 8031 --workers 1
 pause

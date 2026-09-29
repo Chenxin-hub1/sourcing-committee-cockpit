@@ -4,7 +4,7 @@
 
 ## 前提
 
-> 服务器上没有管理员权限、装不了 Docker？看 [windows-portable/README.md](windows-portable/README.md)：免安装 Python 运行时，`git clone` 后双击 `start.bat` 即可。
+> 服务器上没有管理员权限、装不了 Docker？看 [windows-portable/README.md](windows-portable/README.md)：免安装 Python 运行时，`git clone` 后双击 `start.bat` 即可（这条路监听 **8031** 端口，Docker 那条路是 8062）。
 
 - 一台内网 Linux 服务器，能访问外网（拉基础镜像）或已有 Docker 镜像缓存
 - 服务器上已安装 **Docker Engine + Docker Compose**（`docker compose version` 能出版本号即可；没有则让 IT 装，或参考官方文档 docs.docker.com/engine/install）
@@ -45,7 +45,7 @@ Compose 通过 `SC_UID` / `SC_GID` 指定容器身份，默认均为 1000；`dat
 
 | 项 | 填什么 |
 | --- | --- |
-| `SC_PUBLIC_URL` | 同事访问的地址，如 `http://<服务器IP>:8062/`（提醒邮件里的链接前缀） |
+| `SC_PUBLIC_URL` | 同事访问的地址，如 `http://<服务器IP>:8062/`（免安装方式是 `:8031/`；提醒邮件里的链接前缀） |
 | `SC_SEED_ON_EMPTY` | `false`（正式库从空开始，不灌 22 条演示案例） |
 | `SC_TIMEZONE` | `Europe/Berlin`（登记截止周一 23:59 按这个时区；文件名日期也是） |
 | `SC_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` | 领导本人的邮箱（xiangwei.chen@zf-lifetec.com）+ 初始密码；他首次登录后自己改密码 |

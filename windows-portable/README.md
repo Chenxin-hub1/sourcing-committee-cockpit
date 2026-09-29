@@ -1,6 +1,6 @@
 # Windows 免安装运行（没有管理员权限、装不了 Docker 时用）
 
-`python/` 是 Python 3.12 官方免安装版 + 全部依赖库（与 `backend/uv.lock` 同版本），解压即用，不改注册表、不需要管理员。仓库根目录的 `start.bat` 用它启动服务，监听 8062 端口。
+`python/` 是 Python 3.12 官方免安装版 + 全部依赖库（与 `backend/uv.lock` 同版本），解压即用，不改注册表、不需要管理员。仓库根目录的 `start.bat` 用它启动服务，监听 8031 端口。
 
 ## 首次启动
 
@@ -13,7 +13,7 @@ notepad .env        # 按 DEPLOY.md「上线前清单」填：SC_PUBLIC_URL、SC
 .\start.bat
 ```
 
-窗口里出现 `Application startup complete` 就好了，浏览器打开 http://localhost:8062/ 。数据库和上传文件在 `backend\data\`，备份就是复制这个文件夹。
+窗口里出现 `Application startup complete` 就好了，浏览器打开 http://localhost:8031/ 。数据库和上传文件在 `backend\data\`，备份就是复制这个文件夹。
 
 ## 关掉窗口服务就停：让它常驻
 
@@ -37,7 +37,7 @@ git pull
 
 ## 同事打不开
 
-服务在本机能开、别的电脑打不开，是服务器防火墙没放行 8062 端口。没有管理员权限改不了，请 IT 放行 TCP 8062 入站。
+服务在本机能开、别的电脑打不开，是服务器防火墙没放行 8031 端口。没有管理员权限改不了，请 IT 放行 TCP 8031 入站。
 
 ## 重新打包运行时（维护者）
 
