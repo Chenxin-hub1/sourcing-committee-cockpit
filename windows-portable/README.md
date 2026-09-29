@@ -17,14 +17,19 @@ notepad .env        # 按 DEPLOY.md「上线前清单」填：SC_PUBLIC_URL、SC
 
 ## 关掉窗口服务就停：让它常驻
 
-任务计划程序（Task Scheduler）不需要管理员就能给自己的账号建任务：
+任务计划程序（Task Scheduler）不需要管理员就能给自己的账号建任务。后台用 `start-background.bat`（输出写到 `backend\data\server.log`），手动调试才用 `start.bat`。
 
-1. 开始菜单搜 "任务计划程序" → 右侧 "创建任务"。
-2. 常规：名称 `Sourcing Cockpit`；选 "不管用户是否登录都要运行"；"不存储密码" 这一项不要勾（需要存密码，否则你注销后服务会停）。
-3. 触发器：新建 → "启动时"。
-4. 操作：新建 → 程序填 `D:\apps\sourcing-cockpit\start.bat`，起始于填 `D:\apps\sourcing-cockpit`。
-5. 设置：勾 "如果任务失败，按以下频率重新启动"，1 分钟，3 次。
-6. 确定后右键任务 → 运行。以后重启服务器会自动起来。
+1. 先关掉正在跑的 start.bat 窗口（Ctrl+C），否则端口被占。
+2. 开始菜单搜 "任务计划程序" → 右侧 "创建任务"（不是"创建基本任务"）。
+3. 常规：名称 `Sourcing Cockpit`；选 "不管用户是否登录都要运行"；"不存储密码" 不要勾。
+4. 触发器：新建 → 开始任务选 "启动时"。
+5. 操作：新建 → 程序或脚本填 `D:\apps\sourcing-committee-cockpit\start-background.bat`，"起始于" 填 `D:\apps\sourcing-committee-cockpit`。
+6. 条件：取消勾选 "只有在计算机使用交流电源时才启动"（服务器一般无所谓，但勾着有时会不启动）。
+7. 设置：勾 "如果任务失败，按以下频率重新启动" 1 分钟、3 次；取消勾选 "如果任务运行时间超过以下时间，停止任务"。
+8. 确定，输入 Windows 密码。
+9. 在任务列表里右键 `Sourcing Cockpit` → 运行。浏览器打开地址能看到页面就成了。
+
+看日志：记事本打开 `backend\data\server.log`。重启服务：任务右键 结束，再 运行。
 
 ## 更新到新版本
 
@@ -33,7 +38,7 @@ cd D:\apps\sourcing-cockpit
 git pull
 ```
 
-然后在任务计划程序里 结束 → 运行 一次（或关掉 start.bat 窗口重开）。数据不受影响。
+然后在任务计划程序里 结束 → 运行 一次（或关掉 start.bat 窗口重开）。数据不受影响。日志文件会一直追加，太大时停服务后删掉即可。
 
 ## 同事打不开
 
