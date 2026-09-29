@@ -1,0 +1,34 @@
+[project]
+name = "sourcing-cockpit"
+version = "0.1.0"
+description = "Sourcing Committee Cockpit — template-faithful UI + persistent FastAPI backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0.30",
+    "aiosqlite>=0.20",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    "tzdata>=2024.1",
+    "aiosmtplib>=3.0",
+    "httpx>=0.27",
+    "openpyxl>=3.1.5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "ruff==0.16.8",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["."]

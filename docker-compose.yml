@@ -1,0 +1,58 @@
+services:
+  cockpit:
+    build: ./backend
+    container_name: sourcing-cockpit
+    user: "${SC_UID:-1000}:${SC_GID:-1000}"
+    ports:
+      # 对外主机端口 8062（8000 常被占用）；容器内仍监听 8000
+      - "8062:8000"
+    environment:
+      # 对外访问地址 —— 决定提醒消息里「Open Action Case」链接的前缀，部署时改成服务器实际地址
+      SC_PUBLIC_URL: ${SC_PUBLIC_URL:-http://localhost:8062/}
+      # 首次启动且库为空时，是否装载与模板一致的演示数据
+      SC_SEED_ON_EMPTY: ${SC_SEED_ON_EMPTY:-true}
+      # 提醒检查的参考时区（IANA 名；"今天/到期"的判断基准，默认北美东部）
+      SC_TIMEZONE: ${SC_TIMEZONE:-America/New_York}
+      # 个人账号（v3 Phase-6）：允许注册的公司邮箱域名；首个 Sourcing 管理员（还没有管理员时启动建立）
+      SC_ALLOWED_EMAIL_DOMAINS: ${SC_ALLOWED_EMAIL_DOMAINS:-zf.com,zf-lifetec.com}
+      SC_BOOTSTRAP_ADMIN_EMAIL: ${SC_BOOTSTRAP_ADMIN_EMAIL:-}
+      SC_BOOTSTRAP_ADMIN_PASSWORD: ${SC_BOOTSTRAP_ADMIN_PASSWORD:-}
+      # 提醒邮件：公司 SMTP 中继（host 为空 = 该通道仅记日志）
+      SC_SMTP_HOST: ${SC_SMTP_HOST:-}
+      SC_SMTP_PORT: ${SC_SMTP_PORT:-25}
+      SC_SMTP_USER: ${SC_SMTP_USER:-}
+      SC_SMTP_PASSWORD: ${SC_SMTP_PASSWORD:-}
+      SC_SMTP_STARTTLS: ${SC_SMTP_STARTTLS:-false}
+      SC_SMTP_FROM: ${SC_SMTP_FROM:-sourcing-cockpit@zf.com}
+      # 提醒 Teams：webhook（url 为空 = 该通道仅记日志；format: teams=频道 / flow=按收件人私发）
+      SC_TEAMS_WEBHOOK_URL: ${SC_TEAMS_WEBHOOK_URL:-}
+      SC_TEAMS_WEBHOOK_FORMAT: ${SC_TEAMS_WEBHOOK_FORMAT:-teams}
+      # Teams Graph 直发频道（两个 ID 配齐 + 下面的 Graph 凭据即启用，优先于 webhook）
+      SC_TEAMS_TEAM_ID: ${SC_TEAMS_TEAM_ID:-}
+      SC_TEAMS_CHANNEL_ID: ${SC_TEAMS_CHANNEL_ID:-}
+      # Graph 接入（SharePoint 建单 / 演示文件 / 邮件兜底共用一套凭据；留空 = 对应功能停用）。
+      # 容器读不到宿主机的 .env 文件，必须在这里逐项传进去
+      SC_GRAPH_TENANT_ID: ${SC_GRAPH_TENANT_ID:-}
+      SC_GRAPH_CLIENT_ID: ${SC_GRAPH_CLIENT_ID:-}
+      SC_GRAPH_CLIENT_SECRET: ${SC_GRAPH_CLIENT_SECRET:-}
+      SC_SP_SITE_URL: ${SC_SP_SITE_URL:-}
+      SC_SP_LIST_NAME: ${SC_SP_LIST_NAME:-}
+      SC_SP_LIBRARY_NAME: ${SC_SP_LIBRARY_NAME:-}
+      SC_SP_FOLDER: ${SC_SP_FOLDER:-Sourcing Cockpit}
+      SC_GRAPH_SENDER: ${SC_GRAPH_SENDER:-}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    # 日志上限：json-file 默认不封顶，长期运行的容器日志会持续膨胀
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # 镜像是 python-slim（没有 curl），用标准库探测轻量的 /api/health（不触发数据库与每日检查）
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

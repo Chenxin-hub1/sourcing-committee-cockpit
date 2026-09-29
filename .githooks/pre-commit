@@ -1,0 +1,12 @@
+#!/bin/sh
+# >>> sync-gemini-md >>>
+# CLAUDE.md 和 GEMINI.md 互为镜像（Claude Code 只认前者，Antigravity / Gemini CLI 只认后者）。
+# 任一份进了暂存区，就先跑一次同步（mtime 新的覆盖旧的），再把两份一起加进本次提交，
+# 保证提交进去的永远是同一份内容。本地即时同步由 systemd path unit 负责，见 sync-gemini-md。
+if ! git diff --cached --quiet -- CLAUDE.md || ! git diff --cached --quiet -- GEMINI.md; then
+	"$(git rev-parse --show-toplevel)/.githooks/sync-gemini-md"
+	git add CLAUDE.md GEMINI.md
+fi
+# <<< sync-gemini-md <<<
+
+exit 0

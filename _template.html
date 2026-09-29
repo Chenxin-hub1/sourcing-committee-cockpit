@@ -1,0 +1,2314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sourcing Committee Cockpit</title>
+<style>
+  :root{
+    --bg:#F3F4F6;
+    --surface:#FFFFFF;
+    --ink:#23262B;
+    --ink-soft:#666B76;
+    --ink-faint:#9AA0AA;
+    --border:#E1E3E8;
+    --border-strong:#CBCFD6;
+    --accent:#E8580A;
+    --accent-dark:#C24A08;
+    --accent-tint:#FCE9DE;
+    --green:#1E8E5A;
+    --green-tint:#E4F5EC;
+    --amber:#B8790A;
+    --amber-tint:#FCF1DA;
+    --red:#C13A2E;
+    --red-tint:#FBEAE7;
+    --gray:#8A909B;
+    --gray-tint:#EDEEF1;
+    --header:#23262B;
+    --radius:8px;
+    --shadow: 0 1px 2px rgba(20,20,22,0.04), 0 1px 8px rgba(20,20,22,0.04);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+    font-size:14px;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font-family:inherit;}
+  a{color:var(--accent);text-decoration:none;}
+  a:hover{text-decoration:underline;}
+  ::selection{background:var(--accent-tint);}
+
+  /* ---------- Header ---------- */
+  .topbar{
+    background:var(--header);
+    color:#fff;
+    display:flex;
+    align-items:center;
+    gap:24px;
+    padding:0 20px;
+    height:52px;
+    position:sticky;top:0;z-index:50;
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14.5px;letter-spacing:.2px;white-space:nowrap;}
+  .brand .mark{
+    width:22px;height:22px;border-radius:5px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;
+  }
+  .brand .sub{color:#B7BBC3;font-weight:400;font-size:12px;border-left:1px solid #454951;padding-left:10px;margin-left:2px;}
+  .navtabs{display:flex;gap:2px;margin-left:6px;overflow-x:auto;scrollbar-width:none;}
+  .navtabs::-webkit-scrollbar{display:none;}
+  .navtabs button{flex:none;}
+  .navtabs button{
+    background:transparent;border:none;color:#C7CAD1;padding:8px 14px;border-radius:6px;
+    font-size:13px;cursor:pointer;font-weight:500;
+  }
+  .navtabs button:hover{background:#2F323A;color:#fff;}
+  .navtabs button.active{background:#33353D;color:#fff;}
+  .navtabs button.active::after{content:'';}
+  .topbar .gsearch{
+    margin-left:auto;display:flex;align-items:center;background:#33353D;border:1px solid #43454D;
+    border-radius:6px;padding:0 10px;height:32px;width:280px;
+  }
+  .topbar .gsearch input{
+    background:transparent;border:none;outline:none;color:#fff;font-size:13px;width:100%;padding:0 6px;
+  }
+  .topbar .gsearch input::placeholder{color:#8A8E97;}
+  .topbar .gsearch svg{flex:none;opacity:.6;}
+  .admin-toggle{flex:none;margin-left:10px;height:30px;padding:0 11px;border-radius:15px;border:1px solid #4A4D56;background:#33353D;color:#C7CAD1;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .admin-toggle.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn-danger-sm{background:#fff;color:var(--red);border:1px solid #EFC2BC;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .btn-danger-sm:hover{background:var(--red-tint);}
+  .confirm-inline{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--red);font-weight:600;white-space:nowrap;}
+
+  /* ---------- Layout ---------- */
+  .page{max-width:1180px;margin:0 auto;padding:24px 20px 60px;}
+  .pagehead{margin-bottom:18px;}
+  .pagehead h1{font-size:19px;margin:0 0 4px;font-weight:600;}
+  .pagehead p{margin:0;color:var(--ink-soft);font-size:13px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
+
+  /* ---------- Home / Upload ---------- */
+  .home-grid{display:grid;grid-template-columns:1.1fr 0.9fr;gap:18px;align-items:start;}
+  @media(max-width:880px){.home-grid{grid-template-columns:1fr;}}
+
+  .upload-card{padding:22px;}
+  .upload-card h2{font-size:14.5px;margin:0 0 3px;font-weight:600;}
+  .upload-card .hint{color:var(--ink-soft);font-size:12.5px;margin:0 0 16px;}
+  .dropzone{
+    border:1.5px dashed var(--border-strong);
+    border-radius:8px;
+    padding:34px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition:.15s;
+    background:#FAFAFB;
+  }
+  .dropzone:hover{border-color:var(--accent);background:var(--accent-tint);}
+  .dropzone .icon{
+    width:46px;height:46px;border-radius:10px;background:var(--accent-tint);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;margin:0 auto 12px;
+  }
+  .dropzone .title{font-weight:600;font-size:14px;margin-bottom:3px;}
+  .dropzone .example{
+    display:inline-block;margin-top:12px;background:var(--gray-tint);color:var(--ink-soft);
+    font-family:'Consolas','SFMono-Regular',Menlo,monospace;font-size:11.5px;padding:4px 9px;border-radius:5px;
+  }
+  .dropzone .small{color:var(--ink-faint);font-size:11.5px;margin-top:10px;}
+
+  .upload-progress{margin-top:16px;border-top:1px solid var(--border);padding-top:14px;display:none;}
+  .upload-progress.show{display:block;}
+  .step-row{display:flex;align-items:center;gap:9px;padding:5px 0;font-size:13px;color:var(--ink-faint);}
+  .step-row .dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--border-strong);flex:none;position:relative;}
+  .step-row.active{color:var(--ink);}
+  .step-row.active .dot{border-color:var(--accent);}
+  .step-row.done{color:var(--ink);}
+  .step-row.done .dot{border-color:var(--green);background:var(--green);}
+  .step-row.done .dot::after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);}
+  .step-row .spinner{width:10px;height:10px;border-radius:50%;border:2px solid var(--accent-tint);border-top-color:var(--accent);position:absolute;top:1px;left:1px;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .upload-success{
+    display:none;margin-top:12px;background:var(--green-tint);border:1px solid #BEE3D0;color:var(--green);
+    padding:10px 12px;border-radius:6px;font-size:12.5px;font-weight:600;
+  }
+  .upload-success.show{display:block;}
+
+  .quicksearch-card{padding:22px;margin-top:18px;}
+  .quicksearch-card h2{font-size:14.5px;margin:0 0 3px;font-weight:600;}
+  .quicksearch-card p.hint{color:var(--ink-soft);font-size:12.5px;margin:0 0 14px;}
+  .qs-input-wrap{position:relative;}
+  .qs-input-wrap svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);opacity:.45;}
+  .qs-input{
+    width:100%;padding:14px 14px 14px 40px;border:1.5px solid var(--border-strong);border-radius:8px;
+    font-size:15px;outline:none;background:#FAFAFB;
+  }
+  .qs-input:focus{border-color:var(--accent);background:#fff;}
+  .qs-chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+  .qs-chip{
+    background:var(--gray-tint);border:1px solid var(--border);color:var(--ink-soft);font-size:11.5px;
+    padding:4px 9px;border-radius:20px;cursor:pointer;
+  }
+  .qs-chip:hover{border-color:var(--accent);color:var(--accent);}
+  .qs-fields{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:12px;color:var(--ink-faint);font-size:11px;}
+
+  /* KPI strip */
+  .kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px;}
+  @media(max-width:880px){.kpi-strip{grid-template-columns:repeat(2,1fr);}}
+  .kpi{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px 14px 12px;cursor:pointer;transition:.12s;box-shadow:var(--shadow);
+  }
+  .kpi:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .kpi .num{font-size:23px;font-weight:700;line-height:1;}
+  .kpi .lbl{color:var(--ink-soft);font-size:11.5px;margin-top:6px;display:flex;align-items:center;gap:6px;}
+  .rag{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none;}
+  .rag.g{background:var(--green);} .rag.y{background:var(--amber);} .rag.r{background:var(--red);} .rag.n{background:var(--gray);} .rag.b{background:#3E5A9C;}
+
+  .side-panel{padding:20px;}
+  .side-panel h3{font-size:13px;margin:0 0 10px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.4px;}
+  .activity-row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:12.5px;}
+  .activity-row:last-child{border-bottom:none;}
+  .activity-row .adot{width:7px;height:7px;border-radius:50%;margin-top:5px;flex:none;}
+  .activity-row .atxt b{font-weight:600;}
+  .activity-row .atime{color:var(--ink-faint);font-size:11px;}
+
+
+  /* ---------- Filters / Database ---------- */
+  .filters-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;}
+  .filters-bar select, .filters-bar .searchbox{
+    border:1px solid var(--border-strong);border-radius:6px;padding:7px 9px;font-size:12.5px;background:#fff;color:var(--ink);
+  }
+  .filters-bar select{cursor:pointer;}
+  .filters-bar .searchbox{flex:1;min-width:180px;position:relative;}
+  .filters-bar .searchbox input{border:none;outline:none;width:100%;font-size:12.5px;}
+  .filters-bar .resultcount{color:var(--ink-soft);font-size:12px;margin-left:auto;white-space:nowrap;}
+  .filters-bar .clearbtn{background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:6px 4px;}
+
+  table.data-table{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;}
+  .data-table thead th{
+    text-align:left;background:#FAFAFB;color:var(--ink-soft);font-weight:600;font-size:11px;text-transform:uppercase;
+    letter-spacing:.3px;padding:10px 10px;border-bottom:1px solid var(--border);white-space:nowrap;
+  }
+  .data-table tbody td{padding:10px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .data-table tbody tr{cursor:pointer;}
+  .data-table tbody tr:hover{background:var(--accent-tint);}
+  .mono{font-family:'Consolas','SFMono-Regular',Menlo,monospace;font-size:11.5px;}
+  .pn-link{font-weight:600;color:var(--ink);}
+  .swat{color:var(--ink-faint);font-size:11px;}
+
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;white-space:nowrap;}
+  .badge.approved{background:var(--green-tint);color:var(--green);}
+  .badge.rejected{background:var(--red-tint);color:var(--red);}
+  .badge.conditional{background:var(--amber-tint);color:var(--amber);}
+  .badge.pending{background:#E8EDF7;color:#3E5A9C;}
+  .badge.open{background:var(--amber-tint);color:var(--amber);}
+  .badge.overdue{background:var(--red-tint);color:var(--red);}
+  .badge.closed{background:var(--green-tint);color:var(--green);}
+  .badge.noaction{background:var(--gray-tint);color:var(--gray);}
+  .badge.resub{background:var(--amber-tint);color:var(--amber);}
+  .no-action-txt{color:var(--ink-faint);font-size:12px;}
+
+  .period-toggle{display:inline-flex;background:var(--gray-tint);border-radius:6px;padding:2px;gap:2px;}
+  .period-toggle button{border:none;background:transparent;font-size:11px;font-weight:600;color:var(--ink-soft);padding:5px 10px;border-radius:5px;cursor:pointer;}
+  .period-toggle button.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08);}
+  .period-week-select{border:1px solid var(--border-strong);border-radius:6px;padding:4px 7px;font-size:11.5px;background:#fff;margin-left:6px;}
+  .breakdown-row-title{font-size:12px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.3px;margin:22px 0 10px;}
+  .tile-row{display:grid;gap:10px;}
+  .tile-row.four{grid-template-columns:repeat(4,1fr);}
+  .tile-row.three{grid-template-columns:repeat(3,1fr);}
+  @media(max-width:880px){.tile-row.four{grid-template-columns:repeat(2,1fr);} .tile-row.three{grid-template-columns:repeat(2,1fr);}}
+  .tile{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:13px 14px;cursor:pointer;transition:.12s;box-shadow:var(--shadow);}
+  .tile:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .tile .num{font-size:21px;font-weight:700;}
+  .tile .lbl{color:var(--ink-soft);font-size:11px;margin-top:4px;display:flex;align-items:center;gap:5px;}
+
+  .empty-state{padding:50px 20px;text-align:center;color:var(--ink-faint);}
+  .empty-state svg{opacity:.35;margin-bottom:10px;}
+
+  /* ---------- Dashboard ---------- */
+  .dash-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px;}
+  @media(max-width:880px){.dash-kpis{grid-template-columns:repeat(2,1fr);}}
+  .dashcard{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);cursor:pointer;transition:.12s;}
+  .dashcard:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .dashcard .top{display:flex;justify-content:space-between;align-items:flex-start;}
+  .dashcard .num{font-size:28px;font-weight:700;}
+  .dashcard .lbl{color:var(--ink-soft);font-size:12px;margin-top:6px;}
+  .dash-section-title{font-size:13px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.4px;margin:26px 0 10px;}
+
+  .breakdown-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:880px){.breakdown-grid{grid-template-columns:1fr;}}
+  .breakdown-card{padding:16px 18px;}
+  .breakdown-card h4{margin:0 0 12px;font-size:12.5px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.3px;}
+  .bar-row{display:flex;align-items:center;gap:10px;font-size:12px;margin-bottom:9px;}
+  .bar-row .blabel{width:120px;flex:none;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bar-track{flex:1;height:8px;background:var(--gray-tint);border-radius:4px;overflow:hidden;}
+  .bar-fill{height:100%;background:var(--accent);border-radius:4px;}
+  .bar-num{width:22px;text-align:right;color:var(--ink-faint);font-size:11.5px;}
+
+  /* ---------- Case Detail ---------- */
+  .backlink{display:inline-flex;align-items:center;gap:5px;color:var(--ink-soft);font-size:12.5px;cursor:pointer;margin-bottom:14px;}
+  .backlink:hover{color:var(--accent);}
+  .detail-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px;}
+  .detail-header .titles h1{font-size:19px;margin:0 0 4px;font-weight:700;}
+  .detail-header .titles .meta{color:var(--ink-soft);font-size:12.5px;display:flex;gap:14px;flex-wrap:wrap;}
+  .detail-header .meta .mono{color:var(--ink-faint);}
+  .decision-pill{padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;text-align:center;white-space:nowrap;}
+
+  .detail-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;align-items:start;}
+  @media(max-width:920px){.detail-grid{grid-template-columns:1fr;}}
+
+  .section-card{padding:18px 20px;margin-bottom:16px;}
+  .section-card h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);margin:0 0 14px;font-weight:600;}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;}
+  .info-item .k{font-size:11px;color:var(--ink-faint);margin-bottom:2px;}
+  .info-item .v{font-size:13px;font-weight:500;}
+  .discussion-box{background:#FAFAFB;border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--ink);line-height:1.6;}
+  .followup-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;}
+  .link-row{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12.5px;}
+  .status-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .status-tile{flex:1;min-width:150px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;}
+  .status-tile .k{font-size:10.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;}
+  .edit-input{width:100%;border:1px solid var(--border-strong);border-radius:6px;padding:7px 9px;font-size:12.5px;font-family:inherit;color:var(--ink);background:#fff;}
+  .edit-input:focus{outline:none;border-color:var(--accent);}
+  textarea.edit-input{resize:vertical;}
+
+  /* Lifecycle timeline - signature element */
+  .timeline-card{padding:20px 22px;}
+  .timeline-card h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);margin:0 0 4px;font-weight:600;}
+  .timeline-card .sub{color:var(--ink-faint);font-size:11.5px;margin-bottom:18px;}
+  .tl{position:relative;padding-left:26px;}
+  .tl-item{position:relative;padding-bottom:22px;cursor:pointer;}
+  .tl-item:last-child{padding-bottom:0;}
+  .tl-item::before{content:'';position:absolute;left:-26px;top:22px;bottom:-2px;width:2px;background:var(--border-strong);}
+  .tl-item:last-child::before{display:none;}
+  .tl-node{
+    position:absolute;left:-33px;top:2px;width:16px;height:16px;border-radius:50%;border:3px solid #fff;
+    box-shadow:0 0 0 1.5px var(--border-strong);
+  }
+  .tl-node.g{background:var(--green);box-shadow:0 0 0 1.5px var(--green);}
+  .tl-node.y{background:var(--amber);box-shadow:0 0 0 1.5px var(--amber);}
+  .tl-node.r{background:var(--red);box-shadow:0 0 0 1.5px var(--red);}
+  .tl-node.b{background:#3E5A9C;box-shadow:0 0 0 1.5px #3E5A9C;}
+  .tl-body{background:#FAFAFB;border:1px solid var(--border);border-radius:7px;padding:11px 14px;transition:.12s;}
+  .tl-item.selected .tl-body{border-color:var(--accent);background:var(--accent-tint);}
+  .tl-item:hover .tl-body{border-color:var(--border-strong);}
+  .tl-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;}
+  .tl-week{font-weight:700;font-size:12.5px;}
+  .tl-case{color:var(--ink-faint);font-size:11px;margin-left:6px;}
+  .tl-note{color:var(--ink-soft);font-size:12px;margin-top:4px;}
+  .tl-select-hint{font-size:10.5px;color:var(--ink-faint);margin-top:14px;text-align:center;}
+
+  .footer-note{margin-top:28px;text-align:center;color:var(--ink-faint);font-size:11px;}
+
+  /* ---------- Submit Case / Approvals ---------- */
+  .form-card{padding:22px 24px;}
+  .form-card h2{font-size:15px;margin:0 0 4px;font-weight:600;}
+  .form-card p.hint{color:var(--ink-soft);font-size:12.5px;margin:0 0 18px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;}
+  @media(max-width:700px){.form-grid{grid-template-columns:1fr;}}
+  .form-field{display:flex;flex-direction:column;gap:5px;}
+  .form-field.span2{grid-column:1/-1;}
+  .form-field label{font-size:11.5px;font-weight:600;color:var(--ink-soft);}
+  .form-field input, .form-field select, .form-field textarea{
+    border:1px solid var(--border-strong);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;
+  }
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus{outline:none;border-color:var(--accent);}
+  .form-field textarea{resize:vertical;min-height:64px;}
+  .form-actions{margin-top:18px;display:flex;align-items:center;gap:12px;}
+  .btn-primary{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:10px 20px;font-size:13.5px;font-weight:600;cursor:pointer;}
+  .btn-primary:hover{background:var(--accent-dark);}
+  .btn-secondary{background:#fff;color:var(--ink);border:1px solid var(--border-strong);border-radius:6px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer;}
+  .btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+  .btn-danger{background:#fff;color:var(--red);border:1px solid #EFC2BC;border-radius:6px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer;}
+  .btn-danger:hover{background:var(--red-tint);}
+  .route-note{background:#FAFAFB;border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:12px;color:var(--ink-soft);margin-top:16px;}
+  .submit-banner{display:none;margin-top:14px;background:var(--green-tint);border:1px solid #BEE3D0;color:var(--green);padding:10px 12px;border-radius:6px;font-size:12.5px;font-weight:600;}
+  .submit-banner.show{display:block;}
+  .block-warning{display:none;margin-top:8px;background:var(--red-tint);border:1px solid #EFC2BC;color:var(--red);padding:9px 12px;border-radius:6px;font-size:12px;font-weight:600;}
+  .screening-section{margin-top:20px;padding-top:18px;border-top:1px solid var(--border);}
+  .screening-section h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);margin:0 0 14px;font-weight:600;}
+
+  .mysub-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:12.5px;}
+  .mysub-row:last-child{border-bottom:none;}
+  .mysub-reason{color:var(--red);font-size:11.5px;margin-top:2px;}
+
+  .appr-card{padding:16px 18px;margin-bottom:14px;}
+  .appr-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .appr-top .who{font-size:12px;color:var(--ink-faint);}
+  .appr-title{font-weight:700;font-size:14px;}
+  .appr-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 18px;font-size:12.5px;margin-bottom:10px;}
+  @media(max-width:700px){.appr-grid{grid-template-columns:1fr 1fr;}}
+  .appr-actions{display:flex;gap:10px;margin-top:10px;}
+  .reject-box{display:none;margin-top:10px;}
+  .reject-box.show{display:block;}
+  .reject-box textarea{width:100%;border:1px solid var(--border-strong);border-radius:6px;padding:8px;font-size:12.5px;font-family:inherit;min-height:54px;}
+  .decided-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:12.5px;}
+  .decided-row:last-child{border-bottom:none;}
+
+  /* ---------- Follow-ups tracker ---------- */
+  .sortable-th{cursor:pointer;user-select:none;}
+  .sortable-th:hover{color:var(--ink);}
+  .sortable-th .arrow{font-size:9px;margin-left:3px;}
+  .cat-tag{display:inline-block;background:var(--gray-tint);color:var(--ink-soft);font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:4px;white-space:nowrap;}
+  .cat-tag.none{background:transparent;color:var(--ink-faint);font-weight:400;}
+  .remind-btn{background:#fff;border:1px solid var(--border-strong);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--ink);cursor:pointer;white-space:nowrap;}
+  .remind-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .remind-btn.sent{background:var(--green-tint);border-color:#BEE3D0;color:var(--green);cursor:default;}
+  .due-overdue{color:var(--red);font-weight:700;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="mark">SC</span>Sourcing Committee Cockpit<span class="sub">Lifetec SBS Procurement</span></div>
+  <div class="navtabs" id="navtabs"></div>
+  <div class="gsearch">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <input id="globalSearch" placeholder="Quick search PN, SWAT ID, supplier..." />
+  </div>
+  <button class="admin-toggle" id="adminToggle" title="Prototype only — stands in for real role-based permissions"></button>
+</div>
+
+<div class="page" id="app"></div>
+
+<script>
+/* ============================= DATA MODEL ============================= */
+const REGIONS = ["AP","EU","NA"];
+const CLUSTERS = ["Chemical","Metal","Electronics, EA and Pyro"];
+// Part types are only used to generate realistic sample part descriptions; each maps to a Cluster.
+const PART_TYPES = ["Inflators & Gas Generators","Seatbelt Webbing","Electronic Control Units","Steering Wheel Modules","Pretensioner Mechanisms","Airbag Cushions & Fabric","Buckle & Latch Systems","Plastics & Housings","Castings & Stampings","Wiring Harness & Connectors"];
+const CLUSTER_OF = {"Inflators & Gas Generators":"Electronics, EA and Pyro","Seatbelt Webbing":"Chemical","Electronic Control Units":"Electronics, EA and Pyro","Steering Wheel Modules":"Metal","Pretensioner Mechanisms":"Electronics, EA and Pyro","Airbag Cushions & Fabric":"Chemical","Buckle & Latch Systems":"Metal","Plastics & Housings":"Chemical","Castings & Stampings":"Metal","Wiring Harness & Connectors":"Electronics, EA and Pyro"};
+const SUPPLIERS = ["Meridian Safety Components","Hanwa Precision Mfg.","Delta Restraint Systems","Nordic Webbing Co.","TriStar Electronics","Yueda Precision Mfg.","Continental Fastener Group","Orion Gas Systems","Baltic Stamping Works","Summit Plastics Ltd.","Cascade Molding Inc.","Pinnacle Sensor Technologies"];
+const PROJECTS = ["SPR9 Program","ACR9 Program","CLS8 Program","Gen6 Restraint Platform","NextGen Steering Wheel","Global Buckle Program","ACR8 Refresh","China Local-for-Local Gen5"];
+const PRESENTERS = ["W. Chen","M. Okafor","L. Novak","R. Fischer","S. Iyer","J. Park","A. Baptiste","H. Meyer"];
+// Contact directory (prototype). In production this comes from the corporate directory / Entra ID.
+const CONTACTS = {"W. Chen":"w.chen@zf.com","M. Okafor":"m.okafor@zf.com","L. Novak":"l.novak@zf.com","R. Fischer":"r.fischer@zf.com",
+  "S. Iyer":"s.iyer@zf.com","J. Park":"j.park@zf.com","A. Baptiste":"a.baptiste@zf.com","H. Meyer":"h.meyer@zf.com","K. Reyes":"k.reyes@zf.com"};
+function emailFor(name){
+  if(!name) return '';
+  if(CONTACTS[name]) return CONTACTS[name];
+  if(/@/.test(name)) return name.trim();
+  const slug = name.toLowerCase().replace(/[^a-z]+/g,'.').replace(/^\.+|\.+$/g,'');
+  return slug ? slug+'@zf.com' : '';
+}
+const REMINDER_CHANNELS = ['Email','Teams','Email + Teams'];
+// Direct link to one case: this page + #case/<SWAT id>. Opening the link lands on that case (see hash routing at startup).
+function caseLink(swatId){ return (typeof location!=='undefined' ? location.href.split('#')[0] : '') + '#case/' + encodeURIComponent(swatId); }
+// One message body for both Email and Teams — enough context to act without opening the Cockpit.
+function reminderMessage(c, t){
+  return [
+    'Follow-up Task for Sourcing Case',
+    '',
+    'Part Description: ' + (c.partDescription||'—'),
+    'Part Number: ' + (c.partNumber||'—') + ((c.partNumbers&&c.partNumbers.length>1) ? ' (+' + (c.partNumbers.length-1) + ' more)' : ''),
+    'SWAT Case: ' + c.swatId,
+    '',
+    'Follow-up Task: ' + (t.task||'—'),
+    'Note: ' + (t.notes||'—'),
+    '',
+    'Due Date: ' + (t.dueDate||'—'),
+    'Owner: ' + (t.responsible||'—'),
+    '',
+    'Open Action Case: ' + caseLink(c.swatId)
+  ].join('\n');
+}
+function taskRecipient(t){ return {name: t.notify||t.responsible||'', email: t.notifyEmail||emailFor(t.notify||t.responsible), cc: t.cc||'', channel: t.channel||'Email + Teams'}; }
+const SOURCING_TYPES = ["New","C/O","GCS"];
+const DECISION_LEVELS = ["Level 2","Level 3","Level 4"];
+// Family options are a first draft — to be confirmed/extended later.
+const FAMILY_OPTIONS = ["N/A","Family Standard","Pelvic","Family 8","Family 6","Webbing"];
+const DECISION_OPTIONS = [{v:"PENDING",l:"Pending"},{v:"APPROVED",l:"Approved"},{v:"CONDITIONAL APPROVAL",l:"Conditional Approval"},{v:"REJECTED",l:"Rejected"}];
+// Illustrative only — meant to be redefined to match your own taxonomy. Multi-select: an action can carry more than one tag
+// so it surfaces under every relevant filter later (e.g. a case that's both Cost- and Timing-related).
+const ACTION_TAGS = ["Cost","Volume","Timing","Quality","Capacity","Commercial Terms","Compliance / Documentation"];
+
+// week -> approx calendar date (2026)
+function weekDate(w){
+  const jan1 = new Date(2026,0,1);
+  const d = new Date(jan1.getTime() + (w-1)*7*86400000);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+function wk(w){ return "2026-W"+String(w).padStart(2,'0'); }
+function dateToWeekNum(d){
+  const jan1 = new Date(2026,0,1);
+  const diffDays = Math.round((d - jan1) / 86400000);
+  return Math.floor(diffDays/7) + 1;
+}
+function formatDateLong(d){
+  return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+}
+// Reference time zone for the registration cutoff: North America (Eastern) — regardless of where the submitter sits.
+function getNATime(){
+  const now = new Date();
+  return new Date(now.toLocaleString('en-US', {timeZone:'America/New_York'}));
+}
+// Committee meets every Wednesday. Registration for a given Wednesday closes end-of-day the preceding
+// Monday, Eastern Time. Once that cutoff passes, the earliest selectable meeting moves to the following Wednesday.
+function getEarliestSelectableWednesday(){
+  const naNow = getNATime();
+  const day = naNow.getDay(); // 0 Sun .. 6 Sat
+  const diffToWed = (3 - day + 7) % 7;
+  const candidate = new Date(naNow.getFullYear(), naNow.getMonth(), naNow.getDate() + diffToWed);
+  const cutoff = new Date(candidate.getFullYear(), candidate.getMonth(), candidate.getDate() - 2, 23, 59, 59, 999); // Monday EOD
+  if(naNow > cutoff) candidate.setDate(candidate.getDate() + 7);
+  return candidate;
+}
+function upcomingWednesdays(count){
+  const first = getEarliestSelectableWednesday();
+  const out = [];
+  for(let i=0;i<count;i++){
+    const d = new Date(first.getFullYear(), first.getMonth(), first.getDate() + i*7);
+    out.push(d);
+  }
+  return out;
+}
+
+let CASE_SEQ = 1;
+function mkCase(o){
+  const base = {
+    id: 'C'+String(CASE_SEQ++).padStart(4,'0'),
+    weekNum:1, caseNumber:1, swatId:'', partNumber:'', partDescription:'',
+    region:'AP', project:'', family:'', cluster:'', parentPF:'', partFamilyCode:'',
+    sourcingType:'New', recommendedSupplier:'', presenter:'', decisionLevel:'Level 2',
+    peakYearSpend:0, leadTime:'', lifetimeSpend:0,
+    committeeDiscussion:'', meetingDecision:'APPROVED',
+    caseStatus:'Open', actionStatus:null,
+    meetingDateLabel:null, partNumbers:null, createdDate:null, submitterComments:'',
+    finalDocLink:'',       // link to the final PPT / supporting document (SharePoint/OneDrive); required when all follow-up actions are closed
+    sourcingPresentationLink:'', // link to the sourcing presentation deck; required whenever a Sourcing Decision other than Pending is recorded
+    followUps:[],
+    closure:{status:'Open',closureDate:'—',closureComment:'—',closureEvidence:'—'},
+    meetingLink:'#'
+  };
+  return Object.assign(base,o);
+}
+
+/* ---- Hand-crafted lifecycle stories (multi-appearance SWAT cases) ---- */
+const HAND_CASES = [
+  // Story 1 — from the prompt's own example: rejected -> resubmitted -> approved -> closed
+  mkCase({weekNum:18,caseNumber:5,swatId:'SWAT-10482',partNumber:'12345678',partDescription:'Front Airbag Inflator Assembly, Stage II',
+    region:'AP',project:'SPR9 Program',family:'Frontal Restraint',cluster:'Electronics, EA and Pyro',parentPF:'INF-FR-02',partFamilyCode:'PF-1182',
+    sourcingType:'New',recommendedSupplier:'Orion Gas Systems',presenter:'W. Chen',decisionLevel:'Level 2',
+    peakYearSpend:4200000,leadTime:'16 weeks',lifetimeSpend:18600000,
+    committeeDiscussion:'Committee reviewed cost and capacity position of Orion Gas Systems for the new inflator platform. Concerns raised on ramp-up capacity at the proposed plant and lack of a validated capacity study for peak-year volumes.',
+    meetingDecision:'REJECTED',caseStatus:'Resubmission Required',actionStatus:'Closed',
+    followUps:[
+      {id:'FU-0002',task:'Supplier to submit third-party validated capacity study for peak-year volume',responsible:'W. Chen',dueDate:'2026-05-15',notes:'Study commissioned with independent capacity auditor; results to be presented at next available committee slot.',status:'Closed',tags:['Capacity','Timing'],notify:'W. Chen',cc:''},
+      {id:'FU-0002b',task:'Confirm updated unit pricing reflects the capacity-study cost impact',responsible:'W. Chen',dueDate:'2026-05-20',notes:'Finance to re-check landed cost once capacity study lands.',status:'Closed',tags:['Cost'],notify:'W. Chen',cc:'K. Reyes'},
+    ],
+    closure:{status:'Closed',closureDate:'2026-05-12',closureComment:'Capacity study received and reviewed ahead of resubmission.',closureEvidence:'Capacity_Study_Orion_v2.pdf (attached to case file)'}}),
+  mkCase({weekNum:21,caseNumber:3,swatId:'SWAT-10482',partNumber:'12345678',partDescription:'Front Airbag Inflator Assembly, Stage II',
+    region:'AP',project:'SPR9 Program',family:'Frontal Restraint',cluster:'Electronics, EA and Pyro',parentPF:'INF-FR-02',partFamilyCode:'PF-1182',
+    sourcingType:'New',recommendedSupplier:'Orion Gas Systems',presenter:'W. Chen',decisionLevel:'Level 2',
+    peakYearSpend:4200000,leadTime:'16 weeks',lifetimeSpend:18600000,
+    committeeDiscussion:'Resubmission following independent capacity validation. Study confirms sufficient line capacity to cover peak-year demand plus 15% contingency. Committee satisfied with evidence and commercial terms unchanged from original quote.',
+    meetingDecision:'CONDITIONAL APPROVAL',caseStatus:'Approved',actionStatus:'Closed',
+    followUps:[{id:'FU-0003',task:'Formalize capacity commitment clause in supply agreement',responsible:'W. Chen',dueDate:'2026-06-05',notes:'Legal to add capacity-commitment clause referencing the validated study before PO release.',status:'Closed',tags:['Commercial Terms'],notify:'W. Chen',cc:''}],
+    closure:{status:'Closed',closureDate:'2026-06-02',closureComment:'Capacity clause executed in supply agreement amendment #3.',closureEvidence:'SPR9_Orion_SupplyAgreement_Amd3_signed.pdf'}}),
+  mkCase({weekNum:21,caseNumber:99,swatId:'SWAT-10482',partNumber:'12345678',partDescription:'Front Airbag Inflator Assembly, Stage II',
+    region:'AP',project:'SPR9 Program',family:'Frontal Restraint',cluster:'Electronics, EA and Pyro',parentPF:'INF-FR-02',partFamilyCode:'PF-1182',
+    sourcingType:'New',recommendedSupplier:'Orion Gas Systems',presenter:'W. Chen',decisionLevel:'Level 2',
+    peakYearSpend:4200000,leadTime:'16 weeks',lifetimeSpend:18600000,
+    committeeDiscussion:'Final ratification recorded following execution of the supply agreement amendment. Case closed out of the active pipeline.',
+    meetingDecision:'APPROVED',caseStatus:'Closed',actionStatus:null,
+    followUps:[],
+    closure:{status:'Closed',closureDate:'2026-06-02',closureComment:'Case fully closed; sourcing decision implemented and evidenced.',closureEvidence:'SPR9_Orion_SupplyAgreement_Amd3_signed.pdf'}}),
+
+  // Story 2 — Approved but action still open (illustrates decision vs action status distinction)
+  mkCase({weekNum:24,caseNumber:2,swatId:'SWAT-10555',partNumber:'55871122',partDescription:'Buckle Switch Connector, 6-pin',
+    region:'EU',project:'Gen6 Restraint Platform',family:'Buckle Systems',cluster:'Electronics, EA and Pyro',parentPF:'CON-BK-06',partFamilyCode:'PF-2044',
+    sourcingType:'C/O',recommendedSupplier:'TriStar Electronics',presenter:'L. Novak',decisionLevel:'Level 2',
+    peakYearSpend:1150000,leadTime:'10 weeks',lifetimeSpend:5100000,
+    committeeDiscussion:'Committee approved the re-source to TriStar Electronics based on a 9% landed cost improvement. Approval conditional on a first-article inspection report being logged before series production release.',
+    meetingDecision:'APPROVED',caseStatus:'Approved',actionStatus:'Overdue',
+    // (kept as-is: illustrates Sourcing Decision = APPROVED while Action Status = Overdue)
+    followUps:[{id:'FU-0005',task:'Submit first-article inspection (FAI) report prior to SOP',responsible:'L. Novak',dueDate:'2026-07-20',notes:'FAI sample shipped late from supplier tooling change; report not yet received. Escalated to supplier quality.',status:'Overdue',tags:['Quality','Timing'],notify:'L. Novak',cc:''}],
+    closure:{status:'Open',closureDate:'—',closureComment:'Pending FAI report.',closureEvidence:'—'}}),
+
+  // Story 3 — plastics case, rejected twice then approved
+  mkCase({weekNum:12,caseNumber:7,swatId:'SWAT-10233',partNumber:'77102233',partDescription:'Airbag Module Housing, Passenger Side',
+    region:'AP',project:'China Local-for-Local Gen5',family:'Module Housings',cluster:'Chemical',parentPF:'HSG-PA-01',partFamilyCode:'PF-3310',
+    sourcingType:'New',recommendedSupplier:'Summit Plastics Ltd.',presenter:'J. Park',decisionLevel:'Level 2',
+    peakYearSpend:2300000,leadTime:'12 weeks',lifetimeSpend:9800000,
+    committeeDiscussion:'Committee rejected the recommendation citing insufficient localization of raw material supply and a 6% cost gap versus target.',
+    meetingDecision:'REJECTED',caseStatus:'Resubmission Required',actionStatus:'Closed',
+    followUps:[{id:'FU-0006',task:'Re-negotiate resin sourcing and resubmit cost model',responsible:'J. Park',dueDate:'2026-03-30',notes:'Buyer engaged alternate resin supplier to close cost gap.',status:'Closed',tags:['Cost'],notify:'J. Park',cc:''}],
+    closure:{status:'Closed',closureDate:'2026-03-28',closureComment:'Revised cost model prepared for resubmission.',closureEvidence:'Cost_Model_Rev2.xlsx'}}),
+  mkCase({weekNum:16,caseNumber:4,swatId:'SWAT-10233',partNumber:'77102233',partDescription:'Airbag Module Housing, Passenger Side',
+    region:'AP',project:'China Local-for-Local Gen5',family:'Module Housings',cluster:'Chemical',parentPF:'HSG-PA-01',partFamilyCode:'PF-3310',
+    sourcingType:'New',recommendedSupplier:'Summit Plastics Ltd.',presenter:'J. Park',decisionLevel:'Level 2',
+    peakYearSpend:2150000,leadTime:'12 weeks',lifetimeSpend:9100000,
+    committeeDiscussion:'Revised cost model presented with local resin sourcing closing most of the cost gap. Committee still not satisfied — remaining 2% gap versus target and requested a second competitive quote before final decision.',
+    meetingDecision:'REJECTED',caseStatus:'Resubmission Required',actionStatus:'Closed',
+    followUps:[{id:'FU-0007',task:'Obtain second competitive quote from alternate housing supplier',responsible:'J. Park',dueDate:'2026-04-24',notes:'RFQ issued to Cascade Molding Inc. as benchmark.',status:'Closed',tags:['Cost'],notify:'J. Park',cc:''}],
+    closure:{status:'Closed',closureDate:'2026-04-20',closureComment:'Benchmark quote received and reviewed.',closureEvidence:'RFQ_Cascade_Benchmark.pdf'}}),
+  mkCase({weekNum:19,caseNumber:6,swatId:'SWAT-10233',partNumber:'77102233',partDescription:'Airbag Module Housing, Passenger Side',
+    region:'AP',project:'China Local-for-Local Gen5',family:'Module Housings',cluster:'Chemical',parentPF:'HSG-PA-01',partFamilyCode:'PF-3310',
+    sourcingType:'New',recommendedSupplier:'Summit Plastics Ltd.',presenter:'J. Park',decisionLevel:'Level 2',
+    peakYearSpend:2080000,leadTime:'12 weeks',lifetimeSpend:8700000,
+    committeeDiscussion:'Benchmark confirmed Summit Plastics Ltd. remains most competitive once localized resin pricing is applied. Committee approved with no conditions.',
+    meetingDecision:'APPROVED',caseStatus:'Closed',actionStatus:null,
+    followUps:[],
+    closure:{status:'Closed',closureDate:'2026-05-08',closureComment:'PO released; case closed.',closureEvidence:'PO_10233_Summit.pdf'}}),
+
+  // Story 4 — single-meeting, approved, closed same week (fast case, software/electronics)
+  mkCase({weekNum:30,caseNumber:1,swatId:'SWAT-10620',partNumber:'33091188',partDescription:'ECU Firmware Validation Toolchain License',
+    region:'NA',project:'Global Buckle Program',family:'Software & Tools',cluster:'Electronics, EA and Pyro',parentPF:'ECU-SW-04',partFamilyCode:'PF-4471',
+    sourcingType:'New',recommendedSupplier:'Pinnacle Sensor Technologies',presenter:'S. Iyer',decisionLevel:'Level 3',
+    peakYearSpend:410000,leadTime:'4 weeks',lifetimeSpend:1230000,
+    committeeDiscussion:'Straightforward tooling license renewal with incumbent supplier at flat pricing. No open items; committee approved without conditions.',
+    meetingDecision:'APPROVED',caseStatus:'Closed',actionStatus:null,
+    followUps:[],
+    closure:{status:'Closed',closureDate:'2026-07-24',closureComment:'License executed same week as approval.',closureEvidence:'License_Agreement_Pinnacle.pdf'}}),
+
+  // Story 5 — most recent / near-current case, conditional approval, due soon (open, near "today")
+  mkCase({weekNum:33,caseNumber:4,swatId:'SWAT-10711',partNumber:'90441002',partDescription:'Pretensioner Cable Assembly, LH/RH Set',
+    region:'EU',project:'ACR9 Program',family:'Pretensioner Systems',cluster:'Electronics, EA and Pyro',parentPF:'PRT-CB-03',partFamilyCode:'PF-5502',
+    sourcingType:'C/O',recommendedSupplier:'Delta Restraint Systems',presenter:'R. Fischer',decisionLevel:'Level 2',
+    peakYearSpend:1870000,leadTime:'14 weeks',lifetimeSpend:7400000,
+    committeeDiscussion:'Committee granted conditional approval pending confirmation of PPAP timing from Delta Restraint Systems. Cost case and quality history both favorable.',
+    meetingDecision:'CONDITIONAL APPROVAL',caseStatus:'Approved',actionStatus:'Open',
+    followUps:[{id:'FU-0010',task:'Confirm PPAP submission date and level with supplier',responsible:'R. Fischer',dueDate:'2026-08-28',notes:'Awaiting written confirmation from supplier quality lead.',status:'Open',tags:['Quality','Timing'],notify:'R. Fischer',cc:''}],
+    closure:{status:'Open',closureDate:'—',closureComment:'Pending PPAP confirmation.',closureEvidence:'—'}}),
+
+  // Story 6 — PENDING meeting decision: committee deferred the case (neither approved nor rejected),
+  // then resubmitted with the missing information and approved. Demonstrates Pending vs Rejected.
+  mkCase({weekNum:27,caseNumber:2,swatId:'SWAT-10847',partNumber:'44872201',partDescription:'Seatbelt Retractor Webbing Assembly, LH',
+    region:'NA',project:'ACR9 Program',family:'Retractor Systems',cluster:'Chemical',parentPF:'WEB-RT-05',partFamilyCode:'PF-6120',
+    sourcingType:'C/O',recommendedSupplier:'Nordic Webbing Co.',presenter:'A. Baptiste',decisionLevel:'Level 2',
+    peakYearSpend:960000,leadTime:'9 weeks',lifetimeSpend:3900000,
+    committeeDiscussion:'Pending for Sourcing Committee Review',
+    meetingDecision:'PENDING',caseStatus:'Open',actionStatus:null,
+    followUps:[],
+    closure:{status:'Open',closureDate:'—',closureComment:'Awaiting benchmark quotes.',closureEvidence:'—'}}),
+  mkCase({weekNum:29,caseNumber:1,swatId:'SWAT-10847',partNumber:'44872201',partDescription:'Seatbelt Retractor Webbing Assembly, LH',
+    region:'NA',project:'ACR9 Program',family:'Retractor Systems',cluster:'Chemical',parentPF:'WEB-RT-05',partFamilyCode:'PF-6120',
+    sourcingType:'C/O',recommendedSupplier:'Nordic Webbing Co.',presenter:'A. Baptiste',decisionLevel:'Level 2',
+    peakYearSpend:960000,leadTime:'9 weeks',lifetimeSpend:3900000,
+    committeeDiscussion:'Two additional benchmark quotes reviewed; Nordic Webbing Co. remained most competitive on landed cost. Committee approved without conditions.',
+    meetingDecision:'APPROVED',caseStatus:'Closed',actionStatus:null,
+    followUps:[],
+    closure:{status:'Closed',closureDate:'2026-07-16',closureComment:'PO released following benchmark review; case closed.',closureEvidence:'PO_10847_Nordic.pdf'}}),
+];
+
+/* ---- Generated single-appearance filler cases (baseline dataset) ---- */
+function seededRand(seed){ let s = seed; return ()=>{ s = (s*1103515245+12345) & 0x7fffffff; return s/0x7fffffff; }; }
+function pick(arr,r){ return arr[Math.floor(r()*arr.length)]; }
+function pickTags(r){
+  const first = pick(ACTION_TAGS,r);
+  if(r()<0.45){
+    let second = pick(ACTION_TAGS,r);
+    let guard=0; while(second===first && guard++<5){ second = pick(ACTION_TAGS,r); }
+    return second===first ? [first] : [first, second];
+  }
+  return [first];
+}
+
+function generateBatch(count, weekRangeStart, weekRangeEnd, seed, swatStart){
+  const r = seededRand(seed);
+  const out = [];
+  const decisions = ['APPROVED','APPROVED','APPROVED','CONDITIONAL APPROVAL','REJECTED','PENDING'];
+  for(let i=0;i<count;i++){
+    const w = weekRangeStart + Math.floor(r()*(weekRangeEnd-weekRangeStart+1));
+    const dec = pick(decisions,r);
+    const partType = pick(PART_TYPES,r);
+    const cluster = CLUSTER_OF[partType];
+    const region = pick(REGIONS,r);
+    const supplier = pick(SUPPLIERS,r);
+    const project = pick(PROJECTS,r);
+    let caseStatus, actionStatus, followUpStatus, closureStatus, discussion;
+    if(dec==='REJECTED'){
+      caseStatus='Resubmission Required'; actionStatus=pick(['Open','Overdue','Closed'],r);
+      discussion='Committee did not approve the recommendation as presented; cost or capacity position did not meet the target threshold and a resubmission was requested.';
+    } else if(dec==='PENDING'){
+      caseStatus='Open'; actionStatus=null; // not reviewed yet — no post-decision actions exist
+      discussion='Pending for Sourcing Committee Review';
+    } else if(dec==='CONDITIONAL APPROVAL'){
+      caseStatus='Approved'; actionStatus=pick(['Open','Overdue','Closed'],r);
+      discussion='Committee approved the recommendation subject to a follow-up item being closed out before production release.';
+    } else {
+      caseStatus= (r()<0.5?'Approved':'Closed'); actionStatus= (caseStatus==='Closed'? null : pick([null,'Closed'],r));
+      discussion='Committee reviewed the sourcing recommendation and approved it without conditions; cost, quality and capacity positions were all satisfactory.';
+    }
+    followUpStatus = actionStatus;
+    closureStatus = (actionStatus==='Closed' || actionStatus===null) ? 'Closed' : 'Open';
+    const swatId = 'SWAT-'+(swatStart+i);
+    const pn = String(10000000 + Math.floor(r()*89999999));
+    out.push(mkCase({
+      weekNum:w, caseNumber: 1+Math.floor(r()*9), swatId, partNumber:pn,
+      partDescription: pick(partTypeDescriptions(partType),r),
+      region, project, family: partType, cluster,
+      parentPF: 'PF-'+Math.floor(1000+r()*8999), partFamilyCode:'PF-'+Math.floor(1000+r()*8999),
+      sourcingType: pick(SOURCING_TYPES,r), recommendedSupplier: supplier, presenter: pick(PRESENTERS,r),
+      decisionLevel: pick(DECISION_LEVELS,r),
+      peakYearSpend: Math.floor(200000+r()*4500000), leadTime: (4+Math.floor(r()*16))+' weeks',
+      lifetimeSpend: Math.floor(800000+r()*20000000),
+      committeeDiscussion: discussion, meetingDecision: dec, caseStatus, actionStatus,
+      followUps: actionStatus===null ? [] : [{
+        id:'FU-GEN-'+swatId, task: pick(['Submit updated quality certification','Confirm capacity commitment in writing','Provide revised cost breakdown','Complete supplier audit follow-up','Submit PPAP documentation'],r),
+        responsible: pick(PRESENTERS,r), dueDate:'2026-'+String(6+Math.floor(r()*3)).padStart(2,'0')+'-'+String(1+Math.floor(r()*27)).padStart(2,'0'),
+        notes:'Tracked with responsible buyer; status updated at next committee cycle.', status: followUpStatus, tags: pickTags(r), notify:'', cc:''
+      }],
+      closure: {status: closureStatus, closureDate: closureStatus==='Closed' ? '2026-'+String(6+Math.floor(r()*3)).padStart(2,'0')+'-'+String(1+Math.floor(r()*27)).padStart(2,'0') : '—',
+        closureComment: closureStatus==='Closed' ? 'Follow-up item resolved and evidenced.' : '—',
+        closureEvidence: closureStatus==='Closed' ? 'Evidence_'+swatId+'.pdf' : '—'}
+    }));
+  }
+  return out;
+}
+function partTypeDescriptions(c){
+  const map = {
+    "Inflators & Gas Generators":["Driver Airbag Inflator, Stage I","Side Curtain Inflator Assembly","Knee Airbag Gas Generator"],
+    "Seatbelt Webbing":["High-Tenacity Seatbelt Webbing, 48mm","Webbing Assembly with Load Limiter"],
+    "Electronic Control Units":["Restraint Control Unit, 8-channel","Occupant Classification ECU"],
+    "Steering Wheel Modules":["Driver Airbag Steering Wheel Module","Heated Steering Wheel Module"],
+    "Pretensioner Mechanisms":["Buckle Pretensioner Assembly","Retractor Pretensioner Unit"],
+    "Airbag Cushions & Fabric":["Side Curtain Cushion, Coated Fabric","Passenger Airbag Cushion Assembly"],
+    "Buckle & Latch Systems":["Seatbelt Buckle Assembly, Standard","Latch Sensor Switch Assembly"],
+    "Plastics & Housings":["Sensor Housing, Injection Molded","Cover Trim, Passenger Airbag"],
+    "Castings & Stampings":["Anchor Bracket, Die-Cast Aluminum","Mounting Stamping, Steel"],
+    "Wiring Harness & Connectors":["Restraint System Wiring Harness","Sensor Connector, 4-pin Sealed"]
+  };
+  return map[c] || ["Component Assembly"];
+}
+
+let ALL_CASES = [...HAND_CASES, ...generateBatch(11, 10, 32, 77, 20101)];
+function normalizePendingCases(list){
+  list.forEach(c=>{ if(c.meetingDecision==='PENDING'){ c.actionStatus=null; c.followUps=[]; if(!c.committeeDiscussion || /deferred|pending/i.test(c.committeeDiscussion)) c.committeeDiscussion='Pending for Sourcing Committee Review'; } });
+}
+function seedPresentationLinks(list){
+  list.forEach(c=>{ if(c.meetingDecision!=='PENDING' && !c.sourcingPresentationLink) c.sourcingPresentationLink = 'https://zf.sharepoint.com/sites/SourcingCommittee/'+wk(c.weekNum)+'/'+c.swatId+'_SourcingPresentation.pptx'; });
+}
+function seedFinalDocLinks(list){
+  list.forEach(c=>{ if(c.actionStatus==='Closed' && !c.finalDocLink) c.finalDocLink = 'https://zf.sharepoint.com/sites/SourcingCommittee/'+wk(c.weekNum)+'/'+c.swatId+'_Final.pptx'; });
+}
+normalizePendingCases(ALL_CASES);
+seedFinalDocLinks(ALL_CASES);
+seedPresentationLinks(ALL_CASES);
+
+/* ---- Online case submission / approval workflow (replaces filling the weekly Excel by hand) ---- */
+// Normalize a typed case number: "swat 10482" / "swat-10482" → "SWAT-10482"; anything else (e.g. Supplyon) kept as typed.
+function normalizeCaseNo(v){ v=(v||'').trim(); const m=/^swat[\s-]*(\d+)$/i.exec(v); return m ? 'SWAT-'+m[1] : v; }
+function caseNoStatus(v){ const id=normalizeCaseNo(v); if(!id) return null; const n=ALL_CASES.filter(c=>c.swatId===id).length; return {id, existing:n>0, priorEntries:n}; }
+function nextSubId(){
+  // Derive from what actually exists — never reuse an ID (a fixed counter collided with the seeded SUB-0001,
+  // which made "Confirm" act on the wrong submission).
+  const nums = SUBMISSIONS.map(s=>Number(String(s.subId).replace('SUB-',''))).filter(n=>!isNaN(n));
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  return 'SUB-'+String(next).padStart(4,'0');
+}
+const SUBMISSIONS = [
+  // a couple of seeded examples so the Approvals queue isn't empty on first load
+  {subId:'SUB-0001', submittedAt:'Sep 15, 2026 2:10 PM', submitterName:'D. Alvarez', submitterEmail:'d.alvarez@zf.com',
+   status:'Waiting for Registration Confirmation', rejectReason:'',
+   partNumber:'61190042', partDescription:'Side Airbag Cushion, Coated Fabric', region:'EU', project:'Gen6 Restraint Platform',
+   family:'Airbag Cushions', cluster:'Chemical', parentPF:'PF-7002', partFamilyCode:'PF-7002',
+   sourcingType:'New', recommendedSupplier:'Meridian Safety Components', presenter:'D. Alvarez',
+   decisionLevel:'Level 2', peakYearSpend:1340000, leadTime:'11 weeks', lifetimeSpend:5600000,
+   committeeDiscussion:'Requesting committee review for new cushion supplier ahead of Gen6 program SOP.',
+   isFamilyCase:'No', familyAligned:'—', familyEvidence:'—', involvesECM:'No', ccbApproved:'—'},
+];
+
+function nextSwatId(){
+  const nums = ALL_CASES.map(c=>Number(String(c.swatId).replace('SWAT-','')))
+    .concat(SUBMISSIONS.filter(s=>s.approvedSwatId).map(s=>Number(String(s.approvedSwatId).replace('SWAT-',''))))
+    .filter(n=>!isNaN(n));
+  return 'SWAT-' + ((nums.length ? Math.max(...nums) : 10000) + 1);
+}
+
+/* ============================= STATE ============================= */
+const state = {
+  view:'home',
+  filters:{year:'', weekFrom:'', weekTo:'', region:'', cluster:'', supplier:'', decision:'', status:''},
+  searchQuery:'',
+  selectedSwatId:null,
+  selectedEntryIndex:0,
+  dashFilter:null,
+  uploaded:false,
+  isAdmin:true,          // prototype stand-in for a real role; toggle in the top bar
+  pendingDeleteId:null,  // SWAT ID awaiting delete confirmation
+  remindOpenId:null,     // follow-up task id whose reminder panel is open
+  flash:null,            // one-time confirmation message shown on the next case detail render
+  editError:null,        // validation message shown in the case editor (e.g. closing without a final document link)
+  dashPeriod:'ytd', // 'ytd' | 'week'
+  dashWeek:null,    // set on first dashboard render to the latest week present
+  followupSortDir:'asc',
+  followupTag:'',
+  followupOwner:'',
+  detailEditMode:false,
+  editBuffer:null,
+};
+const REMINDED = new Set(); // session-only: which follow-ups have had a reminder sent
+
+/* ===================== Automatic reminders =====================
+   Rules live here (Admin-editable). The daily check runs by itself whenever the Cockpit is open
+   (on load and every hour after that) — it marks overdue tasks and sends the due reminders, logging each one.
+   Sending is still simulated in this prototype; IT wires the same rules + log to the mail/Teams service. */
+const REMINDER_DEFAULTS = { enabled:true, daysBefore:0, onDueDate:true, overdueEveryDays:1, channel:'Email + Teams', alwaysCc:'', lastRunDate:null, lastRun:null };
+let REMINDER_SETTINGS = Object.assign({}, REMINDER_DEFAULTS);
+try{ const saved = JSON.parse(localStorage.getItem('sc_reminder_settings_v2')||'null'); if(saved) REMINDER_SETTINGS = Object.assign({}, REMINDER_DEFAULTS, saved); }catch(e){}
+function saveReminderSettings(){ try{ localStorage.setItem('sc_reminder_settings_v2', JSON.stringify(REMINDER_SETTINGS)); }catch(e){} }
+const AUTO_LOG = []; // newest first: {when, trigger, swatId, task, to, cc, channel, message}
+function todayISO(){ const d = getNATime(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function daysBetweenISO(a,b){ return Math.round((new Date(b+'T00:00:00') - new Date(a+'T00:00:00'))/86400000); }
+// When will this task next get an automatic reminder? (null = never under current rules)
+function nextReminderDate(t){
+  const S = REMINDER_SETTINGS; if(!S.enabled) return null;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate||'')) return null;
+  const today = todayISO();
+  const addDays = (iso,n)=>{ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+  const remindedToday = t.lastAutoReminderDate===today;
+  const cands = [];
+  if(Number(S.daysBefore)>0) cands.push(addDays(t.dueDate, -Number(S.daysBefore)));
+  if(S.onDueDate) cands.push(t.dueDate);
+  if(Number(S.overdueEveryDays)>0){ const k = Number(S.overdueEveryDays); for(let i=1;i<=52;i++) cands.push(addDays(t.dueDate, i*k)); }
+  const future = cands.filter(d=> d>today || (d===today && !remindedToday)).sort();
+  return future[0]||null;
+}
+// Returns {overdueMarked, sent, overdueTotal, openTotal}. force=true re-runs today's check even if it already ran.
+function runDailyReminderCheck(force){
+  const today = todayISO();
+  const S = REMINDER_SETTINGS;
+  let overdueMarked = 0, sent = 0;
+  ALL_CASES.forEach(c=>{
+    if(c.meetingDecision==='PENDING') return;                     // not reviewed yet — no actions exist
+    (c.followUps||[]).forEach(t=>{
+      if(!(t.status==='Open' || t.status==='Overdue')) return;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate||'')) return;      // no usable due date
+      const daysUntil = daysBetweenISO(today, t.dueDate);          // negative = overdue
+      if(daysUntil < 0 && t.status==='Open'){ t.status='Overdue'; overdueMarked++; }
+      if(!S.enabled) return;
+      if(t.lastAutoReminderDate===today) return;                    // never twice in one day
+      let trigger = null;
+      if(daysUntil===Number(S.daysBefore) && Number(S.daysBefore)>0) trigger = 'Due in '+S.daysBefore+' days';
+      else if(daysUntil===0 && S.onDueDate) trigger = 'Due today';
+      else if(daysUntil<0 && Number(S.overdueEveryDays)>0 && ((-daysUntil) % Number(S.overdueEveryDays))===0) trigger = 'Overdue by '+(-daysUntil)+' days';
+      if(!trigger) return;
+      const rc = taskRecipient(t);
+      const cc = [rc.cc, S.alwaysCc].filter(Boolean).join(', ');
+      const channel = t.channel || S.channel;
+      const entry = { when: new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}), trigger, swatId:c.swatId, task:t.task, to:rc.email||'(no email on file)', cc, channel, message: reminderMessage(c,t) };
+      AUTO_LOG.unshift(entry); if(AUTO_LOG.length>200) AUTO_LOG.pop();
+      t.lastAutoReminderDate = today;
+      t.lastReminder = { when: entry.when, channel, to: entry.to, message: entry.message, auto:true };
+      REMINDED.add(t.id);
+      sent++;
+    });
+    c.actionStatus = rollupActionStatus(c.followUps);
+  });
+  let overdueTotal=0, openTotal=0;
+  ALL_CASES.forEach(c=>{ if(c.meetingDecision==='PENDING') return; (c.followUps||[]).forEach(t=>{ if(t.status==='Overdue') overdueTotal++; if(t.status==='Open') openTotal++; }); });
+  S.lastRunDate = today;
+  S.lastRun = { when: new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}), auto: !force, overdueMarked, sent, overdueTotal, openTotal };
+  saveReminderSettings();
+  return {overdueMarked, sent, overdueTotal, openTotal};
+}
+function dailyCheckIfDue(){ if(REMINDER_SETTINGS.lastRunDate!==todayISO()) { const r = runDailyReminderCheck(false); if((r.sent||r.overdueMarked) && typeof render==='function' && document.getElementById('app')) render(); } }
+
+/* ============================= HELPERS ============================= */
+function fmtMoney(n){ return '$'+n.toLocaleString('en-US'); }
+function caseDateLabel(c){ return c.meetingDateLabel || weekDate(c.weekNum); }
+function partNumberLines(c){
+  if(c.partNumbers && c.partNumbers.length) return c.partNumbers;
+  return [{partNumber:c.partNumber, partDescription:c.partDescription, peakYearSpend:c.peakYearSpend, lifetimeSpend:c.lifetimeSpend}];
+}
+function decisionBadgeClass(d){ return d==='APPROVED'?'approved':d==='REJECTED'?'rejected':d==='PENDING'?'pending':'conditional'; }
+function actionBadgeClass(a){
+  return a==='Open'?'open':a==='Overdue'?'overdue':a==='Closed'?'closed':'noaction';
+}
+function ragForAction(a){ return a==='Overdue'?'r':a==='Open'?'y':a===null?'n':'g'; }
+function actionCell(a){
+  if(a===null) return '<span class="no-action-txt">No action</span>';
+  return `<span class="badge ${actionBadgeClass(a)}"><span class="rag ${ragForAction(a)}"></span>${a}</span>`;
+}
+// Pending cases have not been reviewed yet, so there is no action status to show (blank, not "No action").
+function actionCellFor(c){ return c.meetingDecision==='PENDING' ? '<span class="no-action-txt">—</span>' : actionCell(c.actionStatus); }
+function rollupActionStatus(list){
+  if(!list || list.length===0) return null;
+  if(list.some(t=>t.status==='Overdue')) return 'Overdue';
+  if(list.some(t=>t.status==='Open')) return 'Open';
+  return 'Closed';
+}
+// Admin-only. Removes the whole case (every weekly entry under that SWAT ID) and everything that points at it,
+// so no orphan rows remain: linked submission is marked, reminder markers cleared, selection/edit state reset.
+function deleteCase(swatId){
+  const removed = ALL_CASES.filter(c=>c.swatId===swatId);
+  if(removed.length===0) return false;
+  ALL_CASES = ALL_CASES.filter(c=>c.swatId!==swatId);
+  removed.forEach(c=> (c.followUps||[]).forEach(t=> REMINDED.delete(t.id)));
+  SUBMISSIONS.forEach(s=>{ if(s.approvedSwatId===swatId){ s.status='Deleted'; s.rejectReason='Case '+swatId+' was deleted by an admin.'; } });
+  if(state.selectedSwatId===swatId){ state.selectedSwatId=null; state.selectedEntryIndex=0; if(state.view==='detail') state.view='database'; }
+  state.detailEditMode=false; state.editBuffer=null; state.pendingDeleteId=null;
+  return true;
+}
+
+function latestByCase(){
+  const map = new Map();
+  ALL_CASES.forEach(c=>{
+    const prev = map.get(c.swatId);
+    if(!prev || c.weekNum > prev.weekNum || (c.weekNum===prev.weekNum && c.caseNumber>prev.caseNumber)) map.set(c.swatId, c);
+  });
+  return [...map.values()];
+}
+function historyFor(swatId){
+  return ALL_CASES.filter(c=>c.swatId===swatId).sort((a,b)=> a.weekNum-b.weekNum || a.caseNumber-b.caseNumber);
+}
+function uniq(arr){ return [...new Set(arr)]; }
+
+function matchesQuery(c,q){
+  if(!q) return true;
+  q = q.toLowerCase();
+  const extraPns = partNumberLines(c).map(p=>p.partNumber+' '+p.partDescription).join(' ');
+  return [c.swatId,c.partNumber,c.recommendedSupplier,c.project,c.cluster,c.region,wk(c.weekNum),c.partDescription,extraPns]
+    .join(' ').toLowerCase().includes(q);
+}
+function matchesFilters(c,f){
+  if(f.region && c.region!==f.region) return false;
+  if(f.cluster && c.cluster!==f.cluster) return false;
+  if(f.supplier && c.recommendedSupplier!==f.supplier) return false;
+  if(f.decision && c.meetingDecision!==f.decision) return false;
+  if(f.status && c.actionStatus!==f.status) return false;
+  if(f.weekFrom && c.weekNum < Number(f.weekFrom)) return false;
+  if(f.weekTo && c.weekNum > Number(f.weekTo)) return false;
+  return true;
+}
+
+/* ============================= RENDER: NAV ============================= */
+function renderNav(){
+  const pendingCount = SUBMISSIONS.filter(s=>s.status==='Waiting for Registration Confirmation').length;
+  const tabs = [['home','Home'],['submit','Submit Case'],
+    ['approvals','Approval'+(pendingCount>0?` (${pendingCount})`:'')],
+    ['database','Database'],['dashboard','Dashboard'],['followups','Follow-ups']];
+  document.getElementById('navtabs').innerHTML = tabs.map(([k,l])=>
+    `<button data-nav="${k}" class="${state.view===k?'active':''}">${l}</button>`).join('');
+  document.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>{ state.view=b.dataset.nav; state.dashFilter=null; state.pendingDeleteId=null; try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} render(); });
+  const at = document.getElementById('adminToggle');
+  if(at){
+    at.textContent = state.isAdmin ? 'Admin mode: ON' : 'User view';
+    at.classList.toggle('on', state.isAdmin);
+    at.onclick = ()=>{ state.isAdmin = !state.isAdmin; state.pendingDeleteId=null; if(!state.isAdmin && state.detailEditMode){ state.detailEditMode=false; state.editBuffer=null; } render(); };
+  }
+}
+
+/* ============================= RENDER: HOME ============================= */
+function renderHome(){
+  return `
+  <div class="pagehead">
+    <h1>Sourcing Committee Cockpit</h1>
+    <p>One place to register, search and track every weekly sourcing committee case — no more searching week by week.</p>
+  </div>
+
+  <div class="card" style="padding:20px 22px;margin-bottom:18px;border-color:var(--accent);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+    <div>
+      <div style="font-weight:700;font-size:15px;margin-bottom:3px;">Submit a New Sourcing Case</div>
+      <div style="color:var(--ink-soft);font-size:12.5px;">Going forward, skip the Excel — fill in the case online. It's routed for approval automatically.</div>
+    </div>
+    <button class="btn-primary" id="goToSubmit">+ Submit for Registration</button>
+  </div>
+
+  <div class="home-grid">
+    <div>
+      <div class="card quicksearch-card" style="margin-top:0;">
+        <h2>Search Sourcing Cases</h2>
+        <p class="hint">Find any historical case in seconds — by part number, SWAT ID, supplier, project, cluster, region or week.</p>
+        <div class="qs-input-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input class="qs-input" id="homeSearchInput" placeholder="e.g. PN: 12345678, SWAT-10482, Orion Gas Systems..." />
+        </div>
+        <div class="qs-chip-row">
+          <span class="qs-chip" data-qs="12345678">PN 12345678</span>
+          <span class="qs-chip" data-qs="SWAT-10482">SWAT-10482</span>
+          <span class="qs-chip" data-qs="Orion Gas Systems">Orion Gas Systems</span>
+          <span class="qs-chip" data-qs="Metal">Metal cluster</span>
+          <span class="qs-chip" data-qs="China">China region</span>
+        </div>
+        <div class="qs-fields">Search fields: Part Number · SWAT ID / Sourcing ID · Supplier · Project · Cluster · Region · Week</div>
+      </div>
+
+      <div class="card upload-card" style="margin-top:18px;opacity:.9;">
+        <h2>Legacy: Upload Weekly Excel</h2>
+        <p class="hint">Previous process, kept during the transition. New cases should use "Submit for Registration" above instead.</p>
+        <div class="dropzone" id="dropzone">
+          <div class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
+          </div>
+          <div class="title" id="dzTitle">Drag &amp; Drop Weekly Excel Here</div>
+          <div style="color:var(--ink-faint);font-size:12px;">or click to browse</div>
+          <div class="example">2026_W34_Sourcing_Committee.xlsx</div>
+          <div class="small">Standard committee template · same format every week</div>
+        </div>
+        <div class="upload-progress" id="uploadProgress">
+          <div class="step-row" id="step1"><span class="dot"></span> Reading file</div>
+          <div class="step-row" id="step2"><span class="dot"></span> Validating format</div>
+          <div class="step-row" id="step3"><span class="dot"></span> 18 cases identified</div>
+          <div class="step-row" id="step4"><span class="dot"></span> Database updated successfully</div>
+        </div>
+        <div class="upload-success" id="uploadSuccess">✓ 18 cases from 2026_W34_Sourcing_Committee.xlsx added. No manual entry required.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card side-panel">
+        <h3>Recent Committee Activity</h3>
+        ${recentActivityRows()}
+      </div>
+    </div>
+  </div>
+  `;
+}
+function kpi(label,num,rag,filterKey){
+  return `<div class="kpi" data-kpi="${filterKey}"><div class="num">${num}</div><div class="lbl"><span class="rag ${rag}"></span>${label}</div></div>`;
+}
+function recentActivityRows(){
+  const recent = [...ALL_CASES].sort((a,b)=> b.weekNum-a.weekNum || b.caseNumber-a.caseNumber).slice(0,6);
+  return recent.map(c=>{
+    const rag = c.meetingDecision==='REJECTED'?'r':(c.meetingDecision==='CONDITIONAL APPROVAL'||c.meetingDecision==='PENDING')?'y':'g';
+    return `<div class="activity-row">
+      <div class="adot rag ${rag}" style="margin-top:5px;"></div>
+      <div class="atxt">
+        <div><b>${c.swatId}</b> — ${c.recommendedSupplier}</div>
+        <div style="color:var(--ink-soft);">${c.meetingDecision} · ${c.region} · ${c.cluster}</div>
+        <div class="atime">${wk(c.weekNum)} · ${caseDateLabel(c)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ============================= RENDER: DATABASE ============================= */
+function renderDatabase(){
+  const f = state.filters;
+  let rows = ALL_CASES.filter(c=>matchesQuery(c,state.searchQuery) && matchesFilters(c,f));
+  rows.sort((a,b)=> b.weekNum-a.weekNum || b.caseNumber-a.caseNumber);
+
+  const regionOpts = uniq(ALL_CASES.map(c=>c.region)).sort();
+  const clusterOpts = uniq(ALL_CASES.map(c=>c.cluster)).sort();
+  const supplierOpts = uniq(ALL_CASES.map(c=>c.recommendedSupplier)).sort();
+  const weekOpts = uniq(ALL_CASES.map(c=>c.weekNum)).sort((a,b)=>a-b);
+
+  return `
+  <div class="pagehead">
+    <h1>Consolidated Case Database</h1>
+    <p>All sourcing committee cases, consolidated automatically from every weekly Excel upload.</p>
+  </div>
+
+  <div class="filters-bar">
+    <div class="searchbox"><input id="dbSearch" placeholder="Search PN, SWAT ID, supplier, project..." value="${escapeAttr(state.searchQuery)}"/></div>
+    <select id="fWeekFrom"><option value="">From week</option>${weekOpts.map(w=>`<option value="${w}" ${f.weekFrom==w?'selected':''}>${wk(w)}</option>`).join('')}</select>
+    <select id="fWeekTo"><option value="">To week</option>${weekOpts.map(w=>`<option value="${w}" ${f.weekTo==w?'selected':''}>${wk(w)}</option>`).join('')}</select>
+    <select id="fRegion"><option value="">Region: All</option>${regionOpts.map(r=>`<option ${f.region===r?'selected':''}>${r}</option>`).join('')}</select>
+    <select id="fCluster"><option value="">Cluster: All</option>${clusterOpts.map(r=>`<option ${f.cluster===r?'selected':''}>${r}</option>`).join('')}</select>
+    <select id="fSupplier"><option value="">Supplier: All</option>${supplierOpts.map(r=>`<option ${f.supplier===r?'selected':''}>${r}</option>`).join('')}</select>
+    <select id="fDecision"><option value="">Decision: All</option>${['APPROVED','REJECTED','CONDITIONAL APPROVAL','PENDING'].map(r=>`<option ${f.decision===r?'selected':''}>${r}</option>`).join('')}</select>
+    <select id="fStatus"><option value="">Action Status: All</option>${['Open','Overdue','Closed'].map(r=>`<option ${f.status===r?'selected':''}>${r}</option>`).join('')}</select>
+    <button class="clearbtn" id="clearFilters">Clear filters</button>
+    <button class="clearbtn" id="exportCsvBtn" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">⬇ Export CSV</button>
+    <div class="resultcount">${rows.length} case${rows.length!==1?'s':''}</div>
+  </div>
+
+  <div class="card" style="overflow-x:auto;">
+    ${rows.length===0 ? emptyState() : `
+    <table class="data-table">
+      <thead><tr>
+        <th>Week</th><th>Date</th><th>Case #</th><th>SWAT Case</th><th>Part Number</th><th>Project</th><th>Cluster</th>
+        <th>Recommended Supplier</th><th>Decision Level</th><th>Spend (Peak Yr)</th><th>Sourcing Decision</th><th>Action Status</th>${state.isAdmin?'<th></th>':''}
+      </tr></thead>
+      <tbody>
+        ${rows.map(c=>`
+        <tr data-swat="${escapeAttr(c.swatId)}">
+          <td class="mono">${wk(c.weekNum)}</td>
+          <td style="white-space:nowrap;">${caseDateLabel(c)}</td>
+          <td>${c.caseNumber}</td>
+          <td class="mono swat">${c.swatId}</td>
+          <td class="pn-link mono">${c.partNumber}${(c.partNumbers&&c.partNumbers.length>1)?` <span style="color:var(--ink-faint);font-weight:400;">(+${c.partNumbers.length-1})</span>`:''}</td>
+          <td>${c.project}</td>
+          <td>${c.cluster}</td>
+          <td>${c.recommendedSupplier}</td>
+          <td style="white-space:nowrap;">${c.decisionLevel}</td>
+          <td>${fmtMoney(c.peakYearSpend)}</td>
+          <td><span class="badge ${decisionBadgeClass(c.meetingDecision)}">${c.meetingDecision}</span></td>
+          <td>${actionCellFor(c)}</td>
+          ${state.isAdmin ? `<td onclick="event.stopPropagation()">${state.pendingDeleteId===c.swatId
+              ? `<span class="confirm-inline">Delete ${c.swatId}? <button class="btn-danger-sm" data-delete-confirm="${escapeAttr(c.swatId)}">Yes, delete</button><button class="btn-secondary" style="padding:4px 9px;font-size:11px;" data-delete-cancel="1">No</button></span>`
+              : `<button class="btn-danger-sm" data-delete-ask="${escapeAttr(c.swatId)}" title="Admin only">Delete</button>`}</td>` : ''}
+        </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>
+  `;
+}
+function emptyState(){
+  return `<div class="empty-state">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <div>No cases match your search or filters.</div>
+  </div>`;
+}
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+/* ---- CSV export (replaces the old cumulative weekly-Excel habit) ---- */
+function csvEscape(v){
+  const s = (v===null||v===undefined) ? '' : String(v);
+  return '"' + s.replace(/"/g,'""') + '"';
+}
+async function saveBlobFile(blob, filename){
+  // Published-artifact runtime: offer the file via the platform's downloads capability.
+  if(window.claude && typeof window.claude.use === 'function'){
+    try{
+      const downloads = await window.claude.use('downloads');
+      if(downloads){
+        try{ await downloads.save({filename, data:blob}); return; }
+        catch(err){ /* viewer declined, or unavailable — fall through to the direct method below */ }
+      }
+    }catch(err){ /* capability not obtainable — fall through */ }
+  }
+  // Plain-HTML fallback (works when this file is opened directly, outside the Artifact runtime).
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function downloadCasesCsv(rows, filename){
+  const anyDecided = rows.some(c=>c.meetingDecision!=='PENDING');
+  const headers = ['Week','Case #','SWAT Case Number','Part Number(s)','Part Description(s)','Region','Project','Product Family','Cluster',
+    'Parent PF','Part Family Code','Sourcing Type','Recommended Supplier','Presenter','Decision Level',
+    'Total Peak Year Spend','Total Lifetime Spend','Sourcing Decision'].concat(anyDecided ? ['Action Status','Open Follow-up Tasks'] : []);
+  const lines = [headers.map(csvEscape).join(',')];
+  rows.forEach(c=>{
+    const pending = c.meetingDecision==='PENDING';
+    const tasksSummary = pending ? '' : ((c.followUps||[]).map(t=>`${t.task} [${t.responsible}, due ${t.dueDate}, ${t.status}]`).join(' | ') || 'No action');
+    const pnLines = partNumberLines(c);
+    const pnSummary = pnLines.map(p=>p.partNumber).join(' | ');
+    const pdSummary = pnLines.map(p=>`${p.partNumber}: ${p.partDescription} (Peak ${fmtMoney(p.peakYearSpend)}, Lifetime ${fmtMoney(p.lifetimeSpend)})`).join(' | ');
+    lines.push([wk(c.weekNum),c.caseNumber,c.swatId,pnSummary,pdSummary,c.region,c.project,c.family,c.cluster,
+      c.parentPF,c.partFamilyCode,c.sourcingType,c.recommendedSupplier,c.presenter,c.decisionLevel,
+      c.peakYearSpend,c.lifetimeSpend,c.meetingDecision
+    ].concat(anyDecided ? [(pending?'':(c.actionStatus===null?'No action':c.actionStatus)), tasksSummary] : []).map(csvEscape).join(','));
+  });
+  const blob = new Blob([lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  await saveBlobFile(blob, filename);
+}
+
+// Meeting-agenda export: color-coded header row, one row per case, open actions expanded
+// horizontally (Action 1, Action 2, ...) — opens as a real spreadsheet in Excel.
+function esc(v){ return (v===null||v===undefined) ? '' : String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+async function downloadMeetingAgenda(rows, weekLabel, filenameSuffix){
+  const anyDecided = rows.some(c=>c.meetingDecision!=='PENDING');
+  const maxActions = anyDecided ? (Math.max(1, ...rows.map(c=>c.meetingDecision==='PENDING'?0:(c.followUps||[]).length), 0) || 1) : 0;
+  const headerCols = ['Case #','SWAT Case Number','Part Number(s)','Part Description(s)','Region','Project','Cluster',
+    'Recommended Supplier','Presenter','Decision Level','Total Peak Year Spend','Sourcing Decision'];
+  if(anyDecided) headerCols.push('Action Status');
+  for(let i=1;i<=maxActions;i++) headerCols.push('Action '+i);
+
+  const headerStyle = "background:#23262B;color:#ffffff;font-weight:bold;padding:6px 8px;border:1px solid #999999;font-family:Calibri,Arial,sans-serif;font-size:11pt;white-space:nowrap;text-align:left;";
+  const cellStyle = "padding:5px 8px;border:1px solid #cccccc;font-family:Calibri,Arial,sans-serif;font-size:10.5pt;vertical-align:top;";
+  const titleStyle = "font-family:Calibri,Arial,sans-serif;font-size:14pt;font-weight:bold;padding:6px 0;";
+
+  let html = '<table style="border-collapse:collapse;">';
+  html += `<tr><td colspan="${headerCols.length}" style="${titleStyle}">Sourcing Committee Agenda / Meeting Minutes — ${esc(weekLabel)}</td></tr>`;
+  html += '<tr>' + headerCols.map(h=>`<th style="${headerStyle}">${esc(h)}</th>`).join('') + '</tr>';
+  rows.forEach(c=>{
+    const pnLines = partNumberLines(c);
+    const pnSummary = pnLines.map(p=>p.partNumber).join(' | ');
+    const pdSummary = pnLines.map(p=>p.partNumber+': '+p.partDescription).join(' | ');
+    const cells = [c.caseNumber, c.swatId, pnSummary, pdSummary, c.region, c.project, c.cluster,
+      c.recommendedSupplier, c.presenter, c.decisionLevel, c.peakYearSpend, c.meetingDecision];
+    if(anyDecided) cells.push(c.meetingDecision==='PENDING'?'':(c.actionStatus===null?'No action':c.actionStatus));
+    const tasks = c.meetingDecision==='PENDING' ? [] : (c.followUps||[]);
+    for(let i=0;i<maxActions;i++){
+      const t = tasks[i];
+      cells.push(t ? `${t.task} — ${t.responsible}, due ${t.dueDate} (${t.status})` : '');
+    }
+    html += '<tr>' + cells.map(v=>`<td style="${cellStyle}">${esc(v)}</td>`).join('') + '</tr>';
+  });
+  html += '</table>';
+
+  const blob = new Blob(['\ufeff'+html], {type:'application/vnd.ms-excel'});
+  await saveBlobFile(blob, `Sourcing_Committee_Agenda_${filenameSuffix}.xls`);
+}
+
+/* ============================= RENDER: DASHBOARD ============================= */
+function renderDashboard(){
+  const allWeeks = uniq(ALL_CASES.map(c=>c.weekNum)).sort((a,b)=>a-b);
+  if(state.dashWeek===null) state.dashWeek = allWeeks[allWeeks.length-1];
+
+  // period-scoped case set:
+  //  - YTD: current state of every unique case (one row per SWAT ID, its latest appearance)
+  //  - By Week: every case actually on the agenda in the selected week (row-level, not deduped)
+  const periodCases = state.dashPeriod==='ytd' ? latestByCase() : ALL_CASES.filter(c=>c.weekNum===state.dashWeek);
+
+  const totalCount = periodCases.length;
+  const approved = periodCases.filter(c=>c.meetingDecision==='APPROVED').length;
+  const rejected = periodCases.filter(c=>c.meetingDecision==='REJECTED').length;
+  const conditional = periodCases.filter(c=>c.meetingDecision==='CONDITIONAL APPROVAL').length;
+  const pending = periodCases.filter(c=>c.meetingDecision==='PENDING').length;
+  const decided = periodCases.filter(c=>c.meetingDecision!=='PENDING');
+  const openA = decided.filter(c=>c.actionStatus==='Open').length;
+  const overdueA = decided.filter(c=>c.actionStatus==='Overdue').length;
+  const closedA = decided.filter(c=>c.actionStatus==='Closed' || c.actionStatus===null).length;
+
+  // Cluster / region breakdowns always reflect current state (YTD) regardless of toggle
+  const latest = latestByCase();
+  const byCluster = {}; latest.forEach(c=>{ byCluster[c.cluster]=(byCluster[c.cluster]||0)+1; });
+  const byRegion = {}; latest.forEach(c=>{ byRegion[c.region]=(byRegion[c.region]||0)+1; });
+  const maxC = Math.max(...Object.values(byCluster));
+  const maxR = Math.max(...Object.values(byRegion));
+
+  return `
+  <div class="pagehead">
+    <h1>Management Cockpit</h1>
+    <p>Status across all sourcing cases. Switch between a single week's committee agenda and the running YTD picture. Click any number to see the underlying cases.</p>
+  </div>
+
+  <div class="card" style="padding:16px 18px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span style="font-size:12.5px;color:var(--ink-soft);font-weight:600;">Total Cases</span>
+    <span style="font-size:22px;font-weight:700;">${totalCount}</span>
+    <div class="period-toggle" style="margin-left:auto;">
+      <button data-period="ytd" class="${state.dashPeriod==='ytd'?'active':''}">By YTD</button>
+      <button data-period="week" class="${state.dashPeriod==='week'?'active':''}">By Week</button>
+    </div>
+    ${state.dashPeriod==='week' ? `<select class="period-week-select" id="dashWeekSelect">${allWeeks.map(w=>`<option value="${w}" ${w===state.dashWeek?'selected':''}>${wk(w)} — ${weekDate(w)}</option>`).join('')}</select>` : ''}
+    <button class="clearbtn" id="dashExportBtn" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">⬇ Export CSV (this scope)</button>
+    ${state.dashPeriod==='week' ? `<button class="clearbtn" id="dashAgendaBtn" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">📋 Export Meeting Agenda / Minutes</button>` : ''}
+  </div>
+  ${state.dashPeriod==='week' ? `<div style="font-size:11px;color:var(--ink-faint);margin:-10px 0 16px;">"Export Meeting Agenda / Minutes" gives you one formatted file — color-coded header, one row per case, open actions laid out as Action 1 / Action 2 / ... — usable before the meeting as the agenda, or after it as the minutes once decisions are recorded.</div>` : ''}
+  <div class="breakdown-row-title">Approval Status ${state.dashPeriod==='week'? '· '+wk(state.dashWeek) : '· current, YTD'} — 4 states</div>
+  <div class="tile-row four">
+    ${tile('Approved', approved, 'g', 'approved')}
+    ${tile('Rejected', rejected, rejected>0?'r':'g', 'rejected')}
+    ${tile('Conditional Approval', conditional, 'y', 'conditional')}
+    ${tile('Pending', pending, 'y', 'pending')}
+  </div>
+
+  <div class="breakdown-row-title">Action Status ${state.dashPeriod==='week'? '· '+wk(state.dashWeek) : '· current, YTD'} — 3 states (decided cases; Pending cases have no actions yet)</div>
+  <div class="tile-row three">
+    ${tile('Open', openA, 'y', 'open')}
+    ${tile('Overdue', overdueA, overdueA>0?'r':'g', 'overdue')}
+    ${tile('Closed', closedA, 'g', 'closedaction')}
+  </div>
+
+  <div class="breakdown-grid" style="margin-top:26px;">
+    <div class="card breakdown-card">
+      <h4>Current Cases by Cluster</h4>
+      ${Object.entries(byCluster).sort((a,b)=>b[1]-a[1]).map(([k,v])=>barRow(k,v,maxC)).join('')}
+    </div>
+    <div class="card breakdown-card">
+      <h4>Current Cases by Region</h4>
+      ${Object.entries(byRegion).sort((a,b)=>b[1]-a[1]).map(([k,v])=>barRow(k,v,maxR)).join('')}
+    </div>
+  </div>
+  `;
+}
+function tile(label,num,rag,filterKey){
+  return `<div class="tile" data-kpi="${filterKey}"><div class="num">${num}</div><div class="lbl"><span class="rag ${rag}"></span>${label}</div></div>`;
+}
+function dashCard(label,num,rag,key,sub){
+  return `<div class="dashcard" data-kpi="${key}">
+    <div class="top"><div class="num">${num}</div><span class="rag ${rag}" style="margin-top:8px;"></span></div>
+    <div class="lbl">${label}</div>
+    <div style="color:var(--ink-faint);font-size:11px;margin-top:2px;">${sub}</div>
+  </div>`;
+}
+function barRow(label,val,max){
+  return `<div class="bar-row"><div class="blabel" title="${escapeAttr(label)}">${label}</div>
+    <div class="bar-track"><div class="bar-fill" style="width:${(val/max*100).toFixed(0)}%"></div></div>
+    <div class="bar-num">${val}</div></div>`;
+}
+
+/* ============================= RENDER: FOLLOW-UPS TRACKER ============================= */
+function renderAutoReminderCard(){
+  const S = REMINDER_SETTINGS; const admin = state.isAdmin;
+  return `
+  <div class="card section-card" style="margin-top:18px;">
+    <h3>Automatic Reminders ${S.enabled?'<span class="badge approved">ON</span>':'<span class="badge noaction">OFF</span>'}</h3>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;">Every task is reminded automatically on its due date, and then every ${Number(S.overdueEveryDays)===1?'day':S.overdueEveryDays+' days'} while it stays Overdue — nothing to click. Each reminder appears in the table above ("Auto-reminded" under the due date) and in the log below. If you want to nudge someone in between, use "Send reminder" on that row.</div>
+    <div class="form-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="form-field"><label>Automatic reminders</label>${admin?`<select class="edit-input" id="rsEnabled"><option value="1" ${S.enabled?'selected':''}>ON</option><option value="0" ${!S.enabled?'selected':''}>OFF</option></select>`:`<div class="v">${S.enabled?'ON':'OFF'}</div>`}</div>
+      <div class="form-field"><label>While overdue, remind every N days</label>${admin?`<input class="edit-input" id="rsOverdueEvery" type="number" min="1" max="60" value="${escapeAttr(S.overdueEveryDays)}"/>`:`<div class="v">${S.overdueEveryDays}</div>`}</div>
+      <div class="form-field"><label>Channel</label>${admin?`<select class="edit-input" id="rsChannel">${REMINDER_CHANNELS.map(ch=>`<option ${S.channel===ch?'selected':''}>${ch}</option>`).join('')}</select>`:`<div class="v">${S.channel}</div>`}</div>
+      <div class="form-field"><label>Always CC</label>${admin?`<input class="edit-input" id="rsAlwaysCc" value="${escapeAttr(S.alwaysCc||'')}" placeholder="e.g. your own address"/>`:`<div class="v">${S.alwaysCc||'—'}</div>`}</div>
+    </div>
+    ${admin?`<div class="form-actions"><button class="btn-primary" id="rsSave">Save</button><span id="rsMsg" style="font-size:12px;color:var(--green);font-weight:600;"></span></div>`:''}
+    <div style="margin-top:16px;"><div class="k" style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;">Reminders sent automatically (${AUTO_LOG.length})</div>
+    ${AUTO_LOG.length===0 ? `<div style="font-size:12.5px;color:var(--ink-faint);">None yet — no task was due or overdue today.</div>` : `
+      <table class="data-table" style="font-size:12px;"><thead><tr><th>When</th><th>Why</th><th>SWAT Case</th><th>Task</th><th>To / CC</th><th>Channel</th></tr></thead>
+      <tbody>${AUTO_LOG.slice(0,25).map(e=>`<tr><td style="white-space:nowrap;">${e.when}</td><td>${e.trigger}</td><td class="mono swat" style="cursor:pointer;" data-swat-link="${escapeAttr(e.swatId)}">${e.swatId}</td><td>${e.task}</td><td class="mono" style="font-size:11px;">${e.to}${e.cc?'<br/>cc: '+e.cc:''}</td><td>${e.channel}</td></tr>`).join('')}</tbody></table>`}
+    </div>
+    <div class="footer-note" style="text-align:left;margin-top:12px;">Delivery is simulated in this prototype: the log shows exactly what would be sent. For real delivery — and for days when nobody opens the Cockpit — IT runs this same daily check on a server and connects it to mail / Teams.</div>
+  </div>`;
+}
+function renderFollowups(){
+  const latest = latestByCase();
+  // Flatten: one row per open/overdue TASK (a case can now carry several tasks)
+  let items = [];
+  latest.forEach(c=>{
+    (c.followUps||[]).forEach(t=>{
+      if(t.status==='Open' || t.status==='Overdue') items.push({c, t});
+    });
+  });
+
+  const tagOpts = uniq(items.flatMap(x=> (x.t.tags&&x.t.tags.length)?x.t.tags:['Untagged'])).sort();
+  const ownerOpts = uniq(items.map(x=>x.t.responsible)).sort();
+
+  if(state.followupTag) items = items.filter(x=> {
+    const t = (x.t.tags&&x.t.tags.length) ? x.t.tags : ['Untagged'];
+    return t.includes(state.followupTag);
+  });
+  if(state.followupOwner) items = items.filter(x=> x.t.responsible===state.followupOwner);
+
+  items.sort((a,b)=>{
+    const da = a.t.dueDate==='—' ? '9999-99-99' : a.t.dueDate;
+    const db = b.t.dueDate==='—' ? '9999-99-99' : b.t.dueDate;
+    return state.followupSortDir==='asc' ? da.localeCompare(db) : db.localeCompare(da);
+  });
+
+  const overdueCount = items.filter(x=>x.t.status==='Overdue').length;
+
+  return `
+  <div class="pagehead">
+    <h1>Follow-ups to Track</h1>
+    <p>Every open task across all cases — a case can carry more than one — with owner, due date and tags, so nothing gets missed before the next meeting. Tags shown are illustrative; define your own taxonomy as needed.</p>
+  </div>
+
+  <div class="filters-bar">
+    <select id="fFollowupTag"><option value="">Tag: All</option>${tagOpts.map(c=>`<option ${state.followupTag===c?'selected':''}>${c}</option>`).join('')}</select>
+    <select id="fFollowupOwner"><option value="">Owner: All</option>${ownerOpts.map(o=>`<option ${state.followupOwner===o?'selected':''}>${o}</option>`).join('')}</select>
+    <div class="resultcount">${items.length} open task${items.length!==1?'s':''}${overdueCount>0?` · <span style="color:var(--red);font-weight:600;">${overdueCount} overdue</span>`:''}</div>
+  </div>
+
+  <div class="card" style="overflow-x:auto;">
+    ${items.length===0 ? emptyState() : `
+    <table class="data-table">
+      <thead><tr>
+        <th>SWAT Case</th><th>Tags</th><th>Task</th><th>Owner</th><th>Reminder goes to</th>
+        <th class="sortable-th" id="sortDueTh">Due Date <span class="arrow">${state.followupSortDir==='asc'?'▲':'▼'}</span></th>
+        <th>Status</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${items.map(({c,t})=>{
+          const overdue = t.status==='Overdue';
+          const rc = taskRecipient(t);
+          const open = state.remindOpenId===t.id;
+          const last = t.lastReminder;
+          return `<tr>
+            <td class="mono swat" style="cursor:pointer;" data-swat-link="${escapeAttr(c.swatId)}">${c.swatId}</td>
+            <td>${(t.tags||[]).length ? t.tags.map(tg=>`<span class="cat-tag">${tg}</span>`).join(' ') : `<span class="cat-tag none">Untagged</span>`}</td>
+            <td>${t.task}</td>
+            <td>${t.responsible}</td>
+            <td style="font-size:11px;color:var(--ink-soft);line-height:1.5;">
+              <b style="color:var(--ink);">${rc.name||'—'}</b><br/>
+              <span class="mono">${rc.email||'<span style="color:var(--red);">no email on file</span>'}</span><br/>
+              ${rc.cc?`CC: ${rc.cc}<br/>`:''}<span class="cat-tag">${rc.channel}</span>
+            </td>
+            <td class="${overdue?'due-overdue':''}">${t.dueDate}${(()=>{ const n = nextReminderDate(t); return n ? (t.lastAutoReminderDate===todayISO() ? `<div style="font-size:10.5px;color:var(--green);font-weight:600;white-space:nowrap;">Auto-reminded today ✓</div>` : `<div style="font-size:10.5px;color:var(--ink-faint);font-weight:400;white-space:nowrap;">Auto reminder: ${n}</div>`) : (t.lastAutoReminderDate===todayISO() ? `<div style="font-size:10.5px;color:var(--green);font-weight:600;">Auto-reminded today ✓</div>` : ''); })()}</td>
+            <td>${actionCell(t.status)}</td>
+            <td>
+              ${last ? `<div style="font-size:10.5px;color:var(--green);font-weight:600;margin-bottom:4px;">Sent ✓ ${last.when}<br/>via ${last.channel}</div>` : ''}
+              <button class="remind-btn" data-remind-open="${escapeAttr(t.id)}">${open?'Close':(last?'Send again':'Send reminder')}</button>
+            </td>
+          </tr>
+          ${open ? `<tr class="remind-row"><td colspan="8" style="background:#FAFAFB;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;padding:6px 4px;">
+              <div class="form-field"><label>To (name)</label><input class="edit-input" id="rmName_${t.id}" value="${escapeAttr(rc.name)}"/></div>
+              <div class="form-field"><label>To (email) *</label><input class="edit-input" id="rmEmail_${t.id}" value="${escapeAttr(rc.email)}" placeholder="name@zf.com"/></div>
+              <div class="form-field"><label>CC (comma-separated)</label><input class="edit-input" id="rmCc_${t.id}" value="${escapeAttr(rc.cc)}"/></div>
+              <div class="form-field"><label>Channel</label><select class="edit-input" id="rmChannel_${t.id}">${REMINDER_CHANNELS.map(ch=>`<option ${rc.channel===ch?'selected':''}>${ch}</option>`).join('')}</select></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;padding:0 4px 8px;">
+              <button class="btn-primary" style="padding:8px 16px;font-size:12.5px;" data-remind-send="${escapeAttr(t.id)}">Send reminder</button>
+              <span id="rmErr_${t.id}" style="font-size:11.5px;color:var(--red);font-weight:600;"></span>
+            </div>
+            <div style="padding:0 4px 10px;">
+              <div style="font-size:10.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;">Message preview (same content for Email and Teams)</div>
+              <pre style="margin:0;white-space:pre-wrap;font-family:'Consolas','SFMono-Regular',Menlo,monospace;font-size:11.5px;line-height:1.5;background:#fff;border:1px solid var(--border);border-radius:6px;padding:10px 12px;">${esc(reminderMessage(c,t))}</pre>
+              <div style="font-size:11px;color:var(--ink-faint);margin-top:4px;">Sending here is simulated; the recipient, address, channel and message above are exactly what the real system would send.</div>
+            </div>
+          </td></tr>` : ''}`;
+        }).join('')}
+      </tbody>
+    </table>`}
+  </div>
+  ${renderAutoReminderCard()}
+  `;
+}
+
+
+function partNumberRowHtml(i){
+  return `
+  <div class="pn-row" data-pn-row="${i}" style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;position:relative;">
+    ${i>0?`<button type="button" data-remove-pn="${i}" class="btn-danger" style="position:absolute;top:10px;right:10px;padding:4px 9px;font-size:11px;">Remove</button>`:''}
+    <div class="form-grid" style="${i>0?'margin-right:80px;':''}">
+      <div class="form-field"><label>Part Number *</label><input class="pn-input" data-pn-field="partNumber" id="pnPartNumber_${i}" placeholder="e.g. 12345678"/></div>
+      <div class="form-field"><label>Part Description *</label><input class="pn-input" data-pn-field="partDescription" id="pnPartDescription_${i}" placeholder="e.g. Front Airbag Inflator Assembly"/></div>
+      <div class="form-field"><label>Peak Year Spend (USD) *</label><input class="pn-input pn-spend" data-pn-field="peakYearSpend" id="pnPeak_${i}" type="number" placeholder="e.g. 1500000"/></div>
+      <div class="form-field"><label>Lifetime Spend (USD) *</label><input class="pn-input pn-spend" data-pn-field="lifetimeSpend" id="pnLife_${i}" type="number" placeholder="e.g. 6000000"/></div>
+    </div>
+  </div>`;
+}
+function renderSubmit(){
+  const mine = [...SUBMISSIONS].sort((a,b)=> b.subId.localeCompare(a.subId));
+  return `
+  <div class="pagehead">
+    <h1>Submit a Sourcing Case</h1>
+    <p>Fill in the case directly — no Excel needed. It's routed to the SBS Procurement approver, who confirms or returns it for correction.</p>
+  </div>
+
+  <div class="card form-card">
+    <h2>New Case Registration</h2>
+    <p class="hint">Fields match what used to live in the weekly Excel. Once submitted, you'll be notified by email once it's reviewed.</p>
+    <div class="form-grid">
+      <div class="form-field"><label>Your Name *</label><input id="fSubmitter" placeholder="e.g. J. Martinez"/></div>
+      <div class="form-field"><label>Your Email *</label><input id="fSubmitterEmail" placeholder="e.g. j.martinez@zf.com"/></div>
+      <div class="form-field span2"><label>SWAT Case # or Supplyon Case # *</label><input id="fExistingSwat" placeholder="e.g. SWAT-10482 or the Supplyon case number"/><div id="caseNoHint" style="font-size:11px;color:var(--ink-faint);margin-top:4px;">Required for every case. If this number is already in the Database, this registration is automatically linked to that case's history (it came back). Otherwise it is registered as a new case under this number.</div></div>
+    </div>
+
+    <div class="screening-section" style="margin-top:16px;padding-top:16px;">
+      <h3>Part Numbers</h3>
+      <div id="partNumbersContainer">${partNumberRowHtml(0)}</div>
+      <button type="button" class="btn-secondary" id="addPartNumberBtn">+ Add Another Part Number</button>
+      <div style="margin-top:12px;font-size:12.5px;font-weight:600;">
+        Aggregate Total Peak Year Spend: <span id="totalPeakDisplay">$0</span>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        Aggregate Total Lifetime Spend: <span id="totalLifetimeDisplay">$0</span>
+      </div>
+    </div>
+
+    <div class="form-grid" style="margin-top:16px;">
+      <div class="form-field"><label>Region *</label><select id="fRegionIn">${REGIONS.map(r=>`<option>${r}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Project *</label><select id="fProjectIn">${PROJECTS.map(r=>`<option>${r}</option>`).join('')}</select></div>
+
+      <div class="form-field"><label>Product Family *</label><select id="fFamily">${FAMILY_OPTIONS.map(r=>`<option>${r}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Cluster *</label><select id="fClusterIn">${CLUSTERS.map(r=>`<option>${r}</option>`).join('')}</select></div>
+
+      <div class="form-field"><label>Parent PF (optional — definition to be clarified)</label><input id="fParentPF" placeholder="e.g. PF-1182"/></div>
+      <div class="form-field"><label>Part Family Code (optional — definition to be clarified)</label><input id="fPartFamilyCode" placeholder="e.g. PF-1182"/></div>
+
+      <div class="form-field"><label>Sourcing Type *</label><select id="fSourcingType">${SOURCING_TYPES.map(r=>`<option>${r}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Decision Level *</label><select id="fDecisionLevelIn">${DECISION_LEVELS.map(r=>`<option>${r}</option>`).join('')}</select></div>
+
+      <div class="form-field"><label>Recommended Supplier *</label><input id="fSupplierIn" placeholder="e.g. Orion Gas Systems"/></div>
+
+      <div class="form-field span2">
+        <label>Requested Committee Meeting Date *</label>
+        <select id="fMeetingDate">${upcomingWednesdays(12).map(d=>`<option value="${d.toISOString().slice(0,10)}">${wk(dateToWeekNum(d))} — ${formatDateLong(d)}</option>`).join('')}</select>
+        <div style="font-size:11px;color:var(--ink-faint);margin-top:4px;">The committee meets every Wednesday. Registrations close end-of-day Monday (Eastern Time, US) — after that, the earliest available date is automatically the following Wednesday.</div>
+      </div>
+
+      <div class="form-field span2"><label>Comments (optional)</label><textarea id="fDiscussionIn" placeholder="Anything the approver or committee should know..."></textarea></div>
+    </div>
+
+    <div class="screening-section">
+      <h3>Screening Questions</h3>
+      <div class="form-grid">
+        <div class="form-field"><label>Is this a Family Case? *</label>
+          <select id="qFamily"><option value="">Select...</option><option>Yes</option><option>No</option></select>
+        </div>
+      </div>
+      <div id="familyBlock" style="display:none;margin-top:12px;">
+        <div class="form-grid">
+          <div class="form-field"><label>Has Family Alignment been completed? *</label>
+            <select id="qFamilyAligned"><option value="">Select...</option><option>Yes</option><option>No</option></select>
+          </div>
+          <div class="form-field" id="familyEvidenceField" style="display:none;">
+            <label>Family Alignment Evidence (link) *</label>
+            <input id="qFamilyEvidence" placeholder="Link to the email or shared-folder item — we can't store the file itself here"/>
+          </div>
+        </div>
+        <div class="block-warning" id="familyBlockWarning">⚠ This case cannot be registered until Family Alignment is completed. Please complete alignment first, then submit.</div>
+      </div>
+
+      <div class="form-grid" style="margin-top:16px;">
+        <div class="form-field"><label>Does this case involve an Engineering Change (ECM)? *</label>
+          <select id="qECM"><option value="">Select...</option><option>Yes</option><option>No</option></select>
+        </div>
+      </div>
+      <div id="ecmBlock" style="display:none;margin-top:12px;">
+        <div class="form-grid">
+          <div class="form-field"><label>Has this case passed CCB2? *</label>
+            <select id="qCCB"><option value="">Select...</option><option>Yes</option><option>No</option></select>
+          </div>
+        </div>
+        <div class="block-warning" id="ecmBlockWarning">⚠ This case cannot be registered until it has passed CCB2 (Change Control Board 2).</div>
+      </div>
+    </div>
+    <div class="route-note">📧 This request will be routed to the <b>SBS Procurement approver</b> for review. You'll be notified by email once it's approved or returned.</div>
+    <div class="form-actions">
+      <button class="btn-primary" id="submitCaseBtn">Submit for Registration</button>
+    </div>
+    <div class="submit-banner" id="submitBanner"></div>
+  </div>
+
+  <div class="card side-panel" style="margin-top:18px;padding:20px;">
+    <h3>Recent Submissions</h3>
+    ${mine.length===0 ? '<div style="color:var(--ink-faint);font-size:12.5px;">No submissions yet.</div>' : mine.map(s=>`
+      <div class="mysub-row">
+        <div>
+          <div><b>${s.subId}</b> — ${s.partDescription || s.partNumber}${s.caseId?` · <span class="mono">${s.caseId}</span>${s.existingSwatId?' (came back)':''}`:''}</div>
+          <div style="color:var(--ink-soft);">${s.submitterName} · ${s.submittedAt}${s.meetingDateLabel?` · Requested: ${s.meetingDateLabel}`:''}</div>
+          ${s.status==='Rejected' ? `<div class="mysub-reason">Returned: ${s.rejectReason}</div>` : ''}
+          ${s.status==='Registration Confirmed' ? `<div style="color:var(--green);font-size:11.5px;margin-top:2px;">Registration confirmed — registered as ${s.approvedSwatId}</div>` : ''}
+        </div>
+        <span class="badge ${s.status==='Registration Confirmed'?'approved':s.status==='Rejected'?'rejected':s.status==='Deleted'?'noaction':'pending'}">${s.status}</span>
+      </div>
+    `).join('')}
+  </div>
+  `;
+}
+
+/* ============================= RENDER: APPROVALS ============================= */
+function renderApprovals(){
+  const pending = SUBMISSIONS.filter(s=>s.status==='Waiting for Registration Confirmation');
+  const decided = SUBMISSIONS.filter(s=>s.status!=='Waiting for Registration Confirmation').sort((a,b)=> b.subId.localeCompare(a.subId));
+  return `
+  <div class="pagehead">
+    <h1>Registration Confirmation</h1>
+    <p>Confirm that a submitted case is accepted into the system, or reject it with a reason. This is <b>not</b> the Sourcing Committee decision — a confirmed case enters the Database with Sourcing Decision = Pending, and the committee decides later.</p>
+  </div>
+
+  ${pending.length===0 ? `<div class="card"><div class="empty-state">No submissions waiting for review.</div></div>` :
+    pending.map(s=>`
+    <div class="card appr-card">
+      <div class="appr-top">
+        <div>
+          <div class="appr-title">${s.partNumber} — ${s.partDescription}${(s.partNumbers&&s.partNumbers.length>1)?` (+${s.partNumbers.length-1} more part number${s.partNumbers.length>2?'s':''})`:''}</div>
+          <div class="who">Submitted by ${s.submitterName} (${s.submitterEmail}) · ${s.submittedAt}${s.caseId?` · <b style="color:${s.existingSwatId?'var(--accent)':'var(--green)'};">${s.existingSwatId?`Came back — existing case ${s.existingSwatId} (${s.priorEntries} previous entr${s.priorEntries===1?'y':'ies'}), will be linked to its history`:`New case ${s.caseId}`}</b>`:''}</div>
+        </div>
+        <span class="badge pending">Waiting for Registration Confirmation</span>
+      </div>
+      ${(s.partNumbers&&s.partNumbers.length>1) ? `
+      <div style="border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:12px;">
+        <table class="data-table" style="font-size:12px;">
+          <thead><tr><th>Part Number</th><th>Part Description</th><th>Peak Year Spend</th><th>Lifetime Spend</th></tr></thead>
+          <tbody>${s.partNumbers.map(r=>`<tr><td class="mono">${r.partNumber}</td><td>${r.partDescription}</td><td>${fmtMoney(r.peakYearSpend)}</td><td>${fmtMoney(r.lifetimeSpend)}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>` : ''}
+      <div class="appr-grid">
+        ${infoItem('Requested Meeting Date', s.meetingDateLabel||'—')}
+        ${infoItem('Region', s.region)}
+        ${infoItem('Project', s.project)}
+        ${infoItem('Cluster', s.cluster)}
+        ${infoItem('Sourcing Type', s.sourcingType)}
+        ${infoItem('Recommended Supplier', s.recommendedSupplier)}
+        ${infoItem('Decision Level', s.decisionLevel)}
+        ${infoItem('Total Peak Year Spend', fmtMoney(s.peakYearSpend||0))}
+        ${infoItem('Total Lifetime Spend', fmtMoney(s.lifetimeSpend||0))}
+      </div>
+      <div class="info-item"><div class="k">Comments</div><div class="v" style="font-weight:400;">${s.committeeDiscussion||'—'}</div></div>
+      <div class="appr-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        ${infoItem('Family Case?', s.isFamilyCase||'—')}
+        ${infoItem('Family Alignment Done?', s.familyAligned||'—')}
+        ${infoItem('Family Alignment Evidence', s.familyEvidence||'—')}
+        ${infoItem('Involves ECM?', s.involvesECM||'—')}
+        ${infoItem('Passed CCB2?', s.ccbApproved||'—')}
+      </div>
+      ${state.isAdmin ? `<div class="appr-actions">
+        <button class="btn-primary" data-approve="${s.subId}">Confirm Registration</button>
+        <button class="btn-danger" data-reject-toggle="${s.subId}">Reject</button>
+      </div>` : `<div style="font-size:11.5px;color:var(--ink-faint);margin-top:10px;">Confirm / Reject is available in Admin mode only.</div>`}
+      <div class="reject-box" id="rejectBox-${s.subId}">
+        <textarea id="rejectReason-${s.subId}" placeholder="Reason for returning this to the submitter (required)..."></textarea>
+        <div class="form-actions">
+          <button class="btn-danger" data-reject-confirm="${s.subId}">Confirm Reject &amp; Notify Submitter</button>
+        </div>
+      </div>
+    </div>
+    `).join('')}
+
+  ${decided.length>0 ? `
+  <div class="card side-panel" style="margin-top:18px;padding:20px;">
+    <h3>Recently Processed Registrations</h3>
+    ${decided.slice(0,8).map(s=>`
+      <div class="decided-row">
+        <div>${s.subId} — ${s.partDescription || s.partNumber} <span style="color:var(--ink-faint);">(${s.submitterName})</span></div>
+        <span class="badge ${s.status==='Registration Confirmed'?'approved':s.status==='Deleted'?'noaction':'rejected'}">${s.status}</span>
+      </div>
+    `).join('')}
+  </div>` : ''}
+  `;
+}
+
+
+function renderDetail(){
+  const hist = historyFor(state.selectedSwatId);
+  if(hist.length===0){ state.view='database'; return renderDatabase(); }
+  const idx = Math.min(state.selectedEntryIndex, hist.length-1);
+  const c = hist[idx];
+  const decClass = decisionBadgeClass(c.meetingDecision);
+  const decColor = decClass==='approved'?'var(--green)':decClass==='rejected'?'var(--red)':decClass==='pending'?'#3E5A9C':'var(--amber)';
+  const decBg = decClass==='approved'?'var(--green-tint)':decClass==='rejected'?'var(--red-tint)':decClass==='pending'?'#E8EDF7':'var(--amber-tint)';
+  const editing = state.detailEditMode;
+  const b = editing ? state.editBuffer : null;
+  const ef = (id,val)=> `<input class="edit-input" id="${id}" value="${escapeAttr(val)}"/>`;
+  const eta = (id,val)=> `<textarea class="edit-input" id="${id}" style="min-height:70px;">${val}</textarea>`;
+  const esel = (id,val,opts)=> `<select class="edit-input" id="${id}">${opts.map(o=>`<option ${val===o?'selected':''}>${o}</option>`).join('')}</select>`;
+  const rolledUpStatus = editing ? rollupActionStatus(b.followUps) : c.actionStatus;
+  const flash = state.flash; state.flash = null;
+
+  return `
+  ${flash ? `<div class="submit-banner show" style="margin:0 0 14px;">${flash}</div>` : ''}
+  <div class="backlink" id="backToDb">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+    Back to Database
+  </div>
+
+  <div class="detail-header">
+    <div class="titles">
+      <h1>${c.partDescription || '(no part description)'}</h1>
+      <div class="meta" style="margin-bottom:4px;">
+        <span>Part Number: <b class="mono" style="color:var(--ink);">${c.partNumber}</b>${(c.partNumbers&&c.partNumbers.length>1)?` <span style="color:var(--ink-faint);">(+${c.partNumbers.length-1} more)</span>`:''}</span>
+        <span>SWAT Case: <b class="mono" style="color:var(--ink);">${c.swatId}</b></span>
+      </div>
+      <div class="meta">
+        <span class="mono">${wk(c.weekNum)} · ${caseDateLabel(c)} · Case #${c.caseNumber} · ${c.decisionLevel}</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      ${editing ? `<span class="badge pending">Editing (Admin)</span>` : `
+        <div class="decision-pill" style="background:${decBg};color:${decColor};">${c.meetingDecision}</div>
+        ${state.isAdmin ? `<button class="btn-secondary" id="editCaseBtn">✎ Edit Case</button>` : ''}
+        ${state.isAdmin ? (state.pendingDeleteId===c.swatId
+            ? `<span class="confirm-inline">Delete this case? <button class="btn-danger-sm" data-delete-confirm="${escapeAttr(c.swatId)}">Yes, delete</button><button class="btn-secondary" style="padding:4px 9px;font-size:11px;" data-delete-cancel="1">No</button></span>`
+            : `<button class="btn-danger-sm" data-delete-ask="${escapeAttr(c.swatId)}">Delete Case</button>`) : ''}
+      `}
+    </div>
+  </div>
+
+  <div class="status-row">
+    ${editing ? `
+    <div class="status-tile"><div class="k">Sourcing Decision</div><select class="edit-input" id="editDecision">${DECISION_OPTIONS.map(o=>`<option value="${o.v}" ${b.meetingDecision===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
+    <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation Link ${b.meetingDecision!=='PENDING'?'*':''}</div>${ef('editPresentationLink', b.sourcingPresentationLink||'')}<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">Required to save any decision other than Pending.</div></div>
+    <div class="status-tile"><div class="k">Action Status</div>${b.meetingDecision==='PENDING' ? '<span class="no-action-txt">—</span>' : actionCell(rolledUpStatus)}<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">${b.meetingDecision==='PENDING' ? 'Blank until a Sourcing Decision is recorded' : 'Computed from task statuses below'}</div></div>
+    ` : `
+    <div class="status-tile"><div class="k">Sourcing Decision</div><span class="badge ${decisionBadgeClass(c.meetingDecision)}">${c.meetingDecision}</span></div>
+    <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation</div><div style="font-size:12px;word-break:break-all;">${c.sourcingPresentationLink ? `🔗 <a href="${escapeAttr(c.sourcingPresentationLink)}" target="_blank" rel="noopener">${c.sourcingPresentationLink}</a>` : `<span style="color:var(--ink-faint);">Not yet provided — required when a decision is recorded</span>`}</div></div>
+    <div class="status-tile"><div class="k">Action Status</div>${actionCellFor(c)}</div>
+    `}
+  </div>
+
+  <div class="detail-grid">
+    <div>
+      <div class="card section-card">
+        <h3>Part Numbers</h3>
+        ${editing ? `
+          ${b.partNumbers.map((p,i)=>`
+            <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;position:relative;">
+              ${b.partNumbers.length>1?`<button data-remove-pnl="${i}" class="btn-danger" style="position:absolute;top:10px;right:10px;padding:4px 9px;font-size:11px;">Remove</button>`:''}
+              <div class="form-grid" style="${b.partNumbers.length>1?'margin-right:80px;':''}">
+                <div class="form-field"><label>Part Number</label>${ef('editPnNumber_'+i, p.partNumber)}</div>
+                <div class="form-field"><label>Part Description</label>${ef('editPnDesc_'+i, p.partDescription)}</div>
+                <div class="form-field"><label>Peak Year Spend (USD)</label>${ef('editPnPeak_'+i, p.peakYearSpend)}</div>
+                <div class="form-field"><label>Lifetime Spend (USD)</label>${ef('editPnLife_'+i, p.lifetimeSpend)}</div>
+              </div>
+            </div>
+          `).join('')}
+          <button class="btn-secondary" id="addPnLineBtn">+ Add Another Part Number</button>
+          <div style="margin-top:10px;font-size:12.5px;font-weight:600;">
+            Aggregate Total Peak Year Spend: ${fmtMoney(b.partNumbers.reduce((s,p)=>s+(Number(p.peakYearSpend)||0),0))}
+            &nbsp;|&nbsp;
+            Aggregate Total Lifetime Spend: ${fmtMoney(b.partNumbers.reduce((s,p)=>s+(Number(p.lifetimeSpend)||0),0))}
+          </div>
+        ` : `
+          ${partNumberLines(c).length>1 ? `
+          <table class="data-table" style="margin-bottom:10px;">
+            <thead><tr><th>Part Number</th><th>Part Description</th><th>Peak Year Spend</th><th>Lifetime Spend</th></tr></thead>
+            <tbody>${partNumberLines(c).map(p=>`<tr><td class="mono">${p.partNumber}</td><td>${p.partDescription}</td><td>${fmtMoney(p.peakYearSpend)}</td><td>${fmtMoney(p.lifetimeSpend)}</td></tr>`).join('')}</tbody>
+          </table>
+          <div style="font-size:12.5px;font-weight:600;">Total Peak Year Spend: ${fmtMoney(c.peakYearSpend)} &nbsp;|&nbsp; Total Lifetime Spend: ${fmtMoney(c.lifetimeSpend)}</div>
+          ` : `
+          <div class="info-grid">
+            ${infoItem('Part Number', c.partNumber)}
+            ${infoItem('Part Description', c.partDescription)}
+            ${infoItem('Peak Year Spend', fmtMoney(c.peakYearSpend))}
+            ${infoItem('Lifetime Spend', fmtMoney(c.lifetimeSpend))}
+          </div>
+          `}
+        `}
+      </div>
+
+      <div class="card section-card">
+        <h3>Case Information</h3>
+        ${editing ? `
+        <div class="form-grid">
+          <div class="form-field"><label>Region</label>${esel('editRegion', b.region, REGIONS)}</div>
+          <div class="form-field"><label>Project</label>${esel('editProject', b.project, uniq([...PROJECTS, b.project]))}</div>
+          <div class="form-field"><label>Product Family</label>${esel('editFamily', b.family, uniq([...FAMILY_OPTIONS, b.family].filter(Boolean)))}</div>
+          <div class="form-field"><label>Cluster</label>${esel('editCluster', b.cluster, uniq([...CLUSTERS, b.cluster]))}</div>
+          <div class="form-field"><label>Parent PF</label>${ef('editParentPF', b.parentPF)}</div>
+          <div class="form-field"><label>Part Family Code</label>${ef('editPartFamilyCode', b.partFamilyCode)}</div>
+          <div class="form-field"><label>Sourcing Type</label>${esel('editSourcingType', b.sourcingType, SOURCING_TYPES)}</div>
+          <div class="form-field"><label>Recommended Supplier</label>${ef('editSupplier', b.recommendedSupplier)}</div>
+          <div class="form-field"><label>Presenter</label>${ef('editPresenter', b.presenter)}</div>
+          <div class="form-field"><label>Decision Level</label>${esel('editDecisionLevel', b.decisionLevel, DECISION_LEVELS)}</div>
+          <div class="form-field span2">
+            <label>Final PPT / Supporting Document Link ${rollupActionStatus(b.followUps)==='Closed'?'*':''}</label>
+            ${ef('editFinalDocLink', b.finalDocLink||'')}
+            <div style="font-size:11px;color:var(--ink-faint);margin-top:4px;">Required once every follow-up action is Closed (that closes the case). Paste the SharePoint / OneDrive link — the file itself stays there.</div>
+          </div>
+        </div>
+        ` : `
+        <div class="info-grid">
+          ${infoItem('SWAT Case Number', c.swatId)}
+          ${c.createdDate ? infoItem('Case Created', c.createdDate) : ''}
+          ${infoItem('Region', c.region)}
+          ${infoItem('Project', c.project)}
+          ${infoItem('Product Family', c.family)}
+          ${infoItem('Cluster', c.cluster)}
+          ${infoItem('Parent PF', c.parentPF)}
+          ${infoItem('Part Family Code', c.partFamilyCode)}
+          ${infoItem('Sourcing Type', c.sourcingType)}
+          ${infoItem('Recommended Supplier', c.recommendedSupplier)}
+          ${infoItem('Presenter', c.presenter)}
+          ${infoItem('Decision Level', c.decisionLevel)}
+          <div class="info-item" style="grid-column:1/-1;"><div class="k">Final PPT / Supporting Document</div>
+            <div class="v" style="font-weight:400;word-break:break-all;">${c.finalDocLink ? `🔗 <a href="${escapeAttr(c.finalDocLink)}" target="_blank" rel="noopener">${c.finalDocLink}</a>` : `<span style="color:var(--ink-faint);">Not yet provided${c.actionStatus==='Closed'?'':' — required before the case can be closed'}</span>`}</div>
+          </div>
+        </div>
+        `}
+      </div>
+
+      <div class="card section-card">
+        <h3>Committee Discussion</h3>
+        ${editing ? eta('editDiscussion', b.committeeDiscussion) : `<div class="discussion-box">${c.committeeDiscussion}</div>`}
+        ${(!editing && c.submitterComments) ? `<div class="info-item" style="margin-top:10px;"><div class="k">Submitter Comments (from registration)</div><div class="v" style="font-weight:400;">${c.submitterComments}</div></div>` : ''}
+      </div>
+
+      <div class="card section-card" style="margin-bottom:0;">
+        <h3>Follow-up Tasks</h3>
+        ${editing ? `
+          ${b.followUps.length===0 ? `<div style="color:var(--ink-faint);font-size:12.5px;margin-bottom:10px;">${b.meetingDecision==='PENDING' ? 'Case is Pending for Sourcing Committee Review — follow-up tasks can be added once a Sourcing Decision is recorded.' : 'No tasks yet.'}</div>` : ''}
+          ${b.followUps.map((t,i)=>`
+            <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;position:relative;">
+              <button data-remove-task="${i}" class="btn-danger" style="position:absolute;top:10px;right:10px;padding:4px 9px;font-size:11px;">Remove</button>
+              <div class="followup-grid" style="margin-right:80px;">
+                <div class="form-field"><label>Task</label>${ef('editFuTask_'+i, t.task)}</div>
+                <div class="form-field"><label>Tags (comma-separated, free text)</label>${ef('editFuTags_'+i, (t.tags||[]).join(', '))}</div>
+                <div class="form-field"><label>Owner</label>${ef('editFuResp_'+i, t.responsible)}</div>
+                <div class="form-field"><label>Due Date</label><input type="date" class="edit-input" id="${'editFuDue_'+i}" value="${escapeAttr(/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate||'')?t.dueDate:'')}"/></div>
+                <div class="form-field"><label>Status</label>${esel('editFuStatus_'+i, t.status, ['Open','Overdue','Closed'])}</div>
+                <div class="form-field"><label>Reminder to (name)</label>${ef('editFuNotify_'+i, t.notify||t.responsible||'')}</div>
+                <div class="form-field"><label>Reminder email *</label>${ef('editFuEmail_'+i, t.notifyEmail||emailFor(t.notify||t.responsible))}</div>
+                <div class="form-field"><label>CC (comma-separated)</label>${ef('editFuCc_'+i, t.cc||'')}</div>
+                <div class="form-field"><label>Channel</label>${esel('editFuChannel_'+i, t.channel||'Email + Teams', REMINDER_CHANNELS)}</div>
+                <div class="form-field span2"><label>Notes</label>${ef('editFuNotes_'+i, t.notes||'')}</div>
+              </div>
+            </div>
+          `).join('')}
+          <button class="btn-secondary" id="addTaskBtn">+ Add Follow-up Task</button>
+          ${state.editError ? `<div class="block-warning" style="display:block;margin-top:14px;">⚠ ${state.editError}</div>` : ''}
+          <div class="form-actions">
+            <button class="btn-primary" id="saveCaseBtn">Save Changes</button>
+            <button class="btn-secondary" id="cancelEditBtn">Cancel</button>
+          </div>
+        ` : `
+          ${(!c.followUps || c.followUps.length===0) ? `<div style="color:var(--ink-faint);font-size:12.5px;">${c.meetingDecision==='PENDING' ? 'Pending for Sourcing Committee Review — no follow-up actions yet.' : 'No follow-up tasks.'}</div>` : c.followUps.map(t=>`
+            <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;">
+              <div class="followup-grid">
+                ${infoItem('Task', t.task)}
+                ${infoItem('Tags', (t.tags && t.tags.length) ? t.tags.join(', ') : '—')}
+                ${infoItem('Owner', t.responsible)}
+                ${infoItem('Due Date', t.dueDate)}
+                ${infoItem('Status', t.status===null ? 'No action required' : t.status)}
+                ${infoItem('Reminder to', (()=>{ const rc=taskRecipient(t); return `${rc.name||'—'} &lt;${rc.email||'no email'}&gt;${rc.cc?' · cc: '+rc.cc:''} · ${rc.channel}`; })())}
+              </div>
+              <div class="info-item" style="margin-top:8px;"><div class="k">Notes</div><div class="v" style="font-weight:400;">${t.notes}</div></div>
+            </div>
+          `).join('')}
+        `}
+      </div>
+    </div>
+
+    <div>
+      <div class="card timeline-card">
+        <h3>Case Lifecycle</h3>
+        <div class="sub">${hist.length} appearance${hist.length!==1?'s':''} across committee meetings · click a step to view that meeting's record</div>
+        <div class="tl">
+          ${hist.map((h,i)=>{
+            const rag = h.meetingDecision==='REJECTED'?'r':h.meetingDecision==='CONDITIONAL APPROVAL'?'y':h.meetingDecision==='PENDING'?'b':'g';
+            return `<div class="tl-item ${i===idx?'selected':''}" data-idx="${i}">
+              <div class="tl-node ${rag}"></div>
+              <div class="tl-body">
+                <div class="tl-top">
+                  <span class="tl-week">${wk(h.weekNum)}<span class="tl-case">Case #${h.caseNumber}</span></span>
+                  <span class="badge ${decisionBadgeClass(h.meetingDecision)}">${h.meetingDecision}</span>
+                </div>
+                <div class="tl-note">${h.committeeDiscussion.slice(0,90)}${h.committeeDiscussion.length>90?'…':''}</div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="tl-select-hint">Viewing meeting ${idx+1} of ${hist.length}</div>
+      </div>
+    </div>
+  </div>
+  `;
+}
+function infoItem(k,v){ return `<div class="info-item"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
+
+/* ============================= MASTER RENDER ============================= */
+function render(){
+  renderNav();
+  const app = document.getElementById('app');
+  if(state.view==='home') app.innerHTML = renderHome();
+  else if(state.view==='database') app.innerHTML = renderDatabase();
+  else if(state.view==='dashboard') app.innerHTML = renderDashboard();
+  else if(state.view==='followups') app.innerHTML = renderFollowups();
+  else if(state.view==='detail') app.innerHTML = renderDetail();
+  else if(state.view==='submit') app.innerHTML = renderSubmit();
+  else if(state.view==='approvals') app.innerHTML = renderApprovals();
+  wireEvents();
+}
+
+/* ============================= EVENTS ============================= */
+function goToDetail(swatId){
+  try{ history.replaceState(null, '', '#case/'+encodeURIComponent(swatId)); }catch(e){}
+  state.selectedSwatId = swatId;
+  state.selectedEntryIndex = historyFor(swatId).length-1;
+  state.view='detail';
+  state.detailEditMode = false;
+  state.editBuffer = null;
+  render();
+  window.scrollTo(0,0);
+}
+function applyKpiFilter(key){
+  if(key==='open' || key==='overdue'){
+    state.view='followups'; state.followupTag=''; state.followupOwner='';
+    render(); window.scrollTo(0,0); return;
+  }
+  state.view='database'; state.searchQuery='';
+  state.filters = {year:'',weekFrom:'',weekTo:'',region:'',cluster:'',supplier:'',decision:'',status:''};
+  if(key==='closedaction') state.filters.status='Closed';
+  else if(key==='pending') state.filters.decision='PENDING';
+  else if(key==='approved') state.filters.decision='APPROVED';
+  else if(key==='rejected') state.filters.decision='REJECTED';
+  else if(key==='conditional') state.filters.decision='CONDITIONAL APPROVAL';
+  else if(key==='closedcases'){ /* case-level closed: no single row filter, leave unfiltered by decision/status */ }
+  render();
+  window.scrollTo(0,0);
+}
+
+function wireEvents(){
+  document.querySelectorAll('[data-kpi]').forEach(el=>{
+    el.onclick = ()=> applyKpiFilter(el.dataset.kpi);
+  });
+  document.querySelectorAll('[data-period]').forEach(el=>{
+    el.onclick = ()=>{ state.dashPeriod = el.dataset.period; render(); };
+  });
+  const dws = document.getElementById('dashWeekSelect');
+  if(dws) dws.onchange = ()=>{ state.dashWeek = Number(dws.value); render(); };
+  const dashExportBtn = document.getElementById('dashExportBtn');
+  if(dashExportBtn) dashExportBtn.onclick = ()=>{
+    const periodCases = state.dashPeriod==='ytd' ? latestByCase() : ALL_CASES.filter(c=>c.weekNum===state.dashWeek);
+    const label = state.dashPeriod==='ytd' ? 'ytd' : wk(state.dashWeek);
+    downloadCasesCsv(periodCases, `sourcing_committee_dashboard_${label}.csv`);
+  };
+  const dashAgendaBtn = document.getElementById('dashAgendaBtn');
+  if(dashAgendaBtn) dashAgendaBtn.onclick = ()=>{
+    const periodCases = ALL_CASES.filter(c=>c.weekNum===state.dashWeek);
+    downloadMeetingAgenda(periodCases, `${wk(state.dashWeek)} — ${weekDate(state.dashWeek)}`, wk(state.dashWeek));
+  };
+
+  // Home view
+  const dz = document.getElementById('dropzone');
+  if(dz) dz.onclick = runUploadSimulation;
+  const goSubmit = document.getElementById('goToSubmit');
+  if(goSubmit) goSubmit.onclick = ()=>{ state.view='submit'; render(); window.scrollTo(0,0); };
+  const hsi = document.getElementById('homeSearchInput');
+  if(hsi){
+    hsi.oninput = (e)=>{ };
+    hsi.onkeydown = (e)=>{ if(e.key==='Enter'){ state.searchQuery=hsi.value; state.view='database'; render(); } };
+  }
+  document.querySelectorAll('[data-qs]').forEach(el=>{
+    el.onclick = ()=>{ state.searchQuery = el.dataset.qs; state.view='database'; render(); window.scrollTo(0,0); };
+  });
+  document.querySelectorAll('.activity-row').forEach((el,i)=>{
+    // recent activity click -> open that case
+  });
+
+  // Database view
+  const dbSearch = document.getElementById('dbSearch');
+  if(dbSearch){
+    dbSearch.oninput = ()=>{ state.searchQuery = dbSearch.value; refreshDbTableOnly(); };
+  }
+  ['fWeekFrom','fWeekTo','fRegion','fCluster','fSupplier','fDecision','fStatus'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.onchange = ()=>{
+      const map={fWeekFrom:'weekFrom',fWeekTo:'weekTo',fRegion:'region',fCluster:'cluster',fSupplier:'supplier',fDecision:'decision',fStatus:'status'};
+      state.filters[map[id]] = el.value;
+      render();
+    };
+  });
+  const exportBtn = document.getElementById('exportCsvBtn');
+  if(exportBtn) exportBtn.onclick = ()=>{
+    const f = state.filters;
+    const rows = ALL_CASES.filter(c=>matchesQuery(c,state.searchQuery) && matchesFilters(c,f)).sort((a,b)=> b.weekNum-a.weekNum || b.caseNumber-a.caseNumber);
+    downloadCasesCsv(rows, 'sourcing_committee_export.csv');
+  };
+  const clearBtn = document.getElementById('clearFilters');
+  if(clearBtn) clearBtn.onclick = ()=>{
+    state.filters = {year:'',weekFrom:'',weekTo:'',region:'',cluster:'',supplier:'',decision:'',status:''};
+    state.searchQuery='';
+    render();
+  };
+  document.querySelectorAll('tr[data-swat]').forEach(row=>{
+    row.onclick = ()=> goToDetail(row.dataset.swat);
+  });
+
+  // Admin delete (two-step: ask → confirm)
+  document.querySelectorAll('[data-delete-ask]').forEach(el=>{
+    el.onclick = (e)=>{ e.stopPropagation(); if(!state.isAdmin) return; state.pendingDeleteId = el.dataset.deleteAsk; render(); };
+  });
+  document.querySelectorAll('[data-delete-cancel]').forEach(el=>{
+    el.onclick = (e)=>{ e.stopPropagation(); state.pendingDeleteId = null; render(); };
+  });
+  document.querySelectorAll('[data-delete-confirm]').forEach(el=>{
+    el.onclick = (e)=>{ e.stopPropagation(); if(!state.isAdmin) return; deleteCase(el.dataset.deleteConfirm); render(); window.scrollTo(0,0); };
+  });
+
+  // Follow-ups tracker
+  const fTag = document.getElementById('fFollowupTag');
+  if(fTag) fTag.onchange = ()=>{ state.followupTag = fTag.value; render(); };
+  const fOwner = document.getElementById('fFollowupOwner');
+  if(fOwner) fOwner.onchange = ()=>{ state.followupOwner = fOwner.value; render(); };
+  const sortDueTh = document.getElementById('sortDueTh');
+  if(sortDueTh) sortDueTh.onclick = ()=>{ state.followupSortDir = state.followupSortDir==='asc'?'desc':'asc'; render(); };
+  document.querySelectorAll('[data-swat-link]').forEach(el=>{
+    el.onclick = ()=> goToDetail(el.dataset.swatLink);
+  });
+  const rsSave = document.getElementById('rsSave');
+  if(rsSave) rsSave.onclick = ()=>{
+    if(!state.isAdmin) return;
+    const g = id => (document.getElementById(id)||{}).value;
+    REMINDER_SETTINGS.enabled = g('rsEnabled')==='1';
+    REMINDER_SETTINGS.onDueDate = true;
+    REMINDER_SETTINGS.overdueEveryDays = Math.max(1, Number(g('rsOverdueEvery'))||1);
+    REMINDER_SETTINGS.channel = g('rsChannel') || 'Email + Teams';
+    REMINDER_SETTINGS.alwaysCc = (g('rsAlwaysCc')||'').trim();
+    saveReminderSettings();
+    render();
+    runDailyReminderCheck(true); render();
+    const m = document.getElementById('rsMsg'); if(m) m.textContent = 'Saved — reminders re-checked with the new rules.';
+  };
+  document.querySelectorAll('[data-remind-open]').forEach(el=>{
+    el.onclick = ()=>{ const id = el.dataset.remindOpen; state.remindOpenId = (state.remindOpenId===id) ? null : id; render(); };
+  });
+  document.querySelectorAll('[data-remind-send]').forEach(el=>{
+    el.onclick = ()=>{
+      const id = el.dataset.remindSend;
+      let task = null;
+      ALL_CASES.forEach(c=> (c.followUps||[]).forEach(t=>{ if(t.id===id) task=t; }));
+      if(!task) return;
+      const g = k => (document.getElementById(k+'_'+id)||{}).value || '';
+      const email = g('rmEmail').trim();
+      const err = document.getElementById('rmErr_'+id);
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ if(err) err.textContent='Enter a valid recipient email before sending.'; return; }
+      task.notify = g('rmName').trim() || task.responsible;
+      task.notifyEmail = email;
+      task.cc = g('rmCc').trim();
+      task.channel = g('rmChannel') || 'Email + Teams';
+      const owner = ALL_CASES.find(c=>(c.followUps||[]).some(t=>t.id===id));
+      task.lastReminder = { when: new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}), channel: task.channel, to: email, message: owner ? reminderMessage(owner, task) : '' };
+      REMINDED.add(id);
+      state.remindOpenId = null;
+      render();
+    };
+  });
+
+  // Detail view
+  const back = document.getElementById('backToDb');
+  if(back) back.onclick = ()=>{ state.view='database'; render(); window.scrollTo(0,0); };
+  document.querySelectorAll('.tl-item').forEach(el=>{
+    el.onclick = ()=>{ state.selectedEntryIndex = Number(el.dataset.idx); state.detailEditMode=false; state.editBuffer=null; render(); };
+  });
+  const editCaseBtn = document.getElementById('editCaseBtn');
+  if(editCaseBtn) editCaseBtn.onclick = ()=>{
+    const hist = historyFor(state.selectedSwatId);
+    const idx = Math.min(state.selectedEntryIndex, hist.length-1);
+    const c = hist[idx];
+    state.editBuffer = {
+      partNumbers: JSON.parse(JSON.stringify(partNumberLines(c))),
+      region:c.region, project:c.project, family:c.family,
+      cluster:c.cluster, parentPF:c.parentPF, partFamilyCode:c.partFamilyCode, sourcingType:c.sourcingType,
+      recommendedSupplier:c.recommendedSupplier, presenter:c.presenter, decisionLevel:c.decisionLevel,
+      leadTime:c.leadTime,
+      committeeDiscussion:c.committeeDiscussion, meetingDecision:c.meetingDecision,
+      sourcingPresentationLink:c.sourcingPresentationLink||'',
+      finalDocLink:c.finalDocLink||'',
+      followUps: JSON.parse(JSON.stringify(c.followUps||[])),
+    };
+    state.editError = null;
+    state.detailEditMode = true;
+    render();
+  };
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  if(cancelEditBtn) cancelEditBtn.onclick = ()=>{ state.detailEditMode = false; state.editBuffer = null; state.editError = null; render(); };
+
+  function syncEditBufferFromDom(){
+    const b = state.editBuffer;
+    if(!b) return;
+    const val = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+    const setIf = (key, id) => { const v = val(id); if(v!==undefined) b[key]=v; };
+    setIf('region','editRegion'); setIf('project','editProject'); setIf('family','editFamily');
+    setIf('cluster','editCluster'); setIf('parentPF','editParentPF'); setIf('partFamilyCode','editPartFamilyCode');
+    setIf('sourcingType','editSourcingType'); setIf('recommendedSupplier','editSupplier'); setIf('presenter','editPresenter');
+    setIf('decisionLevel','editDecisionLevel'); setIf('leadTime','editLeadTime');
+    setIf('committeeDiscussion','editDiscussion'); setIf('meetingDecision','editDecision'); setIf('sourcingPresentationLink','editPresentationLink');
+    setIf('finalDocLink','editFinalDocLink');
+    b.partNumbers.forEach((p,i)=>{
+      const pn = val('editPnNumber_'+i); if(pn!==undefined) p.partNumber=pn;
+      const pd = val('editPnDesc_'+i); if(pd!==undefined) p.partDescription=pd;
+      const peak = val('editPnPeak_'+i); if(peak!==undefined) p.peakYearSpend=Number(peak)||0;
+      const life = val('editPnLife_'+i); if(life!==undefined) p.lifetimeSpend=Number(life)||0;
+    });
+    b.followUps.forEach((t,i)=>{
+      const task = val('editFuTask_'+i); if(task!==undefined) t.task=task;
+      const tags = val('editFuTags_'+i); if(tags!==undefined) t.tags = tags.split(',').map(s=>s.trim()).filter(Boolean);
+      const resp = val('editFuResp_'+i); if(resp!==undefined) t.responsible=resp;
+      const due = val('editFuDue_'+i); if(due!==undefined) t.dueDate=due;
+      const status = val('editFuStatus_'+i); if(status!==undefined) t.status=status;
+      const notes = val('editFuNotes_'+i); if(notes!==undefined) t.notes=notes;
+      const notify = val('editFuNotify_'+i); if(notify!==undefined) t.notify=notify;
+      const em = val('editFuEmail_'+i); if(em!==undefined) t.notifyEmail=em.trim();
+      const cc = val('editFuCc_'+i); if(cc!==undefined) t.cc=cc;
+      const ch = val('editFuChannel_'+i); if(ch!==undefined) t.channel=ch;
+    });
+  }
+  const addPnLineBtn = document.getElementById('addPnLineBtn');
+  if(addPnLineBtn) addPnLineBtn.onclick = ()=>{
+    syncEditBufferFromDom();
+    state.editBuffer.partNumbers.push({partNumber:'', partDescription:'', peakYearSpend:0, lifetimeSpend:0});
+    render();
+  };
+  document.querySelectorAll('[data-remove-pnl]').forEach(el=>{
+    el.onclick = ()=>{
+      syncEditBufferFromDom();
+      state.editBuffer.partNumbers.splice(Number(el.dataset.removePnl), 1);
+      render();
+    };
+  });
+  const addTaskBtn = document.getElementById('addTaskBtn');
+  if(addTaskBtn) addTaskBtn.onclick = ()=>{
+    syncEditBufferFromDom();
+    state.editBuffer.followUps.push({id:'FU-NEW-'+Date.now(), task:'', tags:[], responsible:'', dueDate:'', notes:'', status:'Open', notify:'', notifyEmail:'', cc:'', channel:'Email + Teams'});
+    render();
+  };
+  document.querySelectorAll('[data-remove-task]').forEach(el=>{
+    el.onclick = ()=>{
+      syncEditBufferFromDom();
+      state.editBuffer.followUps.splice(Number(el.dataset.removeTask), 1);
+      render();
+    };
+  });
+  const saveCaseBtn = document.getElementById('saveCaseBtn');
+  if(saveCaseBtn) saveCaseBtn.onclick = ()=>{
+    syncEditBufferFromDom();
+    const hist = historyFor(state.selectedSwatId);
+    const idx = Math.min(state.selectedEntryIndex, hist.length-1);
+    const c = hist[idx];
+    const b = state.editBuffer;
+    const isUrl = v => /^https?:\/\/\S+$/i.test(v);
+    b.finalDocLink = (b.finalDocLink||'').trim();
+    b.sourcingPresentationLink = (b.sourcingPresentationLink||'').trim();
+    // Rule 1: recording a Sourcing Decision (anything other than Pending) requires the Sourcing Presentation Link.
+    // A newly registered case sits at Pending and is exempt until an admin records a decision.
+    if(b.meetingDecision!=='PENDING'){
+      if(!b.sourcingPresentationLink){ state.editError = 'A Sourcing Decision cannot be saved without the Sourcing Presentation Link. Enter the link, then save the decision.'; render(); return; }
+      if(!isUrl(b.sourcingPresentationLink)){ state.editError = 'The Sourcing Presentation Link must be a full URL (starting with http:// or https://).'; render(); return; }
+    }
+    // Rule 0: a Pending case has not been reviewed — it cannot carry post-decision follow-up tasks.
+    if(b.meetingDecision==='PENDING' && b.followUps.length>0){ state.editError = 'A case that is Pending for Sourcing Committee Review cannot have follow-up tasks. Record the Sourcing Decision first, or remove the tasks.'; render(); return; }
+    // Rule 2: closing the case (every follow-up action closed) requires the Final PPT / Supporting Document Link.
+    const newActionStatus = rollupActionStatus(b.followUps);
+    if(newActionStatus==='Closed'){
+      if(!b.finalDocLink){ state.editError = 'All follow-up actions are now Closed, which closes the case — enter the Final PPT / Supporting Document Link first.'; render(); return; }
+      if(!isUrl(b.finalDocLink)){ state.editError = 'The Final PPT / Supporting Document Link must be a full URL (starting with http:// or https://).'; render(); return; }
+    }
+    state.editError = null;
+    const totalPeak = b.partNumbers.reduce((s,p)=>s+(Number(p.peakYearSpend)||0),0);
+    const totalLife = b.partNumbers.reduce((s,p)=>s+(Number(p.lifetimeSpend)||0),0);
+    Object.assign(c, {
+      partNumber:b.partNumbers[0].partNumber, partDescription:b.partNumbers[0].partDescription,
+      partNumbers: b.partNumbers.length>1 ? b.partNumbers : null,
+      region:b.region, project:b.project, family:b.family,
+      cluster:b.cluster, parentPF:b.parentPF, partFamilyCode:b.partFamilyCode, sourcingType:b.sourcingType,
+      recommendedSupplier:b.recommendedSupplier, presenter:b.presenter, decisionLevel:b.decisionLevel,
+      peakYearSpend:totalPeak, leadTime:b.leadTime, lifetimeSpend:totalLife,
+      committeeDiscussion:b.committeeDiscussion, meetingDecision:b.meetingDecision, sourcingPresentationLink:b.sourcingPresentationLink,
+      finalDocLink:b.finalDocLink,
+      followUps: b.followUps
+    });
+    c.actionStatus = c.meetingDecision==='PENDING' ? null : rollupActionStatus(c.followUps);
+    state.detailEditMode = false;
+    state.editBuffer = null;
+    render();
+    window.scrollTo(0,0);
+  };
+
+  // Global header search
+  const gs = document.getElementById('globalSearch');
+  if(gs){
+    gs.value = '';
+    gs.onkeydown = (e)=>{ if(e.key==='Enter'){ state.searchQuery = gs.value; state.view='database'; render(); window.scrollTo(0,0); } };
+  }
+
+  // Submit Case
+  const submitBtn = document.getElementById('submitCaseBtn');
+
+  // Part Numbers (repeatable rows) — appended/removed via direct DOM ops so other
+  // typed fields on the form are never lost the way a full re-render would lose them.
+  if(document.getElementById('partNumbersContainer')){
+    if(state.pnRowCounter===undefined) state.pnRowCounter = 0;
+    function wirePnRow(i){
+      const removeBtn = document.querySelector(`[data-remove-pn="${i}"]`);
+      if(removeBtn) removeBtn.onclick = ()=>{
+        const row = document.querySelector(`[data-pn-row="${i}"]`);
+        if(row) row.remove();
+        recomputePnTotals();
+      };
+      document.querySelectorAll(`[data-pn-row="${i}"] .pn-spend`).forEach(inp=> inp.oninput = recomputePnTotals);
+    }
+    function recomputePnTotals(){
+      let totalPeak=0, totalLife=0;
+      document.querySelectorAll('.pn-row').forEach(row=>{
+        const peakEl = row.querySelector('[data-pn-field="peakYearSpend"]');
+        const lifeEl = row.querySelector('[data-pn-field="lifetimeSpend"]');
+        totalPeak += Number(peakEl && peakEl.value)||0;
+        totalLife += Number(lifeEl && lifeEl.value)||0;
+      });
+      const pd = document.getElementById('totalPeakDisplay'); if(pd) pd.textContent = fmtMoney(totalPeak);
+      const ld = document.getElementById('totalLifetimeDisplay'); if(ld) ld.textContent = fmtMoney(totalLife);
+    }
+    wirePnRow(0);
+    const addPnBtn = document.getElementById('addPartNumberBtn');
+    if(addPnBtn) addPnBtn.onclick = ()=>{
+      state.pnRowCounter++;
+      document.getElementById('partNumbersContainer').insertAdjacentHTML('beforeend', partNumberRowHtml(state.pnRowCounter));
+      wirePnRow(state.pnRowCounter);
+    };
+  }
+
+  const caseNoEl = document.getElementById('fExistingSwat');
+  if(caseNoEl) caseNoEl.oninput = ()=>{
+    const h = document.getElementById('caseNoHint'); if(!h) return;
+    const st = caseNoStatus(caseNoEl.value);
+    if(!st){ h.style.color='var(--ink-faint)'; h.textContent='Required for every case. If this number is already in the Database, this registration is automatically linked to that case\'s history (it came back). Otherwise it is registered as a new case under this number.'; return; }
+    if(st.existing){ h.style.color='var(--accent)'; h.textContent=`↩ ${st.id} is already in the Database (${st.priorEntries} previous entr${st.priorEntries===1?'y':'ies'}) — this registration will be linked to its history as a comeback.`; }
+    else { h.style.color='var(--green)'; h.textContent=`✓ ${st.id} is not in the Database yet — it will be registered as a new case under this number.`; }
+  };
+  const qFamily = document.getElementById('qFamily');
+  if(qFamily) qFamily.onchange = ()=>{
+    const block = document.getElementById('familyBlock');
+    block.style.display = qFamily.value==='Yes' ? 'block' : 'none';
+    if(qFamily.value!=='Yes'){
+      document.getElementById('qFamilyAligned').value='';
+      document.getElementById('familyBlockWarning').style.display='none';
+      document.getElementById('familyEvidenceField').style.display='none';
+    }
+  };
+  const qFamilyAligned = document.getElementById('qFamilyAligned');
+  if(qFamilyAligned) qFamilyAligned.onchange = ()=>{
+    document.getElementById('familyBlockWarning').style.display = qFamilyAligned.value==='No' ? 'block' : 'none';
+    document.getElementById('familyEvidenceField').style.display = qFamilyAligned.value==='Yes' ? 'flex' : 'none';
+  };
+  const qECM = document.getElementById('qECM');
+  if(qECM) qECM.onchange = ()=>{
+    const block = document.getElementById('ecmBlock');
+    block.style.display = qECM.value==='Yes' ? 'block' : 'none';
+    if(qECM.value!=='Yes'){
+      document.getElementById('qCCB').value='';
+    }
+  };
+  const qCCB = document.getElementById('qCCB');
+  if(qCCB) qCCB.onchange = ()=>{
+    document.getElementById('ecmBlockWarning').style.display = qCCB.value==='No' ? 'block' : 'none';
+  };
+  if(submitBtn) submitBtn.onclick = ()=>{
+    const val = id=> (document.getElementById(id)||{}).value || '';
+    const banner = document.getElementById('submitBanner');
+    const showError = (msg)=>{
+      banner.textContent = msg;
+      banner.style.background = 'var(--red-tint)'; banner.style.color='var(--red)'; banner.style.borderColor='#EFC2BC';
+      banner.classList.add('show');
+    };
+    const name = val('fSubmitter'), email = val('fSubmitterEmail'), supplier = val('fSupplierIn');
+    const pnRows = [...document.querySelectorAll('.pn-row')].map(row=>({
+      partNumber: (row.querySelector('[data-pn-field="partNumber"]')||{}).value || '',
+      partDescription: (row.querySelector('[data-pn-field="partDescription"]')||{}).value || '',
+      peakYearSpend: Number((row.querySelector('[data-pn-field="peakYearSpend"]')||{}).value)||0,
+      lifetimeSpend: Number((row.querySelector('[data-pn-field="lifetimeSpend"]')||{}).value)||0,
+    }));
+    if(!name || !email || !supplier){
+      showError('⚠ Please fill in Name, Email and Recommended Supplier before submitting.');
+      return;
+    }
+    if(pnRows.length===0 || pnRows.some(r=>!r.partNumber || !r.partDescription)){
+      showError('⚠ Please fill in Part Number and Part Description for every part number row before submitting.');
+      return;
+    }
+    const spendMissing = [...document.querySelectorAll('.pn-row')].some(row=>{
+      const pk = (row.querySelector('[data-pn-field="peakYearSpend"]')||{}).value, lf = (row.querySelector('[data-pn-field="lifetimeSpend"]')||{}).value;
+      return pk==='' || pk===undefined || lf==='' || lf===undefined;
+    });
+    if(spendMissing){ showError('⚠ Please enter Peak Year Spend and Lifetime Spend for every part number (enter 0 if not applicable).'); return; }
+    const caseNo = caseNoStatus(val('fExistingSwat'));
+    if(!caseNo){ showError('⚠ Please enter the SWAT Case # or Supplyon Case #. Every case has one — it is required.'); return; }
+    if(SUBMISSIONS.some(x=>x.caseId===caseNo.id && x.status==='Waiting for Registration Confirmation')){ showError('⚠ '+caseNo.id+' already has a registration waiting for confirmation. Please wait for that one to be processed.'); return; }
+    const existingSwat = caseNo.existing ? caseNo.id : '';
+    const famAns = val('qFamily'), famAligned = val('qFamilyAligned'), famEvidence = val('qFamilyEvidence');
+    const ecmAns = val('qECM'), ccbAns = val('qCCB');
+    if(!famAns){ showError('⚠ Please answer "Is this a Family Case?" before submitting.'); return; }
+    if(!ecmAns){ showError('⚠ Please answer "Does this case involve an Engineering Change (ECM)?" before submitting.'); return; }
+    if(famAns==='Yes'){
+      if(!famAligned){ showError('⚠ Please answer whether Family Alignment has been completed.'); return; }
+      if(famAligned==='No'){ showError('⚠ This case cannot be registered until Family Alignment is completed.'); return; }
+      if(famAligned==='Yes' && !famEvidence){ showError('⚠ Please provide a link to the Family Alignment evidence.'); return; }
+    }
+    if(ecmAns==='Yes'){
+      if(!ccbAns){ showError('⚠ Please answer whether this case has passed CCB2.'); return; }
+      if(ccbAns==='No'){ showError('⚠ This case cannot be registered until it has passed CCB2 (Change Control Board 2).'); return; }
+    }
+    const meetingDateStr = val('fMeetingDate');
+    const meetingDateObj = meetingDateStr ? new Date(meetingDateStr+'T00:00:00') : getEarliestSelectableWednesday();
+    const totalPeak = pnRows.reduce((s,r)=>s+r.peakYearSpend,0);
+    const totalLife = pnRows.reduce((s,r)=>s+r.lifetimeSpend,0);
+    const sub = {
+      subId: nextSubId(),
+      submittedAt: new Date().toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
+      submitterName:name, submitterEmail:email, status:'Waiting for Registration Confirmation', rejectReason:'',
+      caseId: caseNo.id, existingSwatId: existingSwat || '', priorEntries: caseNo.priorEntries,
+      partNumbers: pnRows,
+      partNumber:pnRows[0].partNumber, partDescription:pnRows[0].partDescription,
+      region:val('fRegionIn'), project:val('fProjectIn'), family:val('fFamily'),
+      cluster:val('fClusterIn'), parentPF:val('fParentPF'), partFamilyCode:val('fPartFamilyCode'),
+      sourcingType:val('fSourcingType'), recommendedSupplier:supplier, presenter:name, decisionLevel:val('fDecisionLevelIn'),
+      peakYearSpend:totalPeak, leadTime:val('fLeadTime'), lifetimeSpend:totalLife,
+      committeeDiscussion:val('fDiscussionIn'),
+      meetingDateLabel: formatDateLong(meetingDateObj), meetingDateISO: meetingDateStr || meetingDateObj.toISOString().slice(0,10), meetingWeekNum: dateToWeekNum(meetingDateObj),
+      isFamilyCase:famAns, familyAligned:famAligned||'—', familyEvidence:famEvidence||'—',
+      involvesECM:ecmAns, ccbApproved:ccbAns||'—'
+    };
+    SUBMISSIONS.push(sub);
+    render();
+    window.scrollTo(0,0);
+    setTimeout(()=>{
+      const banner2 = document.getElementById('submitBanner');
+      if(banner2){ banner2.textContent = `✓ Submitted for Registration (${sub.subId}) — Waiting for the Registration Confirmation. The SBS Procurement approver has been notified.`; banner2.classList.add('show'); }
+    }, 30);
+  };
+
+  // Approvals
+  document.querySelectorAll('[data-approve]').forEach(el=>{
+    el.onclick = ()=>{
+      if(!state.isAdmin) return;
+      const sub = SUBMISSIONS.find(s=>s.subId===el.dataset.approve);
+      if(!sub || sub.status!=='Waiting for Registration Confirmation') return;
+      sub.status='Registration Confirmed';
+      sub.approvedSwatId = sub.caseId || sub.existingSwatId || nextSwatId();
+      const w = sub.meetingWeekNum || Math.max(...ALL_CASES.map(c=>c.weekNum));
+      const existingForWeek = ALL_CASES.filter(c=>c.weekNum===w);
+      const caseNumber = existingForWeek.length ? Math.max(...existingForWeek.map(c=>c.caseNumber))+1 : 1;
+      ALL_CASES.push(mkCase({
+        weekNum:w, caseNumber,
+        swatId: sub.approvedSwatId, partNumber:sub.partNumber, partDescription:sub.partDescription,
+        partNumbers: (sub.partNumbers && sub.partNumbers.length>1) ? sub.partNumbers : null,
+        region:sub.region, project:sub.project, family:sub.family, cluster:sub.cluster,
+        parentPF:sub.parentPF, partFamilyCode:sub.partFamilyCode, sourcingType:sub.sourcingType,
+        recommendedSupplier:sub.recommendedSupplier, presenter:sub.presenter, decisionLevel:sub.decisionLevel,
+        peakYearSpend:sub.peakYearSpend, leadTime:sub.leadTime, lifetimeSpend:sub.lifetimeSpend,
+        committeeDiscussion: 'Pending for Sourcing Committee Review',
+        submitterComments: sub.committeeDiscussion || '',
+        meetingDecision:'PENDING', caseStatus:'Open', actionStatus:null,
+        meetingDateLabel: sub.meetingDateLabel || null,
+        createdDate: sub.submittedAt || null,
+        followUps:[],
+        closure:{status:'Open',closureDate:'—',closureComment:'Awaiting committee review.',closureEvidence:'—'}
+      }));
+      // Jump straight to the SAME case that was just confirmed so it's never "lost".
+      state.flash = sub.existingSwatId ? `✓ Registration confirmed for ${sub.subId}. ${sub.approvedSwatId} came back — this registration was linked to its history as a new lifecycle entry (Sourcing Decision = Pending, waiting for Sourcing Committee review).` : `✓ Registration confirmed for ${sub.subId}. New case ${sub.approvedSwatId} is now in the Database with Sourcing Decision = Pending — waiting for Sourcing Committee review.`;
+      goToDetail(sub.approvedSwatId);
+    };
+  });
+  document.querySelectorAll('[data-reject-toggle]').forEach(el=>{
+    el.onclick = ()=>{
+      const box = document.getElementById('rejectBox-'+el.dataset.rejectToggle);
+      if(box) box.classList.toggle('show');
+    };
+  });
+  document.querySelectorAll('[data-reject-confirm]').forEach(el=>{
+    el.onclick = ()=>{
+      const id = el.dataset.rejectConfirm;
+      const reasonEl = document.getElementById('rejectReason-'+id);
+      const reason = reasonEl ? reasonEl.value.trim() : '';
+      if(!reason){ reasonEl.style.borderColor='var(--red)'; reasonEl.placeholder='A reason is required before returning this to the submitter.'; return; }
+      const sub = SUBMISSIONS.find(s=>s.subId===id);
+      if(!state.isAdmin || !sub || sub.status!=='Waiting for Registration Confirmation') return;
+      sub.status='Rejected'; sub.rejectReason=reason;
+      render();
+      window.scrollTo(0,0);
+    };
+  });
+}
+function refreshDbTableOnly(){
+  // lightweight re-render preserving focus in search box
+  const scrollY = window.scrollY;
+  const app = document.getElementById('app');
+  app.innerHTML = renderDatabase();
+  wireEvents();
+  document.getElementById('dbSearch').focus();
+  const v = document.getElementById('dbSearch').value;
+  document.getElementById('dbSearch').value=v;
+  document.getElementById('dbSearch').selectionStart = document.getElementById('dbSearch').selectionEnd = v.length;
+  window.scrollTo(0,scrollY);
+}
+
+function runUploadSimulation(){
+  if(state.uploaded) { return; }
+  const dzTitle = document.getElementById('dzTitle');
+  const progress = document.getElementById('uploadProgress');
+  progress.classList.add('show');
+  dzTitle.textContent = '2026_W34_Sourcing_Committee.xlsx';
+  const steps = ['step1','step2','step3','step4'];
+  let i=0;
+  function next(){
+    if(i>0){
+      const prev = document.getElementById(steps[i-1]);
+      prev.classList.remove('active'); prev.classList.add('done');
+      prev.querySelector('.dot').innerHTML='';
+    }
+    if(i < steps.length){
+      const cur = document.getElementById(steps[i]);
+      cur.classList.add('active');
+      cur.querySelector('.dot').innerHTML = '<span class="spinner"></span>';
+      i++;
+      setTimeout(next, 650);
+    } else {
+      document.getElementById('uploadSuccess').classList.add('show');
+      // add new batch of 18 cases simulating the new weekly file
+      const newBatch = generateBatch(18, 34, 34, Date.now()%100000, 20500);
+      normalizePendingCases(newBatch);
+      seedFinalDocLinks(newBatch);
+      seedPresentationLinks(newBatch);
+      ALL_CASES = [...ALL_CASES, ...newBatch];
+      state.uploaded = true;
+      setTimeout(()=>{ render(); window.scrollTo(0,0); }, 900);
+    }
+  }
+  next();
+}
+
+dailyCheckIfDue();
+setInterval(dailyCheckIfDue, 60*60*1000); // re-check hourly while the Cockpit stays open (catches the date rolling over)
+render();
+// Direct case links (e.g. from a reminder): #case/SWAT-12345
+function openFromHash(){
+  const m = /^#case\/(.+)$/.exec(location.hash||'');
+  if(m){ const id = decodeURIComponent(m[1]); if(ALL_CASES.some(c=>c.swatId===id)) goToDetail(id); }
+}
+openFromHash();
+window.addEventListener('hashchange', openFromHash);
+</script>
+</body>
+</html>

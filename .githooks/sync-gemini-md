@@ -1,0 +1,31 @@
+#!/bin/sh
+# 双向镜像 CLAUDE.md <-> GEMINI.md（Claude Code 只认前者，Antigravity / Gemini CLI 只认后者）。
+# 规则：两份内容相同 → 什么都不做；不同 → mtime 新的覆盖旧的；mtime 打平 → CLAUDE.md 赢。
+# 因为相同时不动文件，cp 之后再被触发一次也是 no-op，不会来回震荡。
+# 调用方：.githooks/pre-commit（提交时）和本机的 systemd path unit（文件一变就跑）。
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || root=$(cd "$(dirname "$0")/.." && pwd)
+claude="$root/CLAUDE.md"
+gemini="$root/GEMINI.md"
+
+if [ ! -f "$claude" ] && [ ! -f "$gemini" ]; then
+	exit 0
+fi
+
+if [ ! -f "$gemini" ]; then
+	cp "$claude" "$gemini" && echo "CLAUDE.md -> GEMINI.md (created)"
+	exit 0
+fi
+
+if [ ! -f "$claude" ]; then
+	cp "$gemini" "$claude" && echo "GEMINI.md -> CLAUDE.md (created)"
+	exit 0
+fi
+
+cmp -s "$claude" "$gemini" && exit 0
+
+if [ "$gemini" -nt "$claude" ]; then
+	cp "$gemini" "$claude" && echo "GEMINI.md -> CLAUDE.md"
+else
+	cp "$claude" "$gemini" && echo "CLAUDE.md -> GEMINI.md"
+fi
