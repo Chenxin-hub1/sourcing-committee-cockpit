@@ -4,14 +4,15 @@ Address: **http://<server>:8031/** (replace with the address you were given)
 
 ## 1. First login
 
-**Sourcing admin (Xiangwei Chen)** — the account already exists. Click **Log in** (top right), enter your email and the initial password you received, then click your name → **Change password**.
+**Sourcing admin (Xiangwei Chen)** — the only account with a password. Click **Log in** (top right), enter your email, then the password field appears: enter the initial password you received. Afterwards click your name → **Change password**.
 
-**Managers (Carrie Wang, William Shorter, Eric Wu, Fei Chen)** — two steps:
+**Managers (Carrie Wang, William Shorter, Eric Wu, Fei Chen) and everyone else** — no password at all:
 
-1. Click **Log in → Create account**. Use your company email (@zf.com or @zf-lifetec.com), your name and a password. You are logged in right away as *User*.
-2. Tell the Sourcing admin. He opens **Accounts** and changes your role to **Manager**. It takes effect immediately, no re-login needed.
+1. Click **Log in → Register**. Enter your name and company email (@zf.com or @zf-lifetec.com). Done — you are logged in as *User*.
+2. Next time, click **Log in**, type your email, press Enter. That is the whole login.
+3. Managers: tell the Sourcing admin once. He opens **Accounts** and changes your role to **Manager**; it takes effect immediately.
 
-Password rules: at least 10 characters, not your email address, at least 4 different characters.
+Password rules (admins only): at least 10 characters, not your email address, at least 4 different characters.
 
 ## 2. What each role can do
 
@@ -53,8 +54,10 @@ Viewing does not require login. Submitting does.
 | Message | Meaning / what to do |
 | --- | --- |
 | Use your company email address (@zf.com or @zf-lifetec.com) | Only company addresses can register |
-| An account with this email already exists | Log in instead; forgot the password → ask the Sourcing admin to reset it |
-| Wrong email or password | Check both; after 5 failures in 15 minutes the login is locked for 5 minutes |
+| An account with this email already exists | Just log in with the email |
+| No account with this email yet — register first | Switch to the Register tab, enter name + email |
+| This is a Sourcing admin account — enter the password | Admin accounts are the only ones with a password |
+| Wrong email or password | Admins only; after 5 failures in 15 minutes the login is locked for 5 minutes |
 | This account is disabled | Ask the Sourcing admin to re-enable it |
 | Please fill in Project, Sourcing Type and Recommended Supplier for every part number row | Each part number row needs its own project, type and supplier |
 | Please enter the bundle Peak Year Spend and Lifetime Spend | One total for the whole registration, both must be above 0 |
@@ -68,7 +71,7 @@ Viewing does not require login. Submitting does.
 
 ## 5. Good to know
 
-- Login stays valid for 7 days; changing the password or logging out ends it everywhere.
+- Login stays valid for 7 days; logging out ends it. Only Sourcing admins have a password; promoting someone to admin issues a temporary password shown once on the Accounts page.
 - Uploaded files are renamed automatically to `YYYY.MM.DD Project Part-description PN, Supplier.ext`; the original name is still shown ("uploaded as …").
 - Amounts are stored in EUR. USD / CNY entries are converted with the OP rate maintained by the Sourcing admin on the Dashboard; the entered amount stays visible.
 - Week numbers are ISO calendar weeks (KW).

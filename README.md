@@ -8,7 +8,7 @@ Home 搜索、Submit Case 登记、Approval 确认/退回、Database 筛选与 C
 
 提交金额可按 EUR / USD / CNY 填写，按管理员在 Dashboard 维护的财务 OP 汇率（1 EUR = X 外币）折算为欧元保存（记录保留原币金额与当时汇率）；旧美元案例可一次性换算（见 DEPLOY.md）；区域可多选。Peak Year / Lifetime Spend 按整个 bundle 填一个（案例级必填）；Project / Sourcing Type / Recommended Supplier 按零件行填写，案例级自动汇总；上传的演示文件在系统里改名为 `YYYY.MM.DD 项目 零件描述 零件号, 供应商.ext`（原文件名保留可见）。
 
-每人用公司邮箱自注册个人账号，提交登记须登录；Sourcing admin 在 Accounts 页提升 Manager / admin 角色并可重置密码（详见 DEPLOY.md 安全说明）。审批结果和待办提醒可经 SMTP / Teams 发送，并记录结果。未配置的通道显示 `skipped`。Legacy Excel Upload 目前是管理员专用的演示数据生成功能，**不会解析 Excel 文件**。
+每人用公司邮箱自注册个人账号（只填姓名和邮箱，不设密码，凭邮箱登录；只有 Sourcing admin 用密码），提交登记须登录；Sourcing admin 在 Accounts 页提升 Manager / admin 角色，提升为 admin 时发临时密码（详见 DEPLOY.md 安全说明）。审批结果和待办提醒可经 SMTP / Teams 发送，并记录结果。未配置的通道显示 `skipped`。Legacy Excel Upload 目前是管理员专用的演示数据生成功能，**不会解析 Excel 文件**。
 
 ## 本地启动
 

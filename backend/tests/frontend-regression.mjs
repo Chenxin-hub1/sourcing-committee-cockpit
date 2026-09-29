@@ -613,14 +613,19 @@ try{
     await context.close();
   });
 
-  await test('Wrong login password leaves a usable error panel', async()=>{
+  await test('Admin login reveals the password field on demand; a wrong password leaves a usable error panel', async()=>{
     const {page,context} = await fixture({api:async(route,path)=>{
       if(path!=='/api/auth/login') return false;
-      await route.fulfill({status:401,json:{detail:'Wrong email or password.'}});
+      const body = route.request().postDataJSON();
+      await route.fulfill({status:401,json:{detail: body.password ? 'Wrong email or password.' : 'Password required.'}});
       return true;
     }});
     await page.locator('#adminToggle').click();
-    await page.locator('#adminEmailInput').fill('test.user@zf.com');
+    assert.equal(await page.locator('#adminPasswordInput').isVisible(), false);  // v3 Phase-16：默认只有邮箱
+    await page.locator('#adminEmailInput').fill('admin@zf.com');
+    await page.locator('#adminLoginBtn').click();
+    await page.locator('#adminPasswordInput').waitFor({state:'visible'});  // 服务端说要密码 → 展开
+    assert.ok((await page.locator('#adminLoginErr').textContent()).includes('Sourcing admin account'));
     await page.locator('#adminPasswordInput').fill('wrong');
     await page.locator('#adminLoginBtn').click();
     await page.locator('#adminLoginErr').waitFor({state:'visible'});
@@ -640,9 +645,8 @@ try{
     }});
     await page.locator('#adminToggle').click();
     await page.locator('#adminEmailInput').fill('test.user@zf.com');
-    await page.locator('#adminPasswordInput').fill('test');
-    await page.locator('#adminPasswordInput').press('Enter');
-    await page.locator('#adminPasswordInput').press('Enter');
+    await page.locator('#adminEmailInput').press('Enter');
+    await page.locator('#adminEmailInput').press('Enter');
     await page.waitForFunction(()=>API.pendingWrites===1);
     await page.locator('#adminLoginCancel').click();
     assert.equal(requests,1);
@@ -659,15 +663,16 @@ try{
       Storage.prototype.getItem=()=>{throw new Error('Storage blocked');};
       Storage.prototype.setItem=()=>{throw new Error('Storage blocked');};
     }),api:async(route,path)=>{
-      if(path==='/api/auth/login'){ await route.fulfill({json:{ok:true, token:'memory-token', user:USER}}); return true; }
-      if(path==='/api/auth/password'){ await route.fulfill({json:{ok:true, user:USER}}); return true; }
+      // 改密码只有管理员有（Phase-16）：这里以管理员身份登录
+      const me = {...USER, role:'admin', roleLabel:'Sourcing admin'};
+      if(path==='/api/auth/login'){ await route.fulfill({json:{ok:true, token:'memory-token', user:me}}); return true; }
+      if(path==='/api/auth/password'){ await route.fulfill({json:{ok:true, user:me}}); return true; }
       return false;
     }});
     await page.locator('[data-nav="submit"]').click();
     await page.locator('#submitLoginBtn').click();  // 提交页的登录门槛打开登录面板
     await page.locator('#adminEmailInput').fill('test.user@zf.com');
-    await page.locator('#adminPasswordInput').fill('user-pass-123');
-    await page.locator('#adminLoginBtn').click();
+    await page.locator('#adminLoginBtn').click();  // 邮箱直接登录
     await page.locator('#submitCaseBtn').waitFor();
     assert.equal(await page.evaluate(()=>API.sessionToken()),'memory-token');
     assert.deepEqual(await page.evaluate(()=>[document.getElementById('fSubmitter').value, document.getElementById('fSubmitterEmail').value, document.getElementById('fSubmitter').readOnly]),
@@ -718,12 +723,12 @@ try{
     assert.equal(await page.locator('#adminLoginPanel').getAttribute('data-mode'),'login');
     await page.locator('#toRegister').click();
     assert.ok((await page.locator('#adminLoginPanel').innerText()).includes('@zf.com or @zf-lifetec.com'));
+    assert.equal(await page.locator('#adminPasswordInput').count(),0);  // 注册不设密码
     await page.locator('#regNameInput').fill('New Buyer');
     await page.locator('#adminEmailInput').fill('New.Buyer@zf-lifetec.com');
-    await page.locator('#adminPasswordInput').fill('good-pass-123');
     await page.locator('#adminLoginBtn').click();
     await page.locator('#submitCaseBtn').waitFor();
-    assert.deepEqual(registered,{body:{name:'New Buyer', email:'New.Buyer@zf-lifetec.com', password:'good-pass-123'}, token:undefined});
+    assert.deepEqual(registered,{body:{name:'New Buyer', email:'New.Buyer@zf-lifetec.com'}, token:undefined});
     assert.equal(await page.locator('#adminLoginPanel').count(),0);
     assert.equal(await page.locator('#adminToggle').textContent(),'New Buyer · User');
     assert.equal(await page.evaluate(()=>localStorage.getItem('sc_session_token')),'new-token');
@@ -750,8 +755,9 @@ try{
       if(p==='/api/users' && method==='GET'){ calls.push({p, token:route.request().headers()['x-session-token']}); await route.fulfill({json:{ok:true, users}}); return true; }
       if(p==='/api/users/test.user@zf.com' && method==='PUT'){
         const body=route.request().postDataJSON(); calls.push({p, body});
-        users=users.map(u=>u.email==='test.user@zf.com'?{...u,...body, roleLabel:body.role==='npi_manager'?'Manager':u.roleLabel}:u);
-        await route.fulfill({json:{ok:true, users}}); return true;
+        users=users.map(u=>u.email==='test.user@zf.com'?{...u,...body, roleLabel:body.role==='npi_manager'?'Manager':body.role==='admin'?'Sourcing admin':u.roleLabel}:u);
+        // 提升为管理员：服务端在这次响应里附临时密码（Phase-16）
+        await route.fulfill({json:{ok:true, users, ...(body.role==='admin' ? {temporaryPassword:'promo-Temp-456'} : {})}}); return true;
       }
       if(p==='/api/users/test.user@zf.com/reset-password'){
         calls.push({p});
@@ -775,6 +781,12 @@ try{
     await page.waitForFunction(()=>document.querySelector('[data-user-disable="test.user@zf.com"]')?.textContent==='Enable');
     assert.deepEqual(calls[2],{p:'/api/users/test.user@zf.com', body:{disabled:true}});
     assert.ok((await page.locator('#app').innerText()).includes('Disabled'));
+    // 非管理员没有密码，也就没有 Reset password 按钮；提升为管理员时拿到临时密码
+    assert.equal(await page.locator('[data-user-reset="test.user@zf.com"]').count(),0);
+    await page.locator('[data-user-role="test.user@zf.com"]').selectOption('admin');
+    await page.locator('#accountsNotice').waitFor();
+    assert.ok((await page.locator('#accountsNotice').innerText()).includes('promo-Temp-456'));
+    await page.locator('#accountsNoticeClose').click();
     page.once('dialog', d=>d.accept());
     await page.locator('[data-user-reset="test.user@zf.com"]').click();
     await page.locator('#accountsNotice').waitFor();

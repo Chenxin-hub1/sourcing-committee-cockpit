@@ -22,11 +22,14 @@ def submission(number):
 
 
 def test_unicode_password_round_trips(api_client):
-    account = {"email": "unicode.user@zf.com", "name": "Unicode", "password": "管理员口令🔑-long-enough"}
-    assert api_client.post("/api/auth/register", json=account).status_code == 200
-    response = api_client.post("/api/auth/login", json={**account, "password": "错误口令-long-enough"})
+    # v3 Phase-16：只有管理员有密码 —— 管理员把自己的密码改成含中文与 emoji 的，再登录
+    r = api_client.post("/api/auth/login", json={"email": "admin@zf.com", "password": "test-admin"})
+    admin = {"X-Session-Token": r.json()["token"]}
+    password = "管理员口令🔑-long-enough"
+    assert api_client.post("/api/auth/password", json={"currentPassword": "test-admin", "newPassword": password}, headers=admin).status_code == 200
+    response = api_client.post("/api/auth/login", json={"email": "admin@zf.com", "password": "错误口令-long-enough"})
     assert response.status_code == 401
-    response = api_client.post("/api/auth/login", json=account)
+    response = api_client.post("/api/auth/login", json={"email": "admin@zf.com", "password": password})
     assert response.status_code == 200
 
 

@@ -1,11 +1,13 @@
 """个人账号（v3 Phase-6）：公司邮箱自注册、密码哈希、角色。
 
-反馈人答复（2026-09-24）：每人一个账号，公司邮箱 + 自设密码；新账号默认普通用户，
-Sourcing 管理员在页面上提升角色；共享管理员口令取消。三种角色由低到高：
+反馈人答复（2026-09-24）：每人一个账号，公司邮箱；新账号默认普通用户，
+Sourcing 管理员在页面上提升角色；共享管理员口令取消。
+v3 Phase-16（领导 2026-09-29：不想要密码）：只有 Sourcing 管理员用密码登录，其他人用公司邮箱注册、
+凭邮箱直接登录（不设密码）；提升为管理员时系统生成临时密码，本人首次登录后必须改。三种角色由低到高：
 - user：提交登记、查看
 - npi_manager（页面上显示 "Manager"，v3 Phase-15 起：采购经理也用这个角色）：另可审批登记、编辑与删除案例、记录决议与待办、发提醒、管理案例文件
 - admin（Sourcing 管理员）：另可改汇率 / 登记截止 / 提醒设置、管理账号
-还没有邮件通道（SMTP 待 IT），注册不做邮箱验证；忘记密码由管理员重置成临时密码，本人登录后必须先改。
+还没有邮件通道（SMTP 待 IT），注册不做邮箱验证；管理员忘记密码由另一位管理员重置成临时密码，本人登录后必须先改。
 """
 
 from __future__ import annotations
@@ -103,5 +105,6 @@ def public_user(doc: dict) -> dict:
         "email": doc["email"], "name": doc.get("name", ""), "role": doc.get("role", "user"),
         "roleLabel": ROLE_LABELS.get(doc.get("role", "user"), "User"),
         "disabled": bool(doc.get("disabled")), "mustChangePassword": bool(doc.get("mustChangePassword")),
+        "hasPassword": bool(doc.get("passwordHash")),
         "createdAt": doc.get("createdAt", ""), "lastLoginAt": doc.get("lastLoginAt", ""),
     }

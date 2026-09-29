@@ -222,28 +222,30 @@ LoggedIn = Annotated[dict, Depends(require_login)]
 Manager = Annotated[dict, Depends(require_manager)]
 
 
+PASSWORD_REQUIRED = "Password required."  # 前端据此文案展开密码框（管理员账号）
+
+
 def _session_response(token: str, user: dict) -> dict:
     return {"ok": True, "token": token, "user": accounts.public_user(user)}
 
 
 @app.post("/api/auth/register")
 async def register(b: RegisterIn, request: Request) -> dict:
-    """公司邮箱自注册：新账号默认普通用户，注册即登录。"""
+    """公司邮箱自注册（v3 Phase-16 起不设密码）：新账号默认普通用户，注册即登录。"""
     ip = request.client.host if request.client else "unknown"
     email = accounts.normalize_email(b.email)
     problem = (accounts.email_problem(email, accounts.allowed_domains(get_settings().allowed_email_domains))
-               or ("Please enter your name." if not b.name.strip() else None)
-               or accounts.password_problem(b.password, email))
+               or ("Please enter your name." if not b.name.strip() else None))
     if problem:
         raise HTTPException(422, problem)
     async with _write_lock, SessionLocal() as session:
         if not _register_allowed(ip):
             raise HTTPException(429, "Too many new accounts from this network in the last hour. Please try again later.")
         if await service.get_user(session, email) is not None:
-            raise HTTPException(409, "An account with this email already exists. Log in, or ask the Sourcing admin to reset the password.")
+            raise HTTPException(409, "An account with this email already exists — just log in with it.")
         now = logic.fmt_when(logic.na_now())
         user = {"email": email, "name": b.name.strip(), "role": "user", "disabled": False, "mustChangePassword": False,
-                "passwordHash": accounts.hash_password(b.password), "createdAt": now, "lastLoginAt": now}
+                "createdAt": now, "lastLoginAt": now}
         await service.save_user(session, user)
         _register_times.setdefault(ip, []).append(time.time())
         token = await service.issue_session(session, email)  # 内含提交
@@ -259,9 +261,16 @@ async def login(b: LoginIn, request: Request) -> dict:
     email = accounts.normalize_email(b.email)
     async with _write_lock, SessionLocal() as session:
         user = await service.get_user(session, email)
-    if not accounts.verify_or_dummy(b.password, (user or {}).get("passwordHash")):
+    if user is None:
         _login_record_failure(ip)
-        raise HTTPException(401, "Wrong email or password.")
+        raise HTTPException(401, "No account with this email yet — register first (Register tab), it only takes your name.")
+    # v3 Phase-16：只有 Sourcing 管理员用密码；其他角色凭邮箱直接登录
+    if user.get("role") == "admin":
+        if not b.password:
+            raise HTTPException(401, PASSWORD_REQUIRED)
+        if not accounts.verify_or_dummy(b.password, user.get("passwordHash")):
+            _login_record_failure(ip)
+            raise HTTPException(401, "Wrong email or password.")
     if user.get("disabled"):
         raise HTTPException(403, "This account is disabled. Ask the Sourcing admin to re-enable it.")
     _login_failures.pop(ip, None)
@@ -285,6 +294,8 @@ async def change_password(b: PasswordChangeIn, x_session_token: str | None = Hea
     """本人改密码（临时密码登录后必须先走这里）；别处登录的会话一并失效，当前这个保留。"""
     if user is None:
         raise HTTPException(401, "Please log in.")
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Only Sourcing admins have a password — everyone else logs in with their email.")
     if not accounts.verify_password(b.currentPassword, user.get("passwordHash", "")):
         raise HTTPException(422, "The current password is not correct.")
     problem = accounts.password_problem(b.newPassword, user["email"])
@@ -322,20 +333,30 @@ async def update_account(email: str, b: UserUpdateIn) -> dict:
         users = [updated if u["email"] == user["email"] else u for u in await service.list_users(session)]
         if not any(u.get("role") == "admin" and not u.get("disabled") for u in users):
             raise HTTPException(422, "Keep at least one active Sourcing admin — promote someone else first.")
+        temporary = None
+        if updated.get("role") == "admin" and user.get("role") != "admin":
+            # v3 Phase-16：管理员必须有密码 —— 提升时发一个临时密码（只显示这一次），本人首次登录后必须改
+            temporary = accounts.temporary_password()
+            updated.update(passwordHash=accounts.hash_password(temporary), mustChangePassword=True)
+        elif updated.get("role") != "admin":
+            updated["mustChangePassword"] = False  # 非管理员不用密码，也就不会被"先改密码"拦住
         await service.save_user(session, updated)
         if updated.get("disabled"):
             await service.revoke_user_sessions(session, updated["email"])
         await session.commit()
-        return await _users_response(session)
+        response = await _users_response(session)
+        return {**response, "temporaryPassword": temporary} if temporary else response
 
 
 @app.post("/api/users/{email}/reset-password", dependencies=[Depends(require_admin)])
 async def reset_account_password(email: str) -> dict:
-    """忘记密码（还没有邮件通道）：生成临时密码只显示给管理员一次，本人登录后必须先改。"""
+    """管理员忘记密码（还没有邮件通道）：生成临时密码只显示一次，本人登录后必须先改。只有管理员账号有密码。"""
     async with _write_lock, SessionLocal() as session:
         user = await service.get_user(session, accounts.normalize_email(email))
         if user is None:
             raise HTTPException(404, "Account not found.")
+        if user.get("role") != "admin":
+            raise HTTPException(422, "Only Sourcing admins have a password — this account logs in with its email.")
         temporary = accounts.temporary_password()
         user.update(passwordHash=accounts.hash_password(temporary), mustChangePassword=True)
         await service.save_user(session, user)
