@@ -856,6 +856,7 @@ def generate_batch(count: int, week_start: int, week_end: int, seed: int, swat_s
             "presenter": _pick(PRESENTERS, r), "decisionLevel": _pick(DECISION_LEVELS, r),
             "peakYearSpend": int(200000 + next(r) * 4500000), "leadTime": f"{4 + int(next(r) * 16)} weeks",
             "lifetimeSpend": int(800000 + next(r) * 20000000),
+            "spendCurrency": "EUR",  # 演示批次的金额按欧元记（Phase-15 后新记录一律欧元，导出币种列才不会出现 USD）
             "committeeDiscussion": discussion, "meetingDecision": dec,
             "caseStatus": case_status, "actionStatus": action_status,
             "followUps": [] if action_status is None else [{

@@ -313,7 +313,8 @@ def test_rejected_edit_leaves_case_untouched(client, admin):
 
 
 def test_legacy_case_without_commercial_fields_is_still_editable(client, admin):
-    legacy = next(c for c in client.get("/api/bootstrap").json()["cases"] if "pcPriceCQA" not in c and c["meetingDecision"] == "PENDING")
+    # 商务字段之前登记的案例（种子数据：件价等为空）仍可编辑
+    legacy = next(c for c in client.get("/api/bootstrap").json()["cases"] if c.get("pcPriceCQA") is None and c["meetingDecision"] == "PENDING")
     r = client.put(f"/api/cases/{legacy['id']}", headers=admin, json=_edit_payload(legacy, partNumbers=[dict(r, project="Still editable") for r in _edit_rows(legacy)]))
     assert r.status_code == 200 and r.json()["case"]["project"] == "Still editable"
 

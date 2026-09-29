@@ -4,8 +4,8 @@ services:
     container_name: sourcing-cockpit
     user: "${SC_UID:-1000}:${SC_GID:-1000}"
     ports:
-      # 对外主机端口 8062（8000 常被占用）；容器内仍监听 8000
-      - "8062:8000"
+      # 对外主机端口取 .env 的 SC_PORT（默认 8062；8000 常被占用）；容器内仍监听 8000
+      - "${SC_PORT:-8062}:8000"
     environment:
       # 对外访问地址 —— 决定提醒消息里「Open Action Case」链接的前缀，部署时改成服务器实际地址
       SC_PUBLIC_URL: ${SC_PUBLIC_URL:-http://localhost:8062/}

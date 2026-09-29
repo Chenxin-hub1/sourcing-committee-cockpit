@@ -164,16 +164,26 @@ def test_case_edit_reconverts_with_the_rate_recorded_at_submission(client, admin
     assert (r.json()["case"]["peakYearSpendEntered"], r.json()["case"]["peakYearSpend"]) == (100000, 80000)
 
 
-def test_legacy_case_without_currency_keeps_its_amounts(client, admin):
-    # 模板旧数据没有币种信息（按美元录入）：编辑时原样保存，不做折算
-    snap = client.get("/api/bootstrap").json()
-    case = next(c for c in snap["cases"] if c["partNumbers"] is None and c["meetingDecision"] == "PENDING")
+async def test_legacy_case_without_currency_keeps_its_amounts(async_client):
+    # 没有币种信息的旧数据（当初按美元录入，未跑换算）：编辑时原样保存，不做折算。
+    # 演示种子已是欧元，这里自己放一条旧记录进库
+    from app import main, service
+    async with main.SessionLocal() as session:
+        state = await service.load_state(session)
+        case = logic.mk_case({"weekNum": 30, "caseNumber": 9, "swatId": "SWAT-LEGACY-9", "partNumber": "P-LEG", "partDescription": "Legacy",
+                              "region": "EU", "project": "Legacy", "meetingDecision": "PENDING", "peakYearSpend": 10, "lifetimeSpend": 20}, state["cases"])
+        await service.insert_cases(session, [case])
+        await session.commit()
+    r = await async_client.post("/api/auth/login", json={"email": "admin@zf.com", "password": "test-admin"})
+    admin = {"X-Session-Token": r.json()["token"]}
     assert "spendCurrency" not in case and "fx" not in case
     body = {
         "partNumbers": [{"partNumber": case["partNumber"], "partDescription": case["partDescription"]}],
         "peakYearSpend": 1234, "lifetimeSpend": 5678,
         "region": case["region"], "project": case["project"], "meetingDecision": "PENDING", "followUps": [],
     }
-    saved = client.put(f"/api/cases/{case['id']}", json=body, headers=admin).json()["case"]
+    r = await async_client.put(f"/api/cases/{case['id']}", json=body, headers=admin)
+    assert r.status_code == 200, r.text
+    saved = r.json()["case"]
     assert (saved["peakYearSpend"], saved["lifetimeSpend"]) == (1234, 5678)
     assert "spendCurrency" not in saved and "fx" not in saved

@@ -37,7 +37,7 @@ def test_webhook_keeps_query_credentials_and_public_base_path():
 # ---------- 部署配置一致性：.env.example 里写的每一项，容器都拿得到、程序都读得到 ----------
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPOSE_ONLY = {"SC_UID", "SC_GID"}  # 只给 docker-compose 的 user: 用，不进程序
+COMPOSE_ONLY = {"SC_UID", "SC_GID", "SC_PORT"}  # 只给 docker-compose（user: / ports:）与 start.bat 用，不进程序
 
 
 def _documented_keys() -> set[str]:
@@ -46,8 +46,10 @@ def _documented_keys() -> set[str]:
 
 def test_every_documented_setting_is_passed_into_the_container():
     # 容器里没有宿主机的 .env 文件：没列在 docker-compose.yml environment 里的配置，填了也不生效
-    passed = set(re.findall(r"(?m)^\s+(SC_[A-Z0-9_]+):", (ROOT / "docker-compose.yml").read_text(encoding="utf-8")))
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    passed = set(re.findall(r"(?m)^\s+(SC_[A-Z0-9_]+):", compose))
     assert _documented_keys() - COMPOSE_ONLY - passed == set()
+    assert "${SC_PORT:-8062}:8000" in compose  # 对外端口与 start.bat 共用 SC_PORT
 
 
 def test_every_documented_setting_is_read_by_the_app():

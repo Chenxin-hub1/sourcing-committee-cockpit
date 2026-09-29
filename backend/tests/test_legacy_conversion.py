@@ -8,10 +8,26 @@
 from copy import deepcopy
 from decimal import Decimal
 
-from app import logic, main, migrations
+from app import logic, main, migrations, service
 
 FX = {"currency": "USD", "perEur": "1.17", "basis": "OP 2025 plan rates 2026"}
 WHEN = "Sep 24, 6:30 PM"
+# 演示种子（seed.json）从 2026-09-29 起已是欧元（服务器首装的示例数据导出时不再显示 USD）；
+# 整库换算的用例自己往库里放两条没有币种的旧记录
+LEGACY_SWAT = "SWAT-LEGACY-1"
+LEGACY_SUB = "SUB-LEGACY-1"
+
+
+async def _insert_legacy(client):
+    async with main.SessionLocal() as session:
+        state = await service.load_state(session)
+        case = logic.mk_case({"weekNum": 30, "caseNumber": 9, "swatId": LEGACY_SWAT, "partNumber": "P-LEG", "partDescription": "Legacy housing",
+                              "region": "EU", "project": "Legacy", "meetingDecision": "PENDING", "caseStatus": "Open",
+                              "peakYearSpend": 1_170_000, "lifetimeSpend": 2_340_001}, state["cases"])
+        await service.insert_cases(session, [case])
+        await service.upsert_submission(session, {"subId": LEGACY_SUB, "status": "Waiting for Registration Confirmation", "caseId": "SWAT-LEGACY-2",
+                                                  "partNumber": "P-LEG2", "partDescription": "Legacy cover", "peakYearSpend": 117, "lifetimeSpend": 234})
+        await session.commit()
 
 
 # ---------- 单条记录 ----------
@@ -83,9 +99,10 @@ async def _admin(client):
 
 
 async def test_dry_run_reports_counts_and_changes_nothing(async_client, capsys):
+    await _insert_legacy(async_client)
     before = await _bootstrap(async_client)
     legacy = [c for c in before["cases"] if "spendCurrency" not in c]
-    assert legacy
+    assert [c["swatId"] for c in legacy] == [LEGACY_SWAT]  # 种子数据已是欧元，只有刚放进去的旧记录
     assert await migrations.run(["usd-to-eur", "--per-eur", "1.17"], main.SessionLocal) == 0
     out = capsys.readouterr().out
     assert f"{len(legacy)} case rows" in out and "dry run" in out.lower()
@@ -93,9 +110,11 @@ async def test_dry_run_reports_counts_and_changes_nothing(async_client, capsys):
 
 
 async def test_conversion_needs_a_usd_rate(async_client, capsys):
+    await _insert_legacy(async_client)
     assert await migrations.run(["usd-to-eur", "--apply"], main.SessionLocal) == 2
     assert "USD rate" in capsys.readouterr().err
-    assert all("spendCurrency" not in c for c in (await _bootstrap(async_client))["cases"])
+    legacy = next(c for c in (await _bootstrap(async_client))["cases"] if c["swatId"] == LEGACY_SWAT)
+    assert "spendCurrency" not in legacy
 
 
 async def test_apply_uses_dashboard_rate_converts_once_and_edits_stay_in_usd(async_client):
@@ -103,12 +122,14 @@ async def test_apply_uses_dashboard_rate_converts_once_and_edits_stay_in_usd(asy
     r = await async_client.put("/api/fx-settings", headers=admin,
                                json={"basis": "OP 2025 plan rates 2026", "perEur": {"USD": "1.17", "CNY": "8.3"}})
     assert r.status_code == 200
+    await _insert_legacy(async_client)
     before = {c["id"]: c for c in (await _bootstrap(async_client))["cases"]}
 
     assert await migrations.run(["usd-to-eur", "--apply"], main.SessionLocal) == 0
     after = await _bootstrap(async_client)
     assert all(c["spendCurrency"] == "EUR" for c in after["cases"] + after["submissions"])
-    case = next(c for c in after["cases"] if c["partNumbers"] is None and c["meetingDecision"] == "PENDING")
+    assert next(s for s in after["submissions"] if s["subId"] == LEGACY_SUB)["peakYearSpend"] == 100
+    case = next(c for c in after["cases"] if c["swatId"] == LEGACY_SWAT)
     old = before[case["id"]]
     assert case["peakYearSpendEntered"] == old["peakYearSpend"]
     assert case["peakYearSpend"] == logic.to_eur(old["peakYearSpend"], logic.Fx(per_eur=Decimal("1.17")))
