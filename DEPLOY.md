@@ -12,7 +12,7 @@
 
 ```bash
 # 1) 拉代码（换成你的仓库地址）
-git clone <你的仓库地址> sourcing-cockpit
+git clone git@github.com:Chenxin-hub1/sourcing-committee-cockpit.git sourcing-cockpit   # 私有仓库：服务器上的 SSH 密钥要先加到 GitHub（或改用 https 地址 + 个人令牌）
 cd sourcing-cockpit
 
 # 2) 设置对外访问地址与首个 Sourcing 管理员账号（提醒消息里的链接前缀 + 启动时建立的第一个管理员）
