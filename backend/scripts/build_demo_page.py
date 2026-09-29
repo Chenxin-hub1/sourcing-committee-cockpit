@@ -93,7 +93,7 @@ uploadFile = function(){{ return Promise.reject(Object.assign(new Error(window._
 </body>"""
     assert html.count("</head>") == 1 and html.count("</body>") == 1
     if not artifact:
-        html = html.replace("<title>Sourcing Committee Cockpit</title>", "<title>Sourcing Committee Cockpit — Demo</title>")
+        html = html.replace("<title>Seat Belt Sourcing Committee Cockpit</title>", "<title>Seat Belt Sourcing Committee Cockpit — Demo</title>")
     html = html.replace("</head>", head, 1).replace("</body>", tail, 1)
     return DOCUMENT_TAGS.sub("", html) if artifact else html
 

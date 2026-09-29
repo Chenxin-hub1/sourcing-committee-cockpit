@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- Inline SVG favicon (brand mark): avoids the /favicon.ico 404 without shipping a binary file -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23E8580A'/><text x='16' y='22' font-family='Arial,sans-serif' font-size='14' font-weight='800' fill='%23fff' text-anchor='middle'>SC</text></svg>">
-<title>Sourcing Committee Cockpit</title>
+<title>Seat Belt Sourcing Committee Cockpit</title>
 <style>
   :root{
     --topbar-height:52px;
@@ -459,7 +459,7 @@ body.admin-login-open #adminLoginPanel{z-index:310 !important;}
 <body>
 
 <div class="topbar">
-  <div class="brand"><span class="mark">SC</span>Sourcing Committee Cockpit<span class="sub">Lifetec SBS Procurement</span></div>
+  <div class="brand"><span class="mark">SB</span>Seat Belt Sourcing Committee Cockpit<span class="sub">Lifetec SBS Procurement</span></div>
   <div class="navtabs" id="navtabs"></div>
   <div class="gsearch">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -1634,7 +1634,7 @@ function renderNav(){
 function renderHome(){
   return `
   <div class="pagehead">
-    <h1>Sourcing Committee Cockpit</h1>
+    <h1>Seat Belt Sourcing Committee Cockpit</h1>
     <p>One place to register, search and track every weekly sourcing committee case — no more searching week by week.</p>
   </div>
 
@@ -2232,7 +2232,8 @@ function renderSubmit(){
         <div class="form-field"><label>Bundle Peak Year Spend (<span class="cur-label">${submitCurrency()}</span>) *</label><input id="fBundlePeak" type="number" min="0" step="1" placeholder="e.g. 1500000"/></div>
         <div class="form-field"><label>Bundle Lifetime Spend (<span class="cur-label">${submitCurrency()}</span>) *</label><input id="fBundleLife" type="number" min="0" step="1" placeholder="e.g. 6000000"/></div>
         <div class="form-field span2"><div class="fx-hint" style="margin-top:0;">One total for all part numbers in this registration — no need to split the spend per part number.</div>
-          <div style="margin-top:6px;font-size:12.5px;font-weight:600;">Bundle Peak Year Spend: <span id="totalPeakDisplay">${fmtMoney(0,'EUR')}</span>&nbsp;&nbsp;|&nbsp;&nbsp;Bundle Lifetime Spend: <span id="totalLifetimeDisplay">${fmtMoney(0,'EUR')}</span></div></div>
+          <div style="margin-top:6px;font-size:12.5px;font-weight:600;">Bundle Peak Year Spend: <span id="totalPeakDisplay">${fmtMoney(0,'EUR')}</span>&nbsp;&nbsp;|&nbsp;&nbsp;Bundle Lifetime Spend: <span id="totalLifetimeDisplay">${fmtMoney(0,'EUR')}</span></div>
+          <div id="bundleEurLine" style="margin-top:4px;font-size:12.5px;font-weight:600;color:var(--ink-soft);">In EUR: <span id="totalPeakEur">${fmtMoney(0,'EUR')}</span>&nbsp;&nbsp;|&nbsp;&nbsp;<span id="totalLifetimeEur">${fmtMoney(0,'EUR')}</span> <span id="bundleEurRate" style="font-weight:400;"></span></div></div>
       </div>
     </div>
 
@@ -3302,9 +3303,13 @@ function wireEvents(){
       const totalLife = Number((document.getElementById('fBundleLife')||{}).value)||0;
       // 与服务端一致按除法取整（最终金额以服务端 Decimal 计算为准，这里只是预览）
       const eurPeak = rate ? eurPreview(totalPeak, cur) : 0, eurLife = rate ? eurPreview(totalLife, cur) : 0;
-      const show = (total, eur)=> fmtMoney(total, cur) + (cur!=='EUR' && rate ? ` ≈ ${fmtMoney(eur,'EUR')}` : '');
-      const pd = document.getElementById('totalPeakDisplay'); if(pd) pd.textContent = show(totalPeak, eurPeak);
-      const ld = document.getElementById('totalLifetimeDisplay'); if(ld) ld.textContent = show(totalLife, eurLife);
+      // 第一行按录入币种，第二行固定欧元对照（领导 2026-09-29：要一眼看到欧元）；没有汇率时对照行提示去设汇率
+      const pd = document.getElementById('totalPeakDisplay'); if(pd) pd.textContent = fmtMoney(totalPeak, cur);
+      const ld = document.getElementById('totalLifetimeDisplay'); if(ld) ld.textContent = fmtMoney(totalLife, cur);
+      const pe = document.getElementById('totalPeakEur'); if(pe) pe.textContent = rate ? fmtMoney(eurPeak,'EUR') : '—';
+      const le = document.getElementById('totalLifetimeEur'); if(le) le.textContent = rate ? fmtMoney(eurLife,'EUR') : '—';
+      const rl = document.getElementById('bundleEurRate');
+      if(rl) rl.textContent = cur==='EUR' ? '' : (rate ? `(1 EUR = ${rate} ${cur})` : `(no ${cur} rate set)`);
       // 超过 3 Mio EUR：BPG 问题从"可不答"变成"必答"
       const bpgHint = document.getElementById('bpgHint');
       if(bpgHint){

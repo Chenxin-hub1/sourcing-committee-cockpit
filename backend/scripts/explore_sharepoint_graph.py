@@ -1,4 +1,4 @@
-"""SharePoint Graph 探索样例（Sourcing Committee Cockpit 专用）。
+"""SharePoint Graph 探索样例（Seat Belt Sourcing Committee Cockpit 专用）。
 
 只读为主：解析站点 → 列出 List / 文档库 → 打印目标 List 的列定义和前几条 item。
 可选 --write-demo：向目标 List 写入一条带明显标记的测试 item（需要 write 角色）。

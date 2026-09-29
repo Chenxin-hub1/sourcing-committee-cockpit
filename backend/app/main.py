@@ -1,4 +1,4 @@
-"""Sourcing Committee Cockpit —— API + 静态前端。
+"""Seat Belt Sourcing Committee Cockpit —— API + 静态前端。
 
 约定：所有写端点返回 {ok, snapshot[, ...]}，前端整体替换内存态后重渲染；
 校验失败返回 422 {detail}，文案与模板一致，前端映射到模板既有错误展示位。
@@ -112,7 +112,7 @@ async def lifespan(app: FastAPI):
             pass
 
 
-app = FastAPI(title="Sourcing Committee Cockpit", lifespan=lifespan)
+app = FastAPI(title="Seat Belt Sourcing Committee Cockpit", lifespan=lifespan)
 
 
 # ============================= 管理员门禁 =============================

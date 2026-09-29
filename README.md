@@ -1,4 +1,4 @@
-# Sourcing Committee Cockpit
+# Seat Belt Sourcing Committee Cockpit
 
 寻源委员会驾驶舱：沿用原始 HTML 模板的页面布局，配合 FastAPI + SQLite 保存案例、登记审批和待办，供内网团队共享使用。
 

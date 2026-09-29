@@ -132,11 +132,11 @@ SC_TEAMS_WEBHOOK_FORMAT=flow    # 工作流接收下方 to / subject / text 契�
 
 ### 向 IT 申请的内容（可直接转发）
 
-> **中文说明**：内部工具 Sourcing Committee Cockpit（Docker 部署于内网 Linux 服务器）需要两件能力：
+> **中文说明**：内部工具 Seat Belt Sourcing Committee Cockpit（Docker 部署于内网 Linux 服务器）需要两件能力：
 > 1. **发提醒邮件**：请提供内部 SMTP 中继的**主机名、端口**，是否要求 STARTTLS/账号密码，以及允许的**发件人地址**（建议专用邮箱如 sourcing-cockpit@zf.com）。
 > 2. **发 Teams 消息**：使用 **Power Automate / Workflows** 建流，接收下方 JSON 后向指定频道或收件人发送消息；确认触发器认证、所需许可、工作流负责人及故障通知。请提供端点与允许调用的应用身份要求；采用 Entra 认证时，开发侧将补充令牌获取与传递。
 >
-> **English (for IT)**: Internal tool "Sourcing Committee Cockpit" (Docker, intranet Linux server) needs:
+> **English (for IT)**: Internal tool "Seat Belt Sourcing Committee Cockpit" (Docker, intranet Linux server) needs:
 > 1. **Outbound reminder email**: an internal SMTP relay — hostname, port, whether STARTTLS/auth is required, and an approved sender address (e.g. sourcing-cockpit@zf.com).
 > 2. **Teams messages**: provision a Power Automate / Workflows flow that accepts the JSON contract below and posts to the designated channel or recipient. Please confirm authentication, licensing, ownership, and failure notifications, and provide the endpoint and caller identity requirements. The application currently sends JSON without a bearer token; development will add Entra authentication where required.
 

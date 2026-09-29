@@ -221,7 +221,7 @@ def _finish(ws, headers: list[str], widths: dict[int, int], last_row: int) -> No
 
 def _note(kind: str, when: datetime) -> str:
     what = "Agenda (pre-meeting)" if kind == "agenda" else "Meeting minutes (post-meeting)"
-    return (f"{what} generated {logic.fmt_when(when)} from the Sourcing Committee Cockpit. "
+    return (f"{what} generated {logic.fmt_when(when)} from the Seat Belt Sourcing Committee Cockpit. "
             "One row per part number; case-level cells are merged (Peak Year / LT Spend are per bundle). Amounts in the Currency column "
             "(EUR for cases registered after the EUR switch). Savings follow the SBS template: "
             "(recommended supplier − CQA) × volume, so a negative value means below CQA. "

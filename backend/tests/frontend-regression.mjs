@@ -172,7 +172,9 @@ try{
       fBundlePeak:'139000',fBundleLife:'873000'})){
       await page.locator('#'+id).fill(value);
     }
-    assert.equal(await page.locator('#totalPeakDisplay').textContent(),'$139,000 ≈ €111,200');  // 1 EUR = 1.25 USD，按除法
+    assert.equal(await page.locator('#totalPeakDisplay').textContent(),'$139,000');
+    assert.equal(await page.locator('#totalPeakEur').textContent(),'€111,200');  // 1 EUR = 1.25 USD，按除法，单独一行欧元对照
+    assert.equal(await page.locator('#bundleEurRate').textContent(),'(1 EUR = 1.25 USD)');
     await page.locator('#fRegionIn input[value="EU"]').check();
     await page.locator('#qFamily').selectOption('No');
     await page.locator('#qECM').selectOption('No');
@@ -247,7 +249,8 @@ try{
     await page.locator('#fCurrency').selectOption('USD');
     assert.match(await page.locator('#fxHint').textContent(),/1 EUR = 1\.17 USD \(OP 2025 plan rates 2026\)/);
     await page.locator('#fBundlePeak').fill('117');
-    assert.equal(await page.locator('#totalPeakDisplay').textContent(),'$117 ≈ €100');
+    assert.equal(await page.locator('#totalPeakDisplay').textContent(),'$117');
+    assert.equal(await page.locator('#totalPeakEur').textContent(),'€100');
     await context.close();
   });
 
@@ -1042,6 +1045,8 @@ try{
     await page.locator('#fBundlePeak').fill('578000');
     await page.locator('#fBundleLife').fill('3500000');
     assert.equal(await page.locator('#totalLifetimeDisplay').textContent(),'€3,500,000');
+    assert.equal(await page.locator('#totalLifetimeEur').textContent(),'€3,500,000');
+    assert.equal(await page.locator('#bundleEurRate').textContent(),'');
     assert.ok(await page.locator('#bpgHint.missing').count(), 'BPG hint follows the bundle lifetime spend');
     await page.locator('#qBPG').selectOption('Yes');
     await page.locator('#submitCaseBtn').click();

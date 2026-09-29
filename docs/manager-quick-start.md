@@ -1,4 +1,4 @@
-# Sourcing Committee Cockpit — Quick Start for Managers
+# Seat Belt Sourcing Committee Cockpit — Quick Start for Managers
 
 Address: **http://<server>:8031/** (replace with the address you were given)
 
