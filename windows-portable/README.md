@@ -20,7 +20,7 @@ notepad .env        # 按 DEPLOY.md「上线前清单」填：SC_PUBLIC_URL、SC
 任务计划程序（Task Scheduler）不需要管理员就能给自己的账号建任务：
 
 1. 开始菜单搜 "任务计划程序" → 右侧 "创建任务"。
-2. 常规：名称 `Sourcing Cockpit`；勾 "不管用户是否登录都要运行"；勾 "不存储密码" 不要勾（要存密码，否则注销后停）。
+2. 常规：名称 `Sourcing Cockpit`；选 "不管用户是否登录都要运行"；"不存储密码" 这一项不要勾（需要存密码，否则你注销后服务会停）。
 3. 触发器：新建 → "启动时"。
 4. 操作：新建 → 程序填 `D:\apps\sourcing-cockpit\start.bat`，起始于填 `D:\apps\sourcing-cockpit`。
 5. 设置：勾 "如果任务失败，按以下频率重新启动"，1 分钟，3 次。

@@ -4,6 +4,8 @@
 
 ## 前提
 
+> 服务器上没有管理员权限、装不了 Docker？看 [windows-portable/README.md](windows-portable/README.md)：免安装 Python 运行时，`git clone` 后双击 `start.bat` 即可。
+
 - 一台内网 Linux 服务器，能访问外网（拉基础镜像）或已有 Docker 镜像缓存
 - 服务器上已安装 **Docker Engine + Docker Compose**（`docker compose version` 能出版本号即可；没有则让 IT 装，或参考官方文档 docs.docker.com/engine/install）
 - 8062 端口可用（被占用见下方「改端口」）
