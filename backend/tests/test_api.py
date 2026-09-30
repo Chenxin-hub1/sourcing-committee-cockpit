@@ -267,17 +267,9 @@ def test_reminder_settings_force_rerun(client, admin):
     assert settings["lastRun"]["auto"] is False  # 强制重跑
 
 
-def test_legacy_upload_adds_18(client, admin):
-    # Sourcing 管理员专属：未登录 401、普通用户 403（此前任何人可注入 18 条演示案例）
-    assert client.post("/api/legacy-upload", headers={"X-Session-Token": ""}).status_code == 401
-    r = client.post("/api/legacy-upload")
-    assert r.status_code == 403
-    before = len(client.get("/api/bootstrap").json()["cases"])
-    r = client.post("/api/legacy-upload", headers=admin)
-    assert r.status_code == 200 and r.json()["added"] == 18
-    assert len(r.json()["snapshot"]["cases"]) == before + 18
-    weeks = {c["weekNum"] for c in r.json()["snapshot"]["cases"] if c["swatId"].startswith("SWAT-205")}
-    assert weeks == {34}
+def test_demo_injection_endpoint_is_gone(client, admin):
+    # v3 Phase-17：首页的 "Legacy Excel Upload" 换成真正的周会 Excel 导入（tests/test_excel_import.py）；随机演示批次不再有
+    assert client.post("/api/legacy-upload", headers=admin).status_code in (404, 405)  # 静态文件挂载只认 GET
 
 
 # ============================= v2 Phase-8：提交限流 =============================

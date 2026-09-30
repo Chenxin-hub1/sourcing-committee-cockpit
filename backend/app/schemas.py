@@ -197,6 +197,14 @@ class RejectIn(In):
     reason: LongText = ""
 
 
+class LibraryImportIn(In):
+    """v3 Phase-17：导入随程序发布的历史周文件（app/history 里的相对路径）。"""
+
+    path: Annotated[Text, Field(min_length=1)]
+    commit: Annotated[bool, Field(strict=True)] = False
+    sourceUrl: Text = ""
+
+
 class FollowUpIn(In):
     id: Annotated[Text, Field(min_length=1)]
     task: LongText = ""

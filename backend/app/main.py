@@ -22,7 +22,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, delivery, exports, feedback, files, graph, logic, service
+from . import accounts, delivery, excel_import, exports, feedback, files, graph, logic, service
 from .config import get_settings
 from .db import SessionLocal
 from .schemas import (
@@ -32,6 +32,7 @@ from .schemas import (
     FeedbackDecisionIn,
     FeedbackIn,
     FxSettingsIn,
+    LibraryImportIn,
     LoginIn,
     ManualReminderIn,
     PasswordChangeIn,
@@ -220,6 +221,7 @@ require_manager = require_role("npi_manager")  # NPI 经理与 Sourcing 管理�
 require_admin = require_role("admin")          # 只有 Sourcing 管理员：系统设置与账号
 LoggedIn = Annotated[dict, Depends(require_login)]
 Manager = Annotated[dict, Depends(require_manager)]
+Admin = Annotated[dict, Depends(require_admin)]
 
 
 PASSWORD_REQUIRED = "Password required."  # 前端据此文案展开密码框（管理员账号）
@@ -607,7 +609,7 @@ async def save_case(row_id: str, b: CaseEditIn) -> dict:
         }
         if any(task.get("id") in other_task_ids for task in edit["followUps"]):
             raise HTTPException(422, "Follow-up task IDs must be unique across cases.")
-        error = logic.validate_case_edit(edit)
+        error = logic.validate_case_edit(edit, imported=excel_import.is_imported(case))
         if error:
             raise HTTPException(422, error)
         # 只有请求真的带了商务字段才覆盖（model_fields_set），旧客户端 / 只改决议的保存不动它们
@@ -702,13 +704,18 @@ async def save_reminder_settings(b: ReminderSettingsIn) -> dict:
 
 
 @app.get("/api/exports/{kind}")
-async def export_week(kind: str, week: int = Query(ge=1, le=53)) -> Response:
-    """某周的议程（会前）或会议纪要（会后）.xlsx；周号与页面一致（ISO 周，KW）。"""
+async def export_week(kind: str, week: int = Query(ge=1, le=53), year: int = Query(default=0, ge=0, le=2100)) -> Response:
+    """某周的议程（会前）或会议纪要（会后）.xlsx；周号与页面一致（ISO 周，KW）。
+
+    year 默认当年（v3 Phase-17 导入了往年历史后，同一个 KW 会同时有 2025 与 2026 的案例）；
+    没有 meetingYear 的旧记录（模板演示数据）不按年份过滤。"""
     if kind not in ("agenda", "minutes"):
         raise HTTPException(404, "Unknown export. Use agenda or minutes.")
+    year = year or logic.na_now().isocalendar().year
     async with SessionLocal() as session, _write_lock:
         state = await service.load_state(session)
-    cases = [c for c in state["cases"] if int(c.get("weekNum") or 0) == week]
+    cases = [c for c in state["cases"] if int(c.get("weekNum") or 0) == week
+             and (not c.get("meetingYear") or int(c["meetingYear"]) == year)]
     label = logic.wk(week)
     return _xlsx_response(kind, exports.build(kind, cases, label), exports.filename(kind, label))
 
@@ -987,26 +994,102 @@ async def decide_feedback(task_id: str, fb_id: str, b: FeedbackDecisionIn, user:
 # ============================= 遗留 Excel 上传模拟 =============================
 
 
-@app.post("/api/legacy-upload", dependencies=[Depends(require_admin)])
-async def legacy_upload() -> dict:
-    """遗留 Excel 上传模拟（生成随机演示批次）。管理员专属：每次注入 18 条演示案例，
-    不设门禁会被任何内网用户当垃圾数据注入口。"""
+@app.post("/api/import/excel")
+async def import_excel(request: Request, user: Admin, name: str = Query(max_length=300),
+                       commit: bool = Query(default=False), meetingDate: str = Query(default="", max_length=10),
+                       sourceUrl: str = Query(default="", max_length=500)) -> dict:
+    """v3 Phase-17：周会 Excel（委员会模板的 Agenda / MM）→ 那一周的案例。管理员专属。
+
+    commit=false 只解析并返回预览（案例数、零件行数、警告、会替换掉的旧导入）；commit=true 写库：
+    同一年同一周之前导入的案例先删再插。请求体是文件原始字节（与演示文件上传同一方式）。"""
+    if not name.lower().endswith(".xlsx"):
+        raise HTTPException(422, "Upload the weekly committee file as .xlsx (Excel workbook).")
+    day = None
+    if meetingDate:
+        try:
+            day = date.fromisoformat(meetingDate)
+        except ValueError as exc:
+            raise HTTPException(422, "Meeting date must be YYYY-MM-DD.") from exc
+    if sourceUrl and not logic.valid_http_url(sourceUrl):
+        raise HTTPException(422, "The SharePoint folder link must be a full URL (starting with http:// or https://).")
+    tmp, size = await files.receive(request)
+    try:
+        if size > excel_import.MAX_FILE_BYTES:
+            raise HTTPException(413, "The workbook is larger than 20 MB — that is not a weekly committee file.")
+        data = tmp.read_bytes()
+    finally:
+        tmp.unlink(missing_ok=True)
     async with SessionLocal() as session, _write_lock:
         state = await service.load_state(session)
-        used_ids = [c.get("swatId", "") for c in state["cases"]]
-        used_ids.extend(s.get("caseId", "") for s in state["submissions"])
-        occupied = {int(cid[5:]) for cid in used_ids if re.fullmatch(r"SWAT-\d+", cid)}
-        swat_start = 20500
-        while any(swat_start <= n < swat_start + 18 for n in occupied):
-            swat_start += 18
-        batch = logic.generate_batch(18, 34, 34, int(time.time() * 1000) % 100000, swat_start, state["cases"])
-        logic.normalize_pending_cases(batch)
-        logic.seed_final_doc_links(batch)
-        logic.seed_presentation_links(batch)
-        state["cases"].extend(batch)
-        await service.insert_cases(session, batch)
-        await session.commit()
-        return {"ok": True, "added": len(batch), "snapshot": service.snapshot(state)}
+        return await _import_workbook(session, state, data, name, day=day, source_url=sourceUrl, commit=commit, user=user)
+
+
+async def _import_workbook(session, state: dict, data: bytes, name: str, *, day: date | None, source_url: str,
+                           commit: bool, user: dict) -> dict:
+    """上传的文件与库里的文件共用：解析 → 预览摘要；commit 时替换同一年同一周之前导入的案例。调用方持有写锁。"""
+    try:
+        report = excel_import.parse_workbook(data, name, state["fx"], meeting_date=day, source_url=source_url,
+                                             imported_by=user["email"], when=logic.fmt_when(logic.na_now()))
+    except excel_import.TemplateError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:  # openpyxl 打不开等：给可读的 422，不是 500
+        log.warning("excel import failed for %s: %s", name, exc)
+        raise HTTPException(422, f"The file could not be read as an Excel workbook ({type(exc).__name__}).") from exc
+    replaced = excel_import.previously_imported(state["cases"], report["meetingYear"], report["weekNum"])
+    summary = {
+        "ok": True, "file": name, "sheet": report["sheet"], "weekNum": report["weekNum"], "meetingYear": report["meetingYear"],
+        "meetingDateISO": report["meetingDateISO"], "meetingDateLabel": report["meetingDateLabel"],
+        "cases": len(report["cases"]), "rows": report["rows"], "warnings": report["warnings"],
+        "replaces": len(replaced), "committed": False,
+        "preview": [{"caseNumber": c["caseNumber"], "swatId": c["swatId"], "partDescription": c["partDescription"],
+                     "parts": len(c["partNumbers"] or [1]), "region": c["region"], "decision": c["meetingDecision"],
+                     "lifetimeSpend": c["lifetimeSpend"]} for c in report["cases"]],
+    }
+    if not commit:
+        return summary
+    if not report["cases"]:
+        raise HTTPException(422, "No cases found in this file — nothing to import.")
+    replaced_ids = {c["id"] for c in replaced}
+    state["cases"] = [c for c in state["cases"] if c["id"] not in replaced_ids]
+    new_cases = []
+    for c in report["cases"]:
+        c["id"] = logic.next_case_row_id(state["cases"] + new_cases)
+        new_cases.append(c)
+    await service.delete_cases_by_ids(session, sorted(replaced_ids))
+    await service.insert_cases(session, new_cases)
+    state["cases"].extend(new_cases)
+    await session.commit()
+    summary.update(committed=True, added=len(new_cases), snapshot=service.snapshot(state))
+    return summary
+
+
+@app.get("/api/import/library")
+async def import_library(user: Admin) -> dict:
+    """随程序发布的历史周文件（app/history）：列表 + 那一周是否已从 Excel 导入过。管理员专属。"""
+    async with SessionLocal() as session, _write_lock:
+        state = await service.load_state(session)
+    listed = excel_import.library_files()
+    for f in listed:
+        f["imported"] = bool(f["meetingYear"] and excel_import.previously_imported(state["cases"], f["meetingYear"], f["weekNum"]))
+    return {"ok": True, "files": listed}
+
+
+@app.post("/api/import/library")
+async def import_library_file(b: LibraryImportIn, user: Admin) -> dict:
+    """导入库里的一份周文件（相对路径）；会议日期取文件名，取不到用文件夹名。commit 语义同 /api/import/excel。"""
+    if b.sourceUrl and not logic.valid_http_url(b.sourceUrl):
+        raise HTTPException(422, "The SharePoint folder link must be a full URL (starting with http:// or https://).")
+    try:
+        path = excel_import.library_path(b.path)
+    except excel_import.TemplateError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    _, day = excel_import.meeting_from_name(path.name)
+    if day is None:
+        _, day = excel_import.meeting_from_name(path.parent.name)
+    data = path.read_bytes()
+    async with SessionLocal() as session, _write_lock:
+        state = await service.load_state(session)
+        return await _import_workbook(session, state, data, path.name, day=day, source_url=b.sourceUrl, commit=b.commit, user=user)
 
 
 # ============================= 静态前端（挂载在最后，/api 优先匹配） =============================

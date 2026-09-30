@@ -8,7 +8,7 @@ Home 搜索、Submit Case 登记、Approval 确认/退回、Database 筛选与 C
 
 提交金额可按 EUR / USD / CNY 填写，按管理员在 Dashboard 维护的财务 OP 汇率（1 EUR = X 外币）折算为欧元保存（记录保留原币金额与当时汇率）；旧美元案例可一次性换算（见 DEPLOY.md）；区域可多选。Peak Year / Lifetime Spend 按整个 bundle 填一个（案例级必填）；Project / Sourcing Type / Recommended Supplier 按零件行填写，案例级自动汇总；上传的演示文件在系统里改名为 `YYYY.MM.DD 项目 零件描述 零件号, 供应商.ext`（原文件名保留可见）。
 
-每人用公司邮箱自注册个人账号（只填姓名和邮箱，不设密码，凭邮箱登录；只有 Sourcing admin 用密码），提交登记须登录；Sourcing admin 在 Accounts 页提升 Manager / admin 角色，提升为 admin 时发临时密码（详见 DEPLOY.md 安全说明）。审批结果和待办提醒可经 SMTP / Teams 发送，并记录结果。未配置的通道显示 `skipped`。Legacy Excel Upload 目前是管理员专用的演示数据生成功能，**不会解析 Excel 文件**。
+每人用公司邮箱自注册个人账号（只填姓名和邮箱，不设密码，凭邮箱登录；只有 Sourcing admin 用密码），提交登记须登录；Sourcing admin 在 Accounts 页提升 Manager / admin 角色，提升为 admin 时发临时密码（详见 DEPLOY.md 安全说明）。审批结果和待办提醒可经 SMTP / Teams 发送，并记录结果。未配置的通道显示 `skipped`。首页的 "Import weekly committee Excel"（Sourcing admin 专用）把委员会每周的 Agenda / MM Excel 导入成那一周的案例：拖入新文件，或从下拉框选随程序发布的历史周文件（`backend/app/history/`，2025 KW36 – 2026 KW39 共 36 周）；会议日期从文件名或文件夹名读，同一周重导会替换上次导入的；也可在服务器上批量跑 `python -m app.migrations import-excel <文件夹> --apply`（文件夹按 SharePoint 的 "KW39, 23.09.2026" 命名时日期从文件夹名取）。
 
 ## 本地启动
 

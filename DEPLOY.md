@@ -75,6 +75,7 @@ docker compose up -d --build
 | 健康检查 | compose 已内置（`/api/health`，30s 一次）；`docker compose ps` 看 `(healthy)` |
 | 备份数据 | 演示文件存本地时连 `data/uploads/` 一起备份（见 Graph 接入 → 演示文件）。数据库：WAL 模式下直接 `cp` 数据库文件有风险，用在线备份（不用停服务）：`docker compose exec cockpit python -c "import sqlite3; s=sqlite3.connect('/app/data/cockpit.db'); d=sqlite3.connect('/app/data/cockpit-backup.db'); s.backup(d); d.close()"`，再把 `data/cockpit-backup.db` 拷走 |
 | 恢复/迁移服务器 | 停止目标服务，将上面的在线备份放到新的 `data/cockpit.db`，确认目录所有者与 `SC_UID` / `SC_GID` 一致，再启动；勿与旧库的 WAL/SHM 文件混放 |
+| 导入历史 Excel | 最简单：Sourcing admin 登录首页，"Stored weekly files" 下拉框旁点 "Add all not yet imported" 再 Import（36 周历史文件随程序放在 `backend/app/history/`，`git pull` 就有）。命令行方式：把 "KW39, 23.09.2026" 这类周文件夹（含里面的 Agenda / MM .xlsx）拷到服务器，`python -m app.migrations import-excel <文件夹> --apply`（免安装方式用 `..\windows-portable\python\python.exe -m app.migrations …`，在 backend 目录下跑）；先不带 `--apply` 看预览。每周只放一份文件（优先 MM）。同一周再跑会替换上次导入的案例 |
 | 改端口 | `docker-compose.yml` 里 `"8062:8000"` 左边（对外端口）改成想要的端口，如 `"80:8000"`；右边 8000 是容器内监听，保持不动 |
 | 改提醒时区 | `.env` 里 `SC_TIMEZONE=Asia/Shanghai`（IANA 名）后 `docker compose up -d` |
 | 清空演示数据、从零开始 | 先完成备份，再 `docker compose down`；将原 `data` 目录改名留存，创建新的空目录；设置 `SC_SEED_ON_EMPTY=false` 后启动 |
@@ -93,11 +94,11 @@ EUR 改造之前登记的案例（含模板演示数据）没有币种信息、�
 
 ## 安全说明（v3 起：个人账号）
 
-- **个人账号**：每人用公司邮箱（`SC_ALLOWED_EMAIL_DOMAINS`，默认 `zf.com,zf-lifetec.com`）在右上角 "Log in → Register" 自注册，只填姓名和邮箱，**不设密码**，之后凭邮箱直接登录（v3 Phase-16，领导要求）。只有 **Sourcing admin** 用密码登录：提升某人为 admin 时系统生成临时密码（Accounts 页只显示一次），本人首次登录后必须改，至少 10 位。新账号默认 **User**（提交登记、查看）。注意：邮箱免密意味着内网里任何人都能以别人的邮箱身份提交或（Manager 时）审批，这是业务方接受的取舍。三种角色：User；**Manager**（采购经理与 NPI 经理共用，内部代号 `npi_manager`；另可确认 / 退回登记、编辑与删除案例、记录决议与待办、发提醒、管理案例文件）；**Sourcing admin**（另可改汇率、登记截止、提醒设置，并在 Accounts 页管理账号）。角色由 Sourcing admin 在 Accounts 页提升或收回、停用账号；所有权限由**服务端**按角色强制，前端隐藏按钮只是附加层。
+- **个人账号**：每人用公司邮箱（`SC_ALLOWED_EMAIL_DOMAINS`，默认 `zf.com,zf-lifetec.com`）在右上角 "Log in → Register" 自注册，只填姓名和邮箱，**不设密码**，之后凭邮箱直接登录（v3 Phase-16，领导要求）。只有 **Sourcing admin** 用密码登录：提升某人为 admin 时系统生成临时密码（Accounts 页只显示一次），本人首次登录后必须改，至少 6 位。新账号默认 **User**（提交登记、查看）。注意：邮箱免密意味着内网里任何人都能以别人的邮箱身份提交或（Manager 时）审批，这是业务方接受的取舍。三种角色：User；**Manager**（采购经理与 NPI 经理共用，内部代号 `npi_manager`；另可确认 / 退回登记、编辑与删除案例、记录决议与待办、发提醒、管理案例文件）；**Sourcing admin**（另可改汇率、登记截止、提醒设置，并在 Accounts 页管理账号）。角色由 Sourcing admin 在 Accounts 页提升或收回、停用账号；所有权限由**服务端**按角色强制，前端隐藏按钮只是附加层。
 - **首个管理员**：`.env` 填 `SC_BOOTSTRAP_ADMIN_EMAIL` / `SC_BOOTSTRAP_ADMIN_PASSWORD`，启动时若还没有任何可用的 Sourcing admin 就用它建一个（已有则忽略）。登录后在 Accounts 页把真人提升为 Sourcing admin，再停用这个引导账号。管理员全部丢失时，重新填上这两项并重启即可恢复。
 - **管理员忘记密码**：还没有邮件通道，由另一位 Sourcing admin 在 Accounts 页 "Reset password" 生成一次性临时密码（只显示一次），私下告知本人；本人用临时密码登录后必须先改密码才能操作，其它会话同时失效。非管理员没有密码，不存在忘记。
 - **会话与防爆破**：登录令牌存浏览器（同一浏览器关掉再开仍保持登录）、7 天过期，登出、改密码或被停用后失效；服务端只存令牌哈希。同一来源 15 分钟内输错 5 次锁 5 分钟；同一来源每小时最多注册 10 个账号。
-- 浏览案例、看板、下载演示文件**不需要登录**（内网可达即用）；**提交登记必须登录**，提交人姓名 / 邮箱取自账号（请求里填的不作数）。首页的 Legacy Excel 上传（演示功能，一次注入 18 条随机案例）仅 Sourcing admin 可用。
+- 浏览案例、看板、下载演示文件**不需要登录**（内网可达即用）；**提交登记必须登录**，提交人姓名 / 邮箱取自账号（请求里填的不作数）。首页的 "Import weekly committee Excel"（把每周的 Agenda / MM 导入成案例）仅 Sourcing admin 可用。
 - 从 v2 升级：`SC_ADMIN_PASSWORD` 已无作用，可从 `.env` 删除；原共享口令的会话全部失效，每人重新注册即可。
 
 ## 提醒真实外发（邮件 + Teams）

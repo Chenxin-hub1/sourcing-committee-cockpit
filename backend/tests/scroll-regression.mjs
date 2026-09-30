@@ -91,7 +91,7 @@ async function swipe(session,from,to){
 }
 
 try{
-  await test('Vertical wheel over a wide table scrolls the page down and up',{},async page=>{
+  await test('Vertical wheel over a wide table scrolls the page down and up',{width:900},async page=>{
     await navigate(page,'database');
     const region = await moveOverTable(page);
     const start = await page.evaluate(()=>window.scrollY);
@@ -104,7 +104,7 @@ try{
     assert.equal(await page.evaluate(()=>window.scrollX),0,'Page must stay horizontally aligned');
   });
 
-  await test('Horizontal wheel reaches both table edges without moving the page',{},async page=>{
+  await test('Horizontal wheel reaches both table edges without moving the page',{width:900},async page=>{
     await navigate(page,'database');
     const region = await moveOverTable(page);
     assert.ok(await region.evaluate(element=>element.scrollWidth>element.clientWidth+100));
@@ -121,7 +121,7 @@ try{
     assert.equal(await page.evaluate(()=>window.scrollX),0);
   });
 
-  await test('Shift-wheel pans the table while ordinary wheel remains vertical',{},async page=>{
+  await test('Shift-wheel pans the table while ordinary wheel remains vertical',{width:900},async page=>{
     await navigate(page,'database');
     const region = await moveOverTable(page);
     const startY = await page.evaluate(()=>window.scrollY);
@@ -132,7 +132,7 @@ try{
     assert.ok(await region.evaluate(element=>element.scrollLeft<element.scrollWidth));
   });
 
-  await test('Wide table region is labelled, keyboard reachable and scrollable',{},async page=>{
+  await test('Wide table region is labelled, keyboard reachable and scrollable',{width:900},async page=>{
     await navigate(page,'database');
     const region = await tableRegion(page);
     assert.equal(await region.getAttribute('role'),'region');

@@ -235,6 +235,14 @@ async def _case_id_ceiling(session) -> int:
     return max([int((stored or {}).get("last", 0)), *numbers])
 
 
+async def delete_cases_by_ids(session, ids: list[str]) -> None:
+    """按行 id 删（Excel 重新导入同一周时替换上次导入的案例）；序号上限先保存，行号不复用。"""
+    if not ids:
+        return
+    await _set_kv(session, CASE_SEQUENCE_KEY, {"last": await _case_id_ceiling(session)})
+    await session.execute(delete(CaseRow).where(CaseRow.id.in_(ids)))
+
+
 async def delete_cases_by_swat(session, swat_id: str) -> None:
     # 升级前的数据库没有序号记录；首次删除前先保存当前上限。
     await _set_kv(session, CASE_SEQUENCE_KEY, {"last": await _case_id_ceiling(session)})

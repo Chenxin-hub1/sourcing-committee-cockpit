@@ -22,7 +22,7 @@ import secrets
 ROLES = ("user", "npi_manager", "admin")
 ROLE_LABELS = {"user": "User", "npi_manager": "Manager", "admin": "Sourcing admin"}
 RANK = {role: i for i, role in enumerate(ROLES)}
-PASSWORD_MIN = 10
+PASSWORD_MIN = 6  # 用户 2026-09-30 决定：只有管理员用密码、领导要简单，最短 6 位
 PASSWORD_MAX = 128
 NAME_MAX = 80
 EMAIL_RE = re.compile(r"^[^@\s]+@([^@\s]+\.[^@\s]+)$")

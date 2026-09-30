@@ -53,15 +53,15 @@
     color:#fff;
     display:flex;
     align-items:center;
-    gap:24px;
+    gap:16px;
     padding:0 20px;
     height:52px;
     position:sticky;top:0;z-index:50;
   }
   .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14.5px;letter-spacing:.2px;white-space:nowrap;}
   .brand .mark{
-    width:22px;height:22px;border-radius:5px;background:var(--accent);
-    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;
+    min-width:22px;height:22px;padding:0 5px;border-radius:5px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;letter-spacing:.3px;
   }
   .brand .sub{color:#B7BBC3;font-weight:400;font-size:12px;border-left:1px solid #454951;padding-left:10px;margin-left:2px;}
   .navtabs{display:flex;gap:2px;margin-left:6px;min-width:0;overflow-x:auto;scrollbar-width:thin;scrollbar-color:#777D88 transparent;overscroll-behavior-x:contain;}
@@ -70,7 +70,7 @@
   .navtabs.is-dragging,.navtabs.is-dragging button{cursor:grabbing;user-select:none;}
   .navtabs button{flex:none;}
   .navtabs button{
-    background:transparent;border:none;color:#C7CAD1;padding:8px 14px;border-radius:6px;
+    background:transparent;border:none;color:#C7CAD1;padding:8px 11px;border-radius:6px;
     font-size:13px;cursor:pointer;font-weight:500;
   }
   .navtabs button:hover{background:#2F323A;color:#fff;}
@@ -78,7 +78,7 @@
   .navtabs button.active::after{content:'';}
   .topbar .gsearch{
     margin-left:auto;display:flex;align-items:center;background:#33353D;border:1px solid #43454D;
-    border-radius:6px;padding:0 10px;height:32px;width:280px;
+    border-radius:6px;padding:0 10px;height:32px;width:220px;
   }
   .topbar .gsearch input{
     background:transparent;border:none;outline:none;color:#fff;font-size:13px;width:100%;padding:0 6px;
@@ -98,6 +98,15 @@
 
   /* ---------- Layout ---------- */
   .page{max-width:1180px;margin:0 auto;padding:24px 20px 60px;}
+  /* Database 页：列一个不删（领导 2026-09-30），改为用满窗口宽度 + 紧凑单元格，正常屏幕不出横向滚动条 */
+  .page.wide{max-width:none;}
+  .page.wide .data-table{font-size:12px;}
+  .page.wide .data-table thead th{padding:9px 7px;white-space:normal;line-height:1.2;}
+  .page.wide .data-table tbody td{padding:8px 7px;}
+  /* 提交页顶部的只读信息卡：两张并排，窄屏叠放 */
+  .submit-info{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;}
+  .submit-info .section-card{margin:0 !important;}
+  @media(max-width:1000px){.submit-info{grid-template-columns:1fr;}}
   .pagehead{margin-bottom:18px;}
   .pagehead h1{font-size:19px;margin:0 0 4px;font-weight:600;}
   .pagehead p{margin:0;color:var(--ink-soft);font-size:13px;}
@@ -459,7 +468,7 @@ body.admin-login-open #adminLoginPanel{z-index:310 !important;}
 <body>
 
 <div class="topbar">
-  <div class="brand"><span class="mark">SB</span>Seat Belt Sourcing Committee Cockpit<span class="sub">Lifetec SBS Procurement</span></div>
+  <div class="brand"><span class="mark">SBS</span>Seat Belt Sourcing Committee Cockpit</div>
   <div class="navtabs" id="navtabs"></div>
   <div class="gsearch">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -1420,7 +1429,7 @@ function showAdminLogin(mode){
   else if(mode==='password') p.innerHTML = title('Change password')
     + (forced ? hint('Your password was reset by the Sourcing admin. Choose a new password to continue.') : '')
     + field('curPasswordInput','Current password','password','current-password')
-    + field('adminPasswordInput','New password (at least 10 characters)','password','new-password')
+    + field('adminPasswordInput','New password (at least 6 characters)','password','new-password')
     + actions('Change password', forced ? 'Log out' : 'Cancel');
   else p.innerHTML = title(esc(state.user.name))
     + `<div style="font-size:12px;color:var(--ink-soft);">${esc(state.user.email)}</div><div style="font-size:12px;margin-top:4px;">Role: <b>${esc(state.user.roleLabel||state.user.role)}</b></div>
@@ -1648,6 +1657,66 @@ function renderNav(){
 }
 
 /* ============================= RENDER: HOME ============================= */
+// v3 Phase-17：随程序发布的历史周文件库（app/history）—— 下拉框选一份加入队列，或一键加入全部还没导过的
+function importLibraryHtml(){
+  const lib = state.importLibrary;
+  if(lib===null || lib===undefined){ if(state.isSysAdmin && !state.importLibraryLoading) loadImportLibrary(); return '<div class="fx-hint" style="margin-top:10px;">Loading stored weekly files…</div>'; }
+  if(!lib.length) return '';
+  const queued = new Set((state.importQueue||[]).map(e=>e.libraryPath).filter(Boolean));
+  const pending = lib.filter(f=>!f.imported && !queued.has(f.path));
+  const label = f => `${f.meetingYear||'?'}-KW${String(f.weekNum||0).padStart(2,'0')} · ${f.name}${f.imported?' (imported)':''}`;
+  return `
+    <div class="form-grid" style="margin-top:12px;align-items:end;">
+      <div class="form-field span2"><label>Stored weekly files (${lib.length}, shipped with the Cockpit) — pick one to add it to the list</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <select id="importLibrarySelect" class="edit-input" style="flex:1;min-width:260px;"><option value="">Choose a stored weekly file…</option>${lib.map(f=>`<option value="${escapeAttr(f.path)}" ${queued.has(f.path)?'disabled':''}>${esc(label(f))}</option>`).join('')}</select>
+          <button type="button" class="btn-secondary" id="importLibraryAdd">Add</button>
+          <button type="button" class="btn-secondary" id="importLibraryAddAll" ${pending.length?'':'disabled'}>Add all not yet imported (${pending.length})</button>
+        </div>
+        <div class="fx-hint">The meeting date of a stored file comes from its folder name (e.g. "KW46, 12.11.2025"), so nothing to type. "(imported)" = that week already has cases imported from Excel; adding it again replaces them.</div>
+      </div>
+    </div>`;
+}
+async function loadImportLibrary(){
+  state.importLibraryLoading = true;
+  try{ state.importLibrary = (await API.get('/api/import/library')).files || []; }
+  catch(err){ state.importLibrary = []; toast('⚠ Could not list the stored weekly files: '+(err.detail||err.message)); }
+  state.importLibraryLoading = false;
+  const box = document.getElementById('importLibrary');
+  if(box){ box.innerHTML = importLibraryHtml(); wireEvents(); }
+}
+// v3 Phase-17：周会 Excel 导入队列（管理员）。每个文件先预览（不写库），勾选后一次导入；文件名猜不出会议日期的要手填
+function importQueueHtml(){
+  const q = state.importQueue || [];
+  if(!q.length && !state.importResults) return '';
+  const rows = q.map((e,i)=>{
+    const status = e.status==='checking' ? '<span class="fmeta">Checking…</span>'
+      : e.status==='error' ? `<span class="fb-err">${esc(e.error)}</span>`
+      : e.status==='done' ? `<span class="fmeta" style="color:var(--green);font-weight:600;">✓ Imported ${e.result.added} case${e.result.added===1?'':'s'}${e.result.replaces?` (replaced ${e.result.replaces})`:''}</span>`
+      : `<span class="fmeta">${esc(e.preview.meetingYear)}-KW${String(e.preview.weekNum).padStart(2,'0')} · ${esc(e.preview.meetingDateLabel)} · ${e.preview.cases} case${e.preview.cases===1?'':'s'}, ${e.preview.rows} part row${e.preview.rows===1?'':'s'}${e.preview.replaces?` · replaces ${e.preview.replaces} imported before`:''}${e.preview.warnings.length?` · <button type="button" class="link-btn" data-import-warn="${i}">${e.preview.warnings.length} note${e.preview.warnings.length===1?'':'s'}</button>`:''}</span>`;
+    const dateField = (e.needsDate || e.meetingDate) && e.status!=='done'
+      ? `<label class="fmeta" style="white-space:nowrap;">Meeting date <input type="date" class="edit-input" style="width:auto;display:inline-block;padding:3px 6px;" data-import-date="${i}" value="${escapeAttr(e.meetingDate||'')}"/></label>` : '';
+    return `<li style="align-items:flex-start;">
+      <input type="checkbox" data-import-include="${i}" ${e.include && e.status==='ready' ? 'checked' : ''} ${e.status==='ready' ? '' : 'disabled'} style="margin-top:3px;"/>
+      <span class="fname" style="flex:1;"><b>${esc(e.name)}</b><div style="margin-top:2px;">${status}</div>${e.showWarnings && e.preview ? `<div class="fx-hint" style="white-space:pre-line;">${esc(e.preview.warnings.join('\n'))}</div>` : ''}</span>
+      ${dateField}
+      ${e.status==='done' ? '' : `<button type="button" class="btn-secondary" style="padding:3px 8px;font-size:11px;" data-import-remove="${i}">Remove</button>`}
+    </li>`;
+  }).join('');
+  const ready = q.filter(e=>e.status==='ready' && e.include).length;
+  const busy = q.some(e=>e.status==='checking') || state.importing;
+  return `
+    <ul class="file-list">${rows}</ul>
+    ${q.some(e=>e.status!=='done') ? `
+    <div class="form-grid" style="margin-top:10px;">
+      <div class="form-field span2"><label>SharePoint folder link for these weeks (optional)</label><input id="importSourceUrl" placeholder="https://…sharepoint.com/…/KW39, 23.09.2026 — stored as the presentation link of decided cases" value="${escapeAttr(state.importSourceUrl||'')}"/></div>
+    </div>
+    <div class="form-actions" style="margin-top:10px;">
+      <button class="btn-primary" id="importRunBtn" ${ready && !busy ? '' : 'disabled'}>${state.importing ? 'Importing…' : `Import ${ready} selected file${ready===1?'':'s'}`}</button>
+      <button class="btn-secondary" id="importClearBtn" ${busy?'disabled':''}>Clear list</button>
+    </div>` : `<div class="form-actions" style="margin-top:10px;"><button class="btn-secondary" id="importClearBtn">Clear list</button></div>`}
+    ${state.importResults ? `<div class="submit-banner show" style="margin-top:12px;">${esc(state.importResults)}</div>` : ''}`;
+}
 function renderHome(){
   return `
   <div class="pagehead">
@@ -1682,26 +1751,23 @@ function renderHome(){
         <div class="qs-fields">Search fields: Part Number · SWAT ID / Sourcing ID · Supplier · Project · Cluster · Region · Week</div>
       </div>
 
-      <div class="card upload-card" style="margin-top:18px;opacity:.9;">
-        <h2>Legacy: Upload Weekly Excel</h2>
-        <p class="hint">Previous process, kept during the transition. New cases should use "Submit for Registration" above instead.</p>
+      ${state.isSysAdmin ? `
+      <div class="card upload-card" style="margin-top:18px;">
+        <h2>Import weekly committee Excel</h2>
+        <p class="hint">Drop the week's Agenda or Meeting Minutes (.xlsx, the committee template) — several weeks at once is fine. Each file becomes that week's cases; importing the same week again replaces what was imported from Excel before. Sourcing admin only.</p>
         <div class="dropzone" id="dropzone">
           <div class="icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
           </div>
-          <div class="title" id="dzTitle">Drag &amp; Drop Weekly Excel Here</div>
-          <div style="color:var(--ink-faint);font-size:12px;">or click to browse</div>
-          <div class="example">2026_W34_Sourcing_Committee.xlsx</div>
-          <div class="small">Standard committee template · same format every week</div>
+          <div class="title" id="dzTitle">Drag &amp; drop weekly Excel files here</div>
+          <div style="color:var(--ink-faint);font-size:12px;">or click to choose one or more files</div>
+          <div class="example">KW39 23.09.2026_SBS Sourcing Alignment Committee_MM.xlsx</div>
+          <div class="small">The meeting date is read from the file name (KWnn dd.mm.yyyy). Files without a date ask for it below. Tick the files to import, then press Import.</div>
+          <input type="file" id="importFiles" multiple accept=".xlsx" style="display:none;"/>
         </div>
-        <div class="upload-progress" id="uploadProgress">
-          <div class="step-row" id="step1"><span class="dot"></span> Reading file</div>
-          <div class="step-row" id="step2"><span class="dot"></span> Validating format</div>
-          <div class="step-row" id="step3"><span class="dot"></span> 18 cases identified</div>
-          <div class="step-row" id="step4"><span class="dot"></span> Database updated successfully</div>
-        </div>
-        <div class="upload-success" id="uploadSuccess">✓ 18 cases from 2026_W34_Sourcing_Committee.xlsx added. No manual entry required.</div>
-      </div>
+        <div id="importLibrary">${importLibraryHtml()}</div>
+        <div id="importQueue">${importQueueHtml()}</div>
+      </div>` : ''}
     </div>
 
     <div>
@@ -1967,35 +2033,37 @@ function renderDashboard(){
       ${multiRegion ? '<div class="breakdown-note">A case covering several regions is counted once in each, so the bars can add up to more than the total.</div>' : ''}
     </div>
   </div>
-  ${renderFxCard()}
-  ${renderRegistrationCard()}
+  ${state.isSysAdmin ? renderFxCard() + renderRegistrationCard() : ''}
   `;
 }
-function renderRegistrationCard(){
-  const R = REGISTRATION_SETTINGS, admin = state.isSysAdmin;
+// readonly=true：提交页上的只读展示（领导 2026-09-30：汇率与截止规则要让 buyer 在填表的地方看到）
+function renderRegistrationCard(readonly){
+  const R = REGISTRATION_SETTINGS, admin = state.isSysAdmin && !readonly;
   const dayName = n => ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][(3 - n + 7) % 7];
   return `
   <div class="card section-card" style="margin-top:18px;">
     <h3>Registration Deadline</h3>
-    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;">The committee meets every Wednesday. Registrations for a meeting close <b>${esc(cutoffRuleLabel())}</b>. After that, the Submit page only offers the following Wednesdays; a buyer can still request an exception with a reason, which the Sourcing admin approves by confirming the registration.</div>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;">The committee meets every Wednesday. Registrations for a meeting close <b>${esc(cutoffRuleLabel())}</b>. After that, the Submit page only offers the following Wednesdays.</div>
     <div class="form-grid fx-grid">
       <div class="form-field"><label>Closes</label>${admin?`<select class="edit-input" id="regDaysBefore">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${Number(R.daysBefore)===n?'selected':''}>${n} day${n>1?'s':''} before (${dayName(n)})</option>`).join('')}</select>`:`<div class="v">${esc(dayName(Number(R.daysBefore)||2))}</div>`}</div>
       <div class="form-field"><label>At (24h)</label>${admin?`<input class="edit-input" id="regCutoffTime" type="time" value="${escapeAttr(R.cutoffTime||'23:59')}"/>`:`<div class="v">${esc(R.cutoffTime||'23:59')}</div>`}</div>
-      <div class="form-field"><label>Timezone (IANA, blank = server)</label>${admin?`<input class="edit-input" id="regTimezone" value="${escapeAttr(R.timezone||'')}" placeholder="e.g. Europe/Berlin"/>`:`<div class="v">${esc(cutoffZone())}</div>`}</div>
+      <div class="form-field"><label>${readonly ? 'Timezone' : 'Timezone (IANA, blank = server)'}</label>${admin?`<input class="edit-input" id="regTimezone" value="${escapeAttr(R.timezone||'')}" placeholder="e.g. Europe/Berlin"/>`:`<div class="v">${esc(cutoffZone())}</div>`}</div>
     </div>
     ${admin?`<div class="form-actions"><button class="btn-primary" id="regSave">Save deadline</button><span id="regMsg" style="font-size:12px;color:var(--green);font-weight:600;"></span></div>`:''}
-    <div class="footer-note" style="text-align:left;margin-top:10px;">${R.updatedAt ? 'Last updated '+esc(R.updatedAt)+'.' : 'Default from the original template: Monday 23:59, server time.'}</div>
+    ${readonly ? '' : `<div class="footer-note" style="text-align:left;margin-top:10px;">${R.updatedAt ? 'Last updated '+esc(R.updatedAt)+'.' : 'Default from the original template: Monday 23:59, server time.'}</div>`}
   </div>`;
 }
-function renderFxCard(){
-  const F = FX_SETTINGS, rates = F.perEur || {}, admin = state.isSysAdmin;
+function renderFxCard(readonly){
+  const F = FX_SETTINGS, rates = F.perEur || {}, admin = state.isSysAdmin && !readonly;
   const rateField = cur => admin
     ? `<input class="edit-input" id="fxRate${cur}" type="number" min="0" step="any" value="${escapeAttr(rates[cur]||'')}" placeholder="not set"/>`
     : `<div class="v">${rates[cur] ? esc(rates[cur]) : '—'}</div>`;
   return `
   <div class="card section-card" style="margin-top:18px;">
     <h3>Exchange Rates to EUR</h3>
-    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;">Enter the rates as in the finance OP table (1 EUR = X foreign currency). Buyers can enter spend in EUR, USD or CNY; the Cockpit converts it to EUR with these rates when the case is submitted, and keeps that rate with the case — changing a rate here only affects new submissions. Cases registered before the EUR switch show USD until they are converted to EUR.</div>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;">${readonly
+      ? 'Finance OP rates (1 EUR = X foreign currency). You can enter spend in EUR, USD or CNY; it is converted to EUR with these rates when you submit, and the rate is kept with the case.'
+      : 'Enter the rates as in the finance OP table (1 EUR = X foreign currency). Buyers can enter spend in EUR, USD or CNY; the Cockpit converts it to EUR with these rates when the case is submitted, and keeps that rate with the case — changing a rate here only affects new submissions. Cases registered before the EUR switch show USD until they are converted to EUR.'}</div>
     <div class="form-grid fx-grid">
       <div class="form-field"><label>Rate basis</label>${admin?`<input class="edit-input" id="fxBasis" maxlength="60" value="${escapeAttr(F.basis||'')}" placeholder="e.g. OP 2025 plan rates 2026"/>`:`<div class="v">${esc(F.basis||'—')}</div>`}</div>
       <div class="form-field"><label>1 EUR = ? USD</label>${rateField('USD')}</div>
@@ -2225,6 +2293,7 @@ function renderSubmit(){
     <h1>Submit a Sourcing Case</h1>
     <p>Fill in the case directly — no Excel needed. It's routed to the SBS Procurement approver, who confirms or returns it for correction.</p>
   </div>
+  <div class="submit-info">${renderFxCard(true)}${renderRegistrationCard(true)}</div>
 
   <div class="card form-card">
     <h2>New Case Registration</h2>
@@ -2550,7 +2619,7 @@ function renderDetail(){
     <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation Link ${b.meetingDecision!=='PENDING'?'*':''}</div>${ef('editPresentationLink', b.sourcingPresentationLink||'')}<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">Required to save any decision other than Pending.</div></div>
     <div class="status-tile"><div class="k">Action Status</div>${b.meetingDecision==='PENDING' ? '<span class="no-action-txt">—</span>' : actionCell(rolledUpStatus)}<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">${b.meetingDecision==='PENDING' ? 'Blank until a Sourcing Decision is recorded' : 'Computed from task statuses below'}</div></div>
     ` : `
-    <div class="status-tile"><div class="k">Sourcing Decision</div><span class="badge ${decisionBadgeClass(c.meetingDecision)}">${esc(c.meetingDecision)}</span></div>
+    <div class="status-tile"><div class="k">Sourcing Decision</div><span class="badge ${decisionBadgeClass(c.meetingDecision)}">${esc(c.meetingDecision)}</span>${c.decisionText ? `<div style="font-size:11px;color:var(--ink-soft);margin-top:5px;white-space:pre-line;">Excel: ${esc(c.decisionText)}</div>` : ''}</div>
     <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation</div><div style="font-size:12px;word-break:break-all;">${c.sourcingPresentationLink ? documentLink(c.sourcingPresentationLink) : `<span style="color:var(--ink-faint);">Not yet provided — required when a decision is recorded</span>`}</div></div>
     <div class="status-tile"><div class="k">Action Status</div>${actionCellFor(c)}</div>
     `}
@@ -2630,6 +2699,7 @@ function renderDetail(){
         ` : `
         <div class="info-grid">
           ${infoItem('SWAT Case Number', c.swatId)}
+          ${c.source && c.source.kind==='excel' ? infoItem('Imported from', `${c.source.file} (row ${c.source.row}${c.source.importedAt?`, ${c.source.importedAt}`:''})`) : ''}
           ${c.createdDate ? infoItem('Case Created', c.createdDate) : ''}
           ${c.lateRegistration ? infoItem('Late Registration', `Exception approved at confirmation — deadline was ${c.lateRegistration.deadline}. Reason: ${c.lateRegistration.reason}`) : ''}
           ${infoItem('Region', c.region)}
@@ -2787,6 +2857,7 @@ function render(){
   }
   renderNav();
   const app = document.getElementById('app');
+  app.classList.toggle('wide', state.view==='database');
   if(state.view==='home') app.innerHTML = renderHome();
   else if(state.view==='database') app.innerHTML = renderDatabase();
   else if(state.view==='dashboard') app.innerHTML = renderDashboard();
@@ -2873,9 +2944,30 @@ function wireEvents(){
     bindExportButton(id, kind, ()=>({week: state.dashWeek}));
   }
 
-  // Home view
-  const dz = document.getElementById('dropzone');
-  if(dz) dz.onclick = runUploadSimulation;
+  // Home view: weekly Excel import (v3 Phase-17)
+  const dz = document.getElementById('dropzone'), importInput = document.getElementById('importFiles');
+  if(dz && importInput){
+    dz.onclick = ()=> importInput.click();
+    importInput.onchange = ()=>{ queueImportFiles([...importInput.files]); importInput.value=''; };
+    dz.ondragover = e=>{ e.preventDefault(); dz.classList.add('over'); };
+    dz.ondragleave = ()=> dz.classList.remove('over');
+    dz.ondrop = e=>{ e.preventDefault(); dz.classList.remove('over'); queueImportFiles([...(e.dataTransfer?.files||[])]); };
+  }
+  const libSelect = document.getElementById('importLibrarySelect');
+  const libAdd = document.getElementById('importLibraryAdd');
+  if(libAdd && libSelect) libAdd.onclick = ()=>{ if(libSelect.value) queueLibraryFiles([libSelect.value]); };
+  const libAddAll = document.getElementById('importLibraryAddAll');
+  if(libAddAll) libAddAll.onclick = ()=>{ queueLibraryFiles((state.importLibrary||[]).filter(f=>!f.imported).map(f=>f.path)); };
+  document.querySelectorAll('[data-import-include]').forEach(el=>{ el.onchange = ()=>{ state.importQueue[Number(el.dataset.importInclude)].include = el.checked; refreshImportQueue(); }; });
+  document.querySelectorAll('[data-import-remove]').forEach(el=>{ el.onclick = ()=>{ state.importQueue.splice(Number(el.dataset.importRemove),1); refreshImportQueue(); }; });
+  document.querySelectorAll('[data-import-warn]').forEach(el=>{ el.onclick = ()=>{ const e = state.importQueue[Number(el.dataset.importWarn)]; e.showWarnings = !e.showWarnings; refreshImportQueue(); }; });
+  document.querySelectorAll('[data-import-date]').forEach(el=>{ el.onchange = ()=>{ const e = state.importQueue[Number(el.dataset.importDate)]; e.meetingDate = el.value; if(e.meetingDate) previewImportFile(e); }; });
+  const importSourceUrl = document.getElementById('importSourceUrl');
+  if(importSourceUrl) importSourceUrl.oninput = ()=>{ state.importSourceUrl = importSourceUrl.value; };
+  const importRun = document.getElementById('importRunBtn');
+  if(importRun) importRun.onclick = runImport;
+  const importClear = document.getElementById('importClearBtn');
+  if(importClear) importClear.onclick = ()=>{ state.importQueue = []; state.importResults = null; refreshImportQueue(); };
   const goSubmit = document.getElementById('goToSubmit');
   if(goSubmit) goSubmit.onclick = ()=>{ state.view='submit'; render(); window.scrollTo(0,0); };
   const hsi = document.getElementById('homeSearchInput');
@@ -3640,49 +3732,83 @@ function refreshDbTableOnly(){
   window.scrollTo(0,scrollY);
 }
 
-async function runUploadSimulation(){
-  if(state.uploaded || state.uploading) return;
-  if(!state.isSysAdmin){
-    toast('Legacy Excel upload is available to the Sourcing admin only.');
-    return;
+// ---- 周会 Excel 导入（v3 Phase-17）：预览 → 勾选 → 导入；服务端同一周重导会替换上次导入的案例
+function refreshImportQueue(){
+  const box = document.getElementById('importQueue');
+  if(!box) return;
+  box.innerHTML = importQueueHtml();
+  const lib = document.getElementById('importLibrary');
+  if(lib) lib.innerHTML = importLibraryHtml();
+  wireEvents();
+}
+function importUrl(e, commit){
+  const params = new URLSearchParams({name: e.name, commit: commit ? 'true' : 'false'});
+  if(e.meetingDate) params.set('meetingDate', e.meetingDate);
+  if(commit && (state.importSourceUrl||'').trim()) params.set('sourceUrl', state.importSourceUrl.trim());
+  return '/api/import/excel?' + params.toString();
+}
+// 上传的文件走文件字节接口；库里的文件只传相对路径
+function importRequest(e, commit){
+  if(e.libraryPath) return API.post('/api/import/library', {path: e.libraryPath, commit, sourceUrl: commit ? (state.importSourceUrl||'').trim() : ''});
+  return uploadFile(importUrl(e, commit), e.file, {'X-Session-Token': API.sessionToken()});
+}
+function queueLibraryFiles(paths){
+  if(!state.isSysAdmin) return;
+  state.importQueue = state.importQueue || [];
+  state.importResults = null;
+  const fresh = [];
+  for(const path of paths){
+    const f = (state.importLibrary||[]).find(x=>x.path===path);
+    if(!f || state.importQueue.some(e=>e.libraryPath===path && e.status!=='done')) continue;
+    const e = {name:f.name, libraryPath:path, status:'checking', include:true, meetingDate:'', preview:null, error:''};
+    state.importQueue.push(e); fresh.push(e);
   }
-  const dzTitle = document.getElementById('dzTitle');
-  const progress = document.getElementById('uploadProgress');
-  if(!progress) return;
-  const steps = [...progress.querySelectorAll('.step-row')];
-  const success = document.getElementById('uploadSuccess');
-  state.uploading = true;
-  progress.classList.add('show');
-  dzTitle.textContent = '2026_W34_Sourcing_Committee.xlsx';
-  steps.forEach(step=>step.classList.remove('active','done'));
+  refreshImportQueue();
+  fresh.forEach(previewImportFile);
+}
+async function previewImportFile(e){
+  e.status = 'checking'; e.error = ''; refreshImportQueue();
   try{
-    for(let i=0;i<steps.length;i++){
-      if(!progress.isConnected || !state.isSysAdmin) return;
-      const step = steps[i];
-      step.classList.add('active');
-      step.querySelector('.dot').innerHTML = '<span class="spinner"></span>';
-      if(i===steps.length-1){
-        step.lastChild.textContent = ' Updating database';
-        const resp = await API.post('/api/legacy-upload');
-        applySnapshot(resp.snapshot);
-        state.uploaded = true;
-        step.lastChild.textContent = ' Database updated successfully';
-      }else{
-        await new Promise(resolve=>setTimeout(resolve,650));
-      }
-      step.classList.remove('active');
-      step.classList.add('done');
-      step.querySelector('.dot').textContent = '';
-    }
-    if(success.isConnected) success.classList.add('show');
-    setTimeout(()=>{ if(progress.isConnected){ render(); window.scrollTo(0,0); } },900);
-  }catch(e){
-    toast('⚠ Upload failed: '+(e.detail||e.message));
-    progress.classList.remove('show');
-    dzTitle.textContent = 'Drag & Drop Weekly Excel Here';
-  }finally{
-    state.uploading = false;
+    e.preview = await importRequest(e, false);
+    e.status = 'ready'; e.needsDate = false;
+    if(e.include===undefined) e.include = true;
+  }catch(err){
+    e.status = 'error'; e.error = err.detail || err.message;
+    e.needsDate = /meeting date/i.test(e.error);
   }
+  refreshImportQueue();
+}
+function queueImportFiles(files){
+  if(!state.isSysAdmin) return;
+  state.importQueue = state.importQueue || [];
+  state.importResults = null;
+  const fresh = [];
+  for(const f of files){
+    if(!/\.xlsx$/i.test(f.name)){ toast(`${f.name}: only .xlsx workbooks can be imported.`); continue; }
+    if(state.importQueue.some(e=>e.name===f.name && e.status!=='done')) continue;
+    const e = {name:f.name, file:f, status:'checking', include:true, meetingDate:'', preview:null, error:''};
+    state.importQueue.push(e); fresh.push(e);
+  }
+  refreshImportQueue();
+  fresh.forEach(previewImportFile);
+}
+async function runImport(){
+  const todo = (state.importQueue||[]).filter(e=>e.status==='ready' && e.include);
+  if(!todo.length || state.importing) return;
+  state.importing = true; refreshImportQueue();
+  let added = 0, replaced = 0, failed = 0, snapshot = null;
+  for(const e of todo){
+    try{
+      const resp = await importRequest(e, true);
+      e.status = 'done'; e.result = resp; added += resp.added||0; replaced += resp.replaces||0; snapshot = resp.snapshot || snapshot;
+      if(e.libraryPath && state.importLibrary){ const f = state.importLibrary.find(x=>x.path===e.libraryPath); if(f) f.imported = true; }
+    }catch(err){ e.status = 'error'; e.error = err.detail || err.message; failed++; }
+    refreshImportQueue();
+  }
+  state.importing = false;
+  if(snapshot) applySnapshot(snapshot);
+  state.importResults = `✓ ${added} case${added===1?'':'s'} imported from ${todo.length - failed} file${todo.length-failed===1?'':'s'}${replaced?`, ${replaced} earlier import${replaced===1?'':'s'} replaced`:''}${failed?`; ${failed} file${failed===1?'':'s'} failed — see the list`:''}. Open Database to review them.`;
+  render(); window.scrollTo(0,0);
 }
 
 // Startup: load the shared state from the server, then render. The daily reminder check

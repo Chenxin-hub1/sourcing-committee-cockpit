@@ -835,32 +835,82 @@ try{
     await context.close();
   });
 
-  await test('Legacy upload prevents duplicate requests and permits retry after failure', async()=>{
-    let requests=0;
+  // v3 Phase-17：首页的周会 Excel 导入（管理员）—— 预览、勾选、缺日期手填、按顺序导入
+  await test('Weekly Excel import previews each file, asks for a missing meeting date, and imports only the ticked files', async()=>{
+    const calls=[], libraryCalls=[];
+    const library = [{path:'2025/KW46, 12.11.2025/KW46_SBS Sourcing Alignment Committee_MM.xlsx', name:'KW46_SBS Sourcing Alignment Committee_MM.xlsx', folder:'KW46, 12.11.2025', weekNum:46, meetingYear:2025, meetingDateISO:'2025-11-12', imported:true},
+                     {path:'2026/KW37, 09.09.2026/KW37 09.09.2026_SBS Sourcing Alignment Committee_Updated Agenda 3.xlsx', name:'KW37 09.09.2026_SBS Sourcing Alignment Committee_Updated Agenda 3.xlsx', folder:'KW37, 09.09.2026', weekNum:37, meetingYear:2026, meetingDateISO:'2026-09-09', imported:false}];
     const {page,context} = await fixture({user:'admin', api:async(route,path)=>{
-      if(path!=='/api/legacy-upload') return false;
-      requests++;
-      await route.fulfill({status:500,json:{detail:'Test upload failure'}});
-      return true;
+      if(path==='/api/import/library' && route.request().method()==='GET'){ await route.fulfill({json:{ok:true, files:library}}); return true; }
+      if(path==='/api/import/library'){
+        const body = route.request().postDataJSON(); libraryCalls.push(body);
+        const preview = {ok:true, file:'KW37 09.09.2026_SBS Sourcing Alignment Committee_Updated Agenda 3.xlsx', weekNum:37, meetingYear:2026, meetingDateISO:'2026-09-09', meetingDateLabel:'Wed, Sep 9, 2026', cases:7, rows:9, warnings:[], replaces:0, committed:false, preview:[]};
+        await route.fulfill({json: body.commit ? {...preview, committed:true, added:7, snapshot:empty} : preview}); return true;
+      }
+      if(path!=='/api/import/excel') return false;
+      const u = new URL(route.request().url()); const name=u.searchParams.get('name'), commit=u.searchParams.get('commit')==='true', date=u.searchParams.get('meetingDate')||'';
+      calls.push({name, commit, date, sourceUrl:u.searchParams.get('sourceUrl')||'', size:(route.request().postDataBuffer()||Buffer.alloc(0)).length, token:route.request().headers()['x-session-token']});
+      if(name.startsWith('KW46') && !date){ await route.fulfill({status:422, json:{detail:'Cannot tell the meeting date from the file name — enter it in the import form.'}}); return true; }
+      const kw = name.startsWith('KW46') ? 46 : name.startsWith('KW38') ? 38 : 39, year = kw===46 ? 2025 : 2026;
+      const preview = {ok:true, file:name, weekNum:kw, meetingYear:year, meetingDateISO:`${year}-01-01`, meetingDateLabel:`Wed, KW${kw}`, cases:kw===38?2:3, rows:5,
+        warnings: kw===39 ? ['Row 8 peak spend: cannot read amount \'4 < 750k\''] : [], replaces: kw===39 ? 3 : 0, committed:false, preview:[]};
+      if(!commit){ await route.fulfill({json:preview}); return true; }
+      await route.fulfill({json:{...preview, committed:true, added:preview.cases, snapshot:empty}}); return true;
     }});
-    await page.locator('#dropzone').dblclick();
-    await page.waitForFunction(()=>!state.uploading);
-    assert.equal(requests,1);
-    assert.equal(await page.evaluate(()=>state.uploaded),false);
-    assert.equal(await page.locator('#uploadSuccess').isVisible(),false);
-    await page.locator('#dropzone').click();
-    await page.waitForFunction(()=>!state.uploading);
-    assert.equal(requests,2);
+    assert.equal(await page.locator('#dropzone').count(),1);
+    // 随程序发布的历史文件：下拉框列出、已导入的标 (imported)、"Add all not yet imported" 只算没导过的
+    await page.locator('#importLibrarySelect').waitFor();
+    assert.deepEqual(await page.locator('#importLibrarySelect option').allTextContents(), ['Choose a stored weekly file…',
+      '2025-KW46 · KW46_SBS Sourcing Alignment Committee_MM.xlsx (imported)', '2026-KW37 · KW37 09.09.2026_SBS Sourcing Alignment Committee_Updated Agenda 3.xlsx']);
+    assert.equal(await page.locator('#importLibraryAddAll').textContent(),'Add all not yet imported (1)');
+    await page.locator('#importLibrarySelect').selectOption(library[1].path);
+    await page.locator('#importLibraryAdd').click();
+    await page.waitForFunction(()=>state.importQueue.length===1 && state.importQueue[0].status==='ready');
+    assert.deepEqual(libraryCalls, [{path:library[1].path, commit:false, sourceUrl:''}]);
+    assert.ok((await page.locator('#importQueue').innerText()).includes('2026-KW37 · Wed, Sep 9, 2026 · 7 cases, 9 part rows'));
+    assert.equal(await page.locator('#importLibraryAddAll').isDisabled(), true);  // 已在列表里
+    await page.locator('#importRunBtn').click();
+    await page.waitForFunction(()=>!!state.importResults);
+    assert.deepEqual(libraryCalls[1], {path:library[1].path, commit:true, sourceUrl:''});
+    assert.ok((await page.locator('#app').innerText()).includes('7 cases imported from 1 file'));
+    assert.ok((await page.locator('#importLibrarySelect option').allTextContents())[2].endsWith('(imported)'));  // 导完标记
+    await page.locator('#importClearBtn').click();
+    const xlsx = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    await page.locator('#importFiles').setInputFiles([
+      {name:'KW39 23.09.2026_SBS Sourcing Alignment Committee_MM.xlsx', mimeType:xlsx, buffer:Buffer.alloc(300, 1)},
+      {name:'KW46_SBS Sourcing Alignment Committee_MM.xlsx', mimeType:xlsx, buffer:Buffer.alloc(200, 2)},
+      {name:'KW38 16.09.2026_SBS Sourcing Alignment Committee_Meeting Minutes.xlsx', mimeType:xlsx, buffer:Buffer.alloc(100, 3)},
+      {name:'notes.txt', mimeType:'text/plain', buffer:Buffer.from('x')},
+    ]);
+    await page.waitForFunction(()=>state.importQueue.length===3 && state.importQueue.every(e=>e.status!=='checking'));
+    assert.deepEqual(calls.map(c=>[c.name.slice(0,4), c.commit, c.size, c.token]), [['KW39',false,300,'tok'],['KW46',false,200,'tok'],['KW38',false,100,'tok']]);
+    const list = await page.locator('#importQueue').innerText();
+    assert.ok(list.includes('2026-KW39') && list.includes('3 cases, 5 part rows') && list.includes('replaces 3 imported before') && list.includes('1 note'), list);
+    assert.ok(list.includes('Cannot tell the meeting date'), list);
+    assert.equal(await page.locator('[data-import-date="1"]').count(),1);  // 缺日期的文件出现日期框
+    assert.equal(await page.locator('#importRunBtn').textContent(),'Import 2 selected files');
+    await page.locator('[data-import-warn="0"]').click();
+    assert.ok((await page.locator('#importQueue').innerText()).includes("cannot read amount"));
+    await page.locator('[data-import-date="1"]').fill('2025-11-12');
+    await page.locator('[data-import-date="1"]').dispatchEvent('change');
+    await page.waitForFunction(()=>state.importQueue[1].status==='ready');
+    assert.equal(await page.locator('#importRunBtn').textContent(),'Import 3 selected files');
+    await page.locator('[data-import-include="2"]').uncheck();  // 不导 KW38
+    await page.locator('#importSourceUrl').fill('https://sp.example.com/KW39');
+    await page.locator('#importRunBtn').click();
+    await page.waitForFunction(()=>!!state.importResults);
+    const commits = calls.filter(c=>c.commit);
+    assert.deepEqual(commits.map(c=>[c.name.slice(0,4), c.date, c.sourceUrl]), [['KW39','','https://sp.example.com/KW39'],['KW46','2025-11-12','https://sp.example.com/KW39']]);
+    const text = await page.locator('#app').innerText();
+    assert.ok(text.includes('6 cases imported from 2 files, 3 earlier imports replaced'), text);
+    assert.ok(text.includes('✓ Imported 3 cases (replaced 3)'), text);
     await context.close();
-  });
-
-  await test('Navigating away cancels the upload animation safely', async()=>{
-    const {page,context} = await fixture({user:'admin'});
-    await page.locator('#dropzone').click();
-    await page.locator('[data-nav="database"]').click();
-    await page.waitForFunction(()=>!state.uploading);
-    assert.equal(await page.evaluate(()=>state.view),'database');
-    await context.close();
+    // 普通用户与 Manager 看不到导入卡片
+    for(const user of ['user','manager']){
+      const other = await fixture({user});
+      assert.equal(await other.page.locator('#dropzone').count(),0);
+      await other.context.close();
+    }
   });
 
   await test('Exports block formulas hidden behind whitespace and preserve numeric cells', async()=>{

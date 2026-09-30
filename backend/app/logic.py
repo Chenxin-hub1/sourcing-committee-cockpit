@@ -9,7 +9,6 @@ from __future__ import annotations
 import calendar
 import re
 import uuid
-from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -22,47 +21,13 @@ from .config import get_settings
 
 # ============================= 常量（与模板 DATA MODEL 一致） =============================
 
-REGIONS = ["AP", "EU", "NA"]
-CLUSTERS = ["Chemical", "Metal", "Electronics, EA and Pyro"]
-SOURCING_TYPES = ["New", "C/O", "GCS"]
-DECISION_LEVELS = ["Level 2", "Level 3", "Level 4"]
 ACTION_TAGS = ["Cost", "Volume", "Timing", "Quality", "Capacity", "Commercial Terms", "Compliance / Documentation"]
-# 反馈 PPT 第 4 页：待办的固定分类（编辑页只提供这八个；ACTION_TAGS 仅用于演示数据生成，旧任务上的标签保留显示）
+# 反馈 PPT 第 4 页：待办的固定分类（编辑页只提供这八个；ACTION_TAGS 是种子数据里的旧标签，旧任务上保留显示）
 ACTION_CATEGORIES = ["CQA", "Volume", "Technical", "Timing", "Supplier strategy", "BPG", "Saving", "Further VAVE"]
-REMINDER_CHANNELS = ["Email", "Teams", "Email + Teams"]
-SUPPLIERS = [
-    "Meridian Safety Components", "Hanwa Precision Mfg.", "Delta Restraint Systems", "Nordic Webbing Co.",
-    "TriStar Electronics", "Yueda Precision Mfg.", "Continental Fastener Group", "Orion Gas Systems",
-    "Baltic Stamping Works", "Summit Plastics Ltd.", "Cascade Molding Inc.", "Pinnacle Sensor Technologies",
-]
-PROJECTS = [
-    "SPR9 Program", "ACR9 Program", "CLS8 Program", "Gen6 Restraint Platform", "NextGen Steering Wheel",
-    "Global Buckle Program", "ACR8 Refresh", "China Local-for-Local Gen5",
-]
-PRESENTERS = ["W. Chen", "M. Okafor", "L. Novak", "R. Fischer", "S. Iyer", "J. Park", "A. Baptiste", "H. Meyer"]
 CONTACTS = {
     "W. Chen": "w.chen@zf.com", "M. Okafor": "m.okafor@zf.com", "L. Novak": "l.novak@zf.com",
     "R. Fischer": "r.fischer@zf.com", "S. Iyer": "s.iyer@zf.com", "J. Park": "j.park@zf.com",
     "A. Baptiste": "a.baptiste@zf.com", "H. Meyer": "h.meyer@zf.com", "K. Reyes": "k.reyes@zf.com",
-}
-PART_TYPE_DESCRIPTIONS = {
-    "Inflators & Gas Generators": ["Driver Airbag Inflator, Stage I", "Side Curtain Inflator Assembly", "Knee Airbag Gas Generator"],
-    "Seatbelt Webbing": ["High-Tenacity Seatbelt Webbing, 48mm", "Webbing Assembly with Load Limiter"],
-    "Electronic Control Units": ["Restraint Control Unit, 8-channel", "Occupant Classification ECU"],
-    "Steering Wheel Modules": ["Driver Airbag Steering Wheel Module", "Heated Steering Wheel Module"],
-    "Pretensioner Mechanisms": ["Buckle Pretensioner Assembly", "Retractor Pretensioner Unit"],
-    "Airbag Cushions & Fabric": ["Side Curtain Cushion, Coated Fabric", "Passenger Airbag Cushion Assembly"],
-    "Buckle & Latch Systems": ["Seatbelt Buckle Assembly, Standard", "Latch Sensor Switch Assembly"],
-    "Plastics & Housings": ["Sensor Housing, Injection Molded", "Cover Trim, Passenger Airbag"],
-    "Castings & Stampings": ["Anchor Bracket, Die-Cast Aluminum", "Mounting Stamping, Steel"],
-    "Wiring Harness & Connectors": ["Restraint System Wiring Harness", "Sensor Connector, 4-pin Sealed"],
-}
-CLUSTER_OF = {
-    "Inflators & Gas Generators": "Electronics, EA and Pyro", "Seatbelt Webbing": "Chemical",
-    "Electronic Control Units": "Electronics, EA and Pyro", "Steering Wheel Modules": "Metal",
-    "Pretensioner Mechanisms": "Electronics, EA and Pyro", "Airbag Cushions & Fabric": "Chemical",
-    "Buckle & Latch Systems": "Metal", "Plastics & Housings": "Chemical",
-    "Castings & Stampings": "Metal", "Wiring Harness & Connectors": "Electronics, EA and Pyro",
 }
 REMINDER_DEFAULTS: dict[str, Any] = {
     "enabled": True, "daysBefore": 0, "onDueDate": True, "overdueEveryDays": 1,
@@ -638,13 +603,15 @@ def seed_presentation_links(cases: list[dict]) -> None:
 # ============================= 详情编辑：三条规则与合并 =============================
 
 
-def validate_case_edit(b: dict) -> str | None:
-    """三条规则，文案与模板 saveCaseBtn 完全一致；返回 None 表示通过。"""
+def validate_case_edit(b: dict, *, imported: bool = False) -> str | None:
+    """三条规则，文案与模板 saveCaseBtn 完全一致；返回 None 表示通过。
+
+    imported=True（v3 Phase-17，从周会 Excel 导入的历史案例）：Excel 里没有演示文稿链接，规则 1 不强求。"""
     presentation = (b.get("sourcingPresentationLink") or "").strip()
     final_doc = (b.get("finalDocLink") or "").strip()
     follow_ups = b.get("followUps") or []
     # 规则 1：记录任何非 Pending 决议必须有寻源演示文稿链接。
-    if b.get("meetingDecision") != "PENDING" and not presentation:
+    if b.get("meetingDecision") != "PENDING" and not presentation and not imported:
         return ("A Sourcing Decision cannot be saved without the Sourcing Presentation Link. "
                 "Enter the link, then save the decision.")
     if presentation and not valid_http_url(presentation):
@@ -787,94 +754,6 @@ def delete_case_by_swat(cases: list[dict], submissions: list[dict], swat_id: str
             s["status"] = "Deleted"
             s["rejectReason"] = f"Case {swat_id} was deleted by an admin."
     return True
-
-# ============================= 演示数据生成（遗留 Excel 上传模拟） =============================
-
-
-def _lcg(seed: int) -> Iterator[float]:
-    s = seed
-    while True:
-        s = (s * 1103515245 + 12345) & 0x7FFFFFFF
-        yield s / 0x7FFFFFFF
-
-
-def _pick(arr: list, r: Iterator[float]):
-    return arr[int(next(r) * len(arr))]
-
-
-def _pick_tags(r: Iterator[float]) -> list[str]:
-    first = _pick(ACTION_TAGS, r)
-    if next(r) < 0.45:
-        second = _pick(ACTION_TAGS, r)
-        guard = 0
-        while second == first and guard < 5:
-            second = _pick(ACTION_TAGS, r)
-            guard += 1
-        return [first] if second == first else [first, second]
-    return [first]
-
-
-def generate_batch(count: int, week_start: int, week_end: int, seed: int, swat_start: int, cases: list[dict]) -> list[dict]:
-    r = _lcg(seed)
-    out: list[dict] = []
-    decisions = ["APPROVED", "APPROVED", "APPROVED", "CONDITIONAL APPROVAL", "REJECTED", "PENDING"]
-    for i in range(count):
-        w = week_start + int(next(r) * (week_end - week_start + 1))
-        dec = _pick(decisions, r)
-        part_type = _pick(list(PART_TYPE_DESCRIPTIONS), r)
-        cluster = CLUSTER_OF[part_type]
-        if dec == "REJECTED":
-            case_status, action_status = "Resubmission Required", _pick(["Open", "Overdue", "Closed"], r)
-            discussion = ("Committee did not approve the recommendation as presented; cost or capacity position "
-                          "did not meet the target threshold and a resubmission was requested.")
-        elif dec == "PENDING":
-            case_status, action_status = "Open", None  # 尚未评审 —— 不存在会后行动
-            discussion = "Pending for Sourcing Committee Review"
-        elif dec == "CONDITIONAL APPROVAL":
-            case_status, action_status = "Approved", _pick(["Open", "Overdue", "Closed"], r)
-            discussion = ("Committee approved the recommendation subject to a follow-up item being closed out "
-                          "before production release.")
-        else:
-            case_status = "Closed" if next(r) < 0.5 else "Approved"
-            action_status = None if case_status == "Closed" else _pick([None, "Closed"], r)
-            discussion = ("Committee reviewed the sourcing recommendation and approved it without conditions; "
-                          "cost, quality and capacity positions were all satisfactory.")
-        follow_up_status = action_status
-        closure_status = "Closed" if action_status in (None, "Closed") else "Open"
-        swat_id = f"SWAT-{swat_start + i}"
-        rand_month = 6 + int(next(r) * 3)
-        rand_day = 1 + int(next(r) * 27)
-        due = f"{na_now().year}-{rand_month:02d}-{rand_day:02d}"
-        closure_date = due if closure_status == "Closed" else "—"
-        out.append(mk_case({
-            "weekNum": w, "caseNumber": 1 + int(next(r) * 9), "swatId": swat_id,
-            "partNumber": str(10000000 + int(next(r) * 89999999)),
-            "partDescription": _pick(PART_TYPE_DESCRIPTIONS[part_type], r),
-            "region": _pick(REGIONS, r), "project": _pick(PROJECTS, r), "family": part_type, "cluster": cluster,
-            "parentPF": f"PF-{int(1000 + next(r) * 8999)}", "partFamilyCode": f"PF-{int(1000 + next(r) * 8999)}",
-            "sourcingType": _pick(SOURCING_TYPES, r), "recommendedSupplier": _pick(SUPPLIERS, r),
-            "presenter": _pick(PRESENTERS, r), "decisionLevel": _pick(DECISION_LEVELS, r),
-            "peakYearSpend": int(200000 + next(r) * 4500000), "leadTime": f"{4 + int(next(r) * 16)} weeks",
-            "lifetimeSpend": int(800000 + next(r) * 20000000),
-            "spendCurrency": "EUR",  # 演示批次的金额按欧元记（Phase-15 后新记录一律欧元，导出币种列才不会出现 USD）
-            "committeeDiscussion": discussion, "meetingDecision": dec,
-            "caseStatus": case_status, "actionStatus": action_status,
-            "followUps": [] if action_status is None else [{
-                "id": f"FU-GEN-{swat_id}",
-                "task": _pick(["Submit updated quality certification", "Confirm capacity commitment in writing",
-                               "Provide revised cost breakdown", "Complete supplier audit follow-up",
-                               "Submit PPAP documentation"], r),
-                "responsible": _pick(PRESENTERS, r), "dueDate": due,
-                "notes": "Tracked with responsible buyer; status updated at next committee cycle.",
-                "status": follow_up_status, "tags": _pick_tags(r), "notify": "", "cc": "",
-            }],
-            "closure": {
-                "status": closure_status, "closureDate": closure_date,
-                "closureComment": "Follow-up item resolved and evidenced." if closure_status == "Closed" else "—",
-                "closureEvidence": f"Evidence_{swat_id}.pdf" if closure_status == "Closed" else "—",
-            },
-        }, cases + out))
-    return out
 
 # ============================= 提醒引擎（每日检查 + 手动发送） =============================
 

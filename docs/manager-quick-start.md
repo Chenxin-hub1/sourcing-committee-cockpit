@@ -12,7 +12,7 @@ Address: **http://<server>:8031/** (replace with the address you were given)
 2. Next time, click **Log in**, type your email, press Enter. That is the whole login.
 3. Managers: tell the Sourcing admin once. He opens **Accounts** and changes your role to **Manager**; it takes effect immediately.
 
-Password rules (admins only): at least 10 characters, not your email address, at least 4 different characters.
+Password rules (admins only): at least 6 characters, not your email address, at least 4 different characters.
 
 ## 2. What each role can do
 
@@ -75,4 +75,4 @@ Viewing does not require login. Submitting does.
 - Uploaded files are renamed automatically to `YYYY.MM.DD Project Part-description PN, Supplier.ext`; the original name is still shown ("uploaded as …").
 - Amounts are stored in EUR. USD / CNY entries are converted with the OP rate maintained by the Sourcing admin on the Dashboard; the entered amount stays visible.
 - Week numbers are ISO calendar weeks (KW).
-- Do not use **Legacy Excel Upload** on the Home page — it is a demo function that injects sample cases and does not read your Excel.
+- **Import weekly committee Excel** (Home page, Sourcing admin only): drop the week's Agenda or Meeting Minutes files, or pick a stored historical file from the "Stored weekly files" dropdown ("Add all not yet imported" loads the whole 2025–2026 history in one go), tick the ones to import, press Import. The meeting date comes from the file name (KW39 23.09.2026); a file without a date asks for it. Importing the same week again replaces what was imported before. Imported cases show "Imported from …" and the original decision wording on the case page.

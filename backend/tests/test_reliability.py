@@ -92,17 +92,20 @@ async def test_concurrent_admin_sessions_remain_valid(async_client):
         assert response.status_code == 404
 
 
-def test_repeat_legacy_upload_keeps_case_and_task_ids_unique(api_client):
+def test_repeat_excel_import_keeps_case_ids_unique(api_client):
+    # v3 Phase-17：同一周的 Excel 导两次，行 id 不复用、不重复
+    from tests.test_excel_import import SAMPLE_MERGES, SAMPLE_ROWS, _post, _workbook
     login = api_client.post("/api/auth/login", json={"email": "admin@zf.com", "password": "test-admin"})
     headers = {"X-Session-Token": login.json()["token"]}
+    data = _workbook(SAMPLE_ROWS, SAMPLE_MERGES)
+    seen: list[str] = []
     for _ in range(2):
-        response = api_client.post("/api/legacy-upload", headers=headers)
-        assert response.status_code == 200
+        response = _post(api_client, data, "KW39 23.09.2026_SBS Sourcing Alignment Committee_MM.xlsx", headers, commit="true")
+        assert response.status_code == 200, response.text
+        seen += [c["id"] for c in response.json()["snapshot"]["cases"] if c.get("source", {}).get("kind") == "excel"]
     cases = response.json()["snapshot"]["cases"]
-    ids = [t["id"] for c in cases for t in c.get("followUps") or []]
-    assert len(ids) == len(set(ids))
-    imported = cases[22:]
-    assert len({c["swatId"] for c in imported}) == 36
+    assert len({c["id"] for c in cases}) == len(cases)
+    assert len(seen) == 8 and len(set(seen)) == 8  # 第二次导入的行号是新的
 
 
 @pytest.mark.parametrize("status", [301, 302, 400, 500])

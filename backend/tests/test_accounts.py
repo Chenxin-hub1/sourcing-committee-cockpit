@@ -61,7 +61,7 @@ def test_registration_rules(client, email, name, message):
 
 
 @pytest.mark.parametrize("password,message", [
-    ("short", "at least 10"), ("aaaaaaaaaaaa", "too simple"), ("admin@zf.com", "must not be your email"),
+    ("short", "at least 6"), ("aaaaaaaaaaaa", "too simple"), ("admin@zf.com", "must not be your email"),
 ])
 def test_admin_password_rules(client, admin, password, message):
     r = client.post("/api/auth/password", json={"currentPassword": "test-admin", "newPassword": password}, headers=admin)
