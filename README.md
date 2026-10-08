@@ -6,7 +6,7 @@
 
 Home 搜索、Submit Case 登记、Approval 确认/退回、Database 筛选与 CSV 导出、Dashboard 管理指标与议程导出、Follow-ups 待办与提醒、案例详情和生命周期编辑。待办可由任何登录用户汇报进展并附凭证（含 Outlook 邮件），Manager（采购经理 / NPI 经理角色）approve（关闭）或 reject（写进一步要求），结果邮件通知负责人。
 
-提交金额可按 EUR / USD / CNY 填写，按管理员在 Dashboard 维护的财务 OP 汇率（1 EUR = X 外币）折算为欧元保存（记录保留原币金额与当时汇率）；旧美元案例可一次性换算（见 DEPLOY.md）；区域可多选。Peak Year / Lifetime Spend 按整个 bundle 填一个（案例级必填）；Project / Sourcing Type / Recommended Supplier 按零件行填写，案例级自动汇总；上传的演示文件在系统里改名为 `YYYY.MM.DD 项目 零件描述 零件号, 供应商.ext`（原文件名保留可见）。
+提交金额可按 EUR / USD / CNY 填写，按管理员在 Dashboard 维护的财务 OP 汇率（1 EUR = X 外币）折算为欧元保存（记录保留原币金额与当时汇率）；旧美元案例可一次性换算（见 DEPLOY.md）；区域可多选。Peak Year / Lifetime Spend 按整个 bundle 填一个（案例级必填）；Project / Sourcing Type / Recommended Supplier 按零件行填写，案例级自动汇总；上传的演示文件在系统里改名为 `YYYY.MM.DD 项目 零件描述 零件号, 供应商.ext`（原文件名保留可见）；管理员也可把文件放进服务器目录 `data/presentations/`，经理在案例页下拉框里选一个直接挂到案例（v3 Phase-18）。周标签、周筛选与驾驶舱按案例自己的年份（2025 / 2026 分开），Database 所有列可点表头排序；Excel 导入的 Commodity 原文归一到固定 Cluster + 规范 Commodity 名；待办的分类由系统按任务 / 标签关键词自动判定（标签自由输入），负责人带 Function，驾驶舱按真实待办数统计并按 function / owner 分布。
 
 每人用公司邮箱自注册个人账号（只填姓名和邮箱，不设密码，凭邮箱登录；只有 Sourcing admin 用密码），提交登记须登录；Sourcing admin 在 Accounts 页提升 Manager / admin 角色，提升为 admin 时发临时密码（详见 DEPLOY.md 安全说明）。审批结果和待办提醒可经 SMTP / Teams 发送，并记录结果。未配置的通道显示 `skipped`。首页的 "Import weekly committee Excel"（Sourcing admin 专用）把委员会每周的 Agenda / MM Excel 导入成那一周的案例：拖入新文件，或从下拉框选随程序发布的历史周文件（`backend/app/history/`，2025 KW36 – 2026 KW39 共 36 周）；会议日期从文件名或文件夹名读，同一周重导会替换上次导入的；也可在服务器上批量跑 `python -m app.migrations import-excel <文件夹> --apply`（文件夹按 SharePoint 的 "KW39, 23.09.2026" 命名时日期从文件夹名取）。
 

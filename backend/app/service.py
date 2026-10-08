@@ -18,7 +18,7 @@ from typing import Any
 
 from sqlalchemy import delete, select
 
-from . import accounts, logic
+from . import accounts, commodities, logic
 from .config import get_settings
 from .models import Base, CaseRow, KvRow, ReminderLogRow, SubmissionRow, UserRow
 
@@ -30,6 +30,7 @@ REGISTRATION_KEY = "registration_settings"
 SESSIONS_KEY = "sessions"
 INITIALIZED_KEY = "database_initialized"
 CASE_SEQUENCE_KEY = "case_row_sequence"
+COMMODITY_KEY = "commodity_vocabulary"  # {"version": N}：已按 commodities.VERSION 归一过术语（v3 Phase-18）
 WEEK_NUMBERING_KEY = "week_numbering"  # {"scheme": "iso"}：已换成 ISO 周（v3 Phase-13）
 SESSION_TTL_SECONDS = 7 * 24 * 3600  # 登录 7 天过期：泄露窗口有界，列表不无限增长
 
@@ -194,6 +195,8 @@ def snapshot(state: dict[str, Any]) -> dict[str, Any]:
         "registrationSettings": state.get("registration", logic.REGISTRATION_DEFAULTS),
         "autoLog": [{k: v for k, v in e.items() if k != "_seq"} for e in state["log"]],
         "serverTimezone": get_settings().timezone,
+        # v3 Phase-18：待办分类关键词与职能建议，编辑页实时预览用同一套规则
+        "taskRules": logic.task_rules(),
     }
 
 
@@ -370,6 +373,7 @@ async def init_db(session) -> None:
                 await upsert_submission(session, sub)
         await _set_kv(session, INITIALIZED_KEY, {"seeded": seeded})
     await _migrate_iso_weeks(session)
+    await _migrate_commodities(session)
     await _ensure_bootstrap_admin(session)
     await session.commit()
 
@@ -388,3 +392,29 @@ async def _migrate_iso_weeks(session) -> None:
         if logic.ISO_DATE_RE.match(row.doc.get("meetingDateISO") or ""):
             row.doc = {**row.doc, "meetingWeekNum": logic.iso_week_of_record({"meetingDateISO": row.doc["meetingDateISO"]})}
     await _set_kv(session, WEEK_NUMBERING_KEY, {"scheme": "iso"})
+
+
+def normalize_commodities(cases: list[dict]) -> list[dict]:
+    """v3 Phase-18：按 commodities 词表重算从 Excel 导入的案例（以及 Cluster 不在固定三项里的案例）的
+    cluster / commodity / commodityRaw。返回改动了的案例（原文 commodityRaw 一直保留，词表改了可以再算）。"""
+    changed: list[dict] = []
+    for c in cases:
+        imported = (c.get("source") or {}).get("kind") == "excel"
+        if not imported and c.get("cluster") in commodities.CLUSTERS and not c.get("commodityRaw"):
+            continue  # 在线登记的案例：Cluster 本来就是固定项
+        before = (c.get("cluster"), c.get("commodity"), c.get("commodityRaw"))
+        commodities.apply(c)
+        if before != (c.get("cluster"), c.get("commodity"), c.get("commodityRaw")):
+            changed.append(c)
+    return changed
+
+
+async def _migrate_commodities(session) -> None:
+    """词表版本变了（或从未归一过）就重算一遍，写回改动的案例。"""
+    if (await _kv_doc(session, COMMODITY_KEY) or {}).get("version") == commodities.VERSION:
+        return
+    for row in (await session.execute(select(CaseRow))).scalars():
+        doc = deepcopy(row.doc)
+        if normalize_commodities([doc]):
+            row.doc = doc
+    await _set_kv(session, COMMODITY_KEY, {"version": commodities.VERSION})

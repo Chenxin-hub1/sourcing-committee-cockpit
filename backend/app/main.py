@@ -22,7 +22,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, delivery, excel_import, exports, feedback, files, graph, logic, service
+from . import accounts, delivery, excel_import, exports, feedback, files, graph, logic, presentation_match, service
 from .config import get_settings
 from .db import SessionLocal
 from .schemas import (
@@ -32,6 +32,8 @@ from .schemas import (
     FeedbackDecisionIn,
     FeedbackIn,
     FxSettingsIn,
+    LibraryAttachIn,
+    LibraryAttachManyIn,
     LibraryImportIn,
     LoginIn,
     ManualReminderIn,
@@ -392,64 +394,65 @@ async def bootstrap(x_session_token: str | None = Header(default=None)) -> dict:
 # ============================= 提交与登记 =============================
 
 
-def _validate_submission(cases: list[dict], submissions: list[dict], b: SubmissionIn) -> dict:
-    """提交门禁 —— 文案与模板 showError 完全一致。"""
+def _submission_problems(cases: list[dict], submissions: list[dict], b: SubmissionIn) -> tuple[dict | None, list[str]]:
+    """提交门禁 —— 文案与模板 showError 一致。v3 Phase-19（同事反馈）：收集全部问题一次返回，不再修一条弹一条。"""
+    out: list[str] = []
     if not (b.submitterName.strip() and b.submitterEmail.strip()):
-        raise HTTPException(422, "⚠ Please fill in Name and Email before submitting.")
+        out.append("⚠ Please fill in Name and Email before submitting.")
     if not b.partNumbers or any(not p.partNumber.strip() or not p.partDescription.strip() for p in b.partNumbers):
-        raise HTTPException(422, "⚠ Please fill in Part Number and Part Description for every part number row before submitting.")
+        out.append("⚠ Please fill in Part Number and Part Description for every part number row before submitting.")
     # v3 Phase-15：项目 / 寻源类型 / 推荐供应商按零件行（行上留空沿用案例级值）
     rows_error = logic.bundle_rows_error(logic.bundle_rows([p.model_dump() for p in b.partNumbers], b.model_dump()))
     if rows_error:
-        raise HTTPException(422, rows_error)
+        out.append(rows_error)
+    if not b.region:
+        out.append("⚠ Please select at least one Region before submitting.")
     # v3 Phase-15：金额按整个 bundle 填一个，必填
     if b.peakYearSpend <= 0 or b.lifetimeSpend <= 0:
-        raise HTTPException(422, "⚠ Please enter the bundle Peak Year Spend and Lifetime Spend (the total for all part numbers) before submitting.")
-    if not b.region:
-        raise HTTPException(422, "⚠ Please select at least one Region before submitting.")
-    # 会议日期是登记截止门禁的依据：留空或非周三都不能绕过（提交页只会给周三）
-    if not b.meetingDateISO:
-        raise HTTPException(422, "⚠ Please choose the committee meeting date before submitting.")
-    if date.fromisoformat(b.meetingDateISO).weekday() != logic.MEETING_WEEKDAY:
-        raise HTTPException(422, "⚠ The Sourcing Committee meets on Wednesdays — choose a Wednesday as the meeting date.")
+        out.append("⚠ Please enter the bundle Peak Year Spend and Lifetime Spend (the total for all part numbers) before submitting.")
     st = logic.case_no_status(cases, b.caseNo)
     if st is None:
-        raise HTTPException(422, "⚠ Please enter the SWAT Case # or Supplyon Case #. Every case has one — it is required.")
-    if any(x.get("caseId") == st["id"] and x.get("status") == "Waiting for Registration Confirmation" for x in submissions):
-        raise HTTPException(422, f"⚠ {st['id']} already has a registration waiting for confirmation. "
-                                 "Please wait for that one to be processed.")
+        out.append("⚠ Please enter the SWAT Case # or Supplyon Case #. Every case has one — it is required.")
+    elif any(x.get("caseId") == st["id"] and x.get("status") == "Waiting for Registration Confirmation" for x in submissions):
+        out.append(f"⚠ {st['id']} already has a registration waiting for confirmation. "
+                   "Please wait for that one to be processed.")
     if not b.isFamilyCase:
-        raise HTTPException(422, '⚠ Please answer "Is this a Family Case?" before submitting.')
+        out.append('⚠ Please answer "Is this a Family Case?" before submitting.')
     if not b.involvesECM:
-        raise HTTPException(422, '⚠ Please answer "Does this case involve an Engineering Change (ECM)?" before submitting.')
+        out.append('⚠ Please answer "Does this case involve an Engineering Change (ECM)?" before submitting.')
     if b.isFamilyCase == "Yes":
         if not b.familyAligned:
-            raise HTTPException(422, "⚠ Please answer whether Family Alignment has been completed.")
-        if b.familyAligned == "No":
-            raise HTTPException(422, "⚠ This case cannot be registered until Family Alignment is completed.")
+            out.append("⚠ Please answer whether Family Alignment has been completed.")
+        elif b.familyAligned == "No":
+            out.append("⚠ This case cannot be registered until Family Alignment is completed.")
     if b.involvesECM == "Yes":
         if not b.ccbApproved:
-            raise HTTPException(422, "⚠ Please answer whether this case has passed CCB2.")
-        if b.ccbApproved == "No":
-            raise HTTPException(422, "⚠ This case cannot be registered until it has passed CCB2 (Change Control Board 2).")
-    return st
-
-
-def _late_registration(registration: dict, b: SubmissionIn) -> dict | None:
-    """登记截止门禁：截止后提交该周会议日期 → 422；申请例外且有理由 → 返回标记，随登记单进审批队列。"""
+            out.append("⚠ Please answer whether this case has passed CCB2.")
+        elif b.ccbApproved == "No":
+            out.append("⚠ This case cannot be registered until it has passed CCB2 (Change Control Board 2).")
+    # 会议日期是登记截止门禁的依据：留空或非周三都不能绕过（提交页只会给周三）
     if not b.meetingDateISO:
-        return None
+        out.append("⚠ Please choose the committee meeting date before submitting.")
+    elif date.fromisoformat(b.meetingDateISO).weekday() != logic.MEETING_WEEKDAY:
+        out.append("⚠ The Sourcing Committee meets on Wednesdays — choose a Wednesday as the meeting date.")
+    return st, out
+
+
+def _late_registration(registration: dict, b: SubmissionIn) -> tuple[dict | None, str | None]:
+    """登记截止门禁：截止后提交该周会议日期 → 问题文案；申请例外且有理由 → 返回标记，随登记单进审批队列。"""
+    if not b.meetingDateISO:
+        return None, None
     meeting = date.fromisoformat(b.meetingDateISO)
-    if logic.registration_open(meeting, registration):
-        return None
+    if meeting.weekday() != logic.MEETING_WEEKDAY or logic.registration_open(meeting, registration):
+        return None, None
     deadline = logic.cutoff_moment_label(meeting, registration)
     if not b.lateException:
-        raise HTTPException(422, f"⚠ Registration for the {b.meetingDateLabel or b.meetingDateISO} meeting closed on {deadline} "
-                                 f"(registrations close {logic.cutoff_label(registration)}). Choose a later meeting date, "
-                                 "or tick \"Request an exception\" and give the reason for the Sourcing admin.")
+        return None, (f"⚠ Registration for the {b.meetingDateLabel or b.meetingDateISO} meeting closed on {deadline} "
+                      f"(registrations close {logic.cutoff_label(registration)}). Choose a later meeting date, "
+                      "or tick \"Request an exception\" and give the reason for the Sourcing admin.")
     if not b.lateReason.strip():
-        raise HTTPException(422, "⚠ Please give the reason for the late registration, so the Sourcing admin can approve the exception.")
-    return {"reason": b.lateReason.strip(), "deadline": deadline}
+        return None, "⚠ Please give the reason for the late registration, so the Sourcing admin can approve the exception."
+    return {"reason": b.lateReason.strip(), "deadline": deadline}, None
 
 
 @app.post("/api/submissions")
@@ -461,17 +464,20 @@ async def create_submission(b: SubmissionIn, request: Request, user: LoggedIn) -
         if not _submission_allowed(ip):
             raise HTTPException(429, "Too many submissions from this network in the last hour. Please try again later.")
         state = await service.load_state(session)
-        st = _validate_submission(state["cases"], state["submissions"], b)
+        st, problems = _submission_problems(state["cases"], state["submissions"], b)
         fx = logic.fx_rate(state["fx"], b.currency)
         if fx is None:
-            raise HTTPException(422, f"⚠ No exchange rate is set for {b.currency} yet. Enter the amounts in EUR, "
-                                     f"or ask the Sourcing admin to set the {b.currency} rate.")
+            problems.append(f"⚠ No exchange rate is set for {b.currency} yet. Enter the amounts in EUR, "
+                            f"or ask the Sourcing admin to set the {b.currency} rate.")
         rows = logic.bundle_rows([p.model_dump() for p in b.partNumbers], b.model_dump())
-        spend = logic.convert_spend(rows, fx, b.peakYearSpend, b.lifetimeSpend)
-        commercial_error = logic.validate_commercial(b.model_dump(), spend["lifetimeSpend"])
-        if commercial_error:
-            raise HTTPException(422, commercial_error)
-        late = _late_registration(state["registration"], b)
+        spend = logic.convert_spend(rows, fx, b.peakYearSpend, b.lifetimeSpend) if fx else None
+        problems += logic.commercial_problems(b.model_dump(), spend["lifetimeSpend"] if spend else None)
+        late, late_problem = _late_registration(state["registration"], b)
+        if late_problem:
+            problems.append(late_problem)
+        if problems:  # v3 Phase-19：全部问题一次返回（换行分隔），页面逐条列出
+            raise HTTPException(422, "\n".join(problems))
+        assert st is not None and fx is not None and spend is not None
         pns = spend["partNumbers"]
         summary = logic.bundle_summary(pns)
         sub = {
@@ -595,8 +601,8 @@ async def reject_registration(sub_id: str, b: RejectIn) -> dict:
 # ============================= 案例：编辑 / 删除 =============================
 
 
-@app.put("/api/cases/{row_id}", dependencies=[Depends(require_manager)])
-async def save_case(row_id: str, b: CaseEditIn) -> dict:
+@app.put("/api/cases/{row_id}")
+async def save_case(row_id: str, b: CaseEditIn, user: Manager) -> dict:
     async with SessionLocal() as session, _write_lock:
         state = await service.load_state(session)
         case = next((c for c in state["cases"] if c["id"] == row_id), None)
@@ -609,18 +615,24 @@ async def save_case(row_id: str, b: CaseEditIn) -> dict:
         }
         if any(task.get("id") in other_task_ids for task in edit["followUps"]):
             raise HTTPException(422, "Follow-up task IDs must be unique across cases.")
-        error = logic.validate_case_edit(edit, imported=excel_import.is_imported(case))
-        if error:
-            raise HTTPException(422, error)
+        # v3 Phase-19：改周只给 Sourcing admin（同一周内的日期视为没改）
+        new_day = date.fromisoformat(b.meetingDate) if b.meetingDate else None
+        if new_day is not None and new_day.isocalendar()[:2] != (logic.case_year(case), int(case.get("weekNum") or 0)) \
+                and user.get("role") != "admin":
+            raise HTTPException(403, "Only the Sourcing admin can move a case to another week.")
+        # v3 Phase-19：全部问题一次返回；案例上已有演示文件即满足"演示文稿"规则
+        problems = logic.case_edit_problems(edit, imported=excel_import.is_imported(case), has_files=bool(case.get("files")))
         # 只有请求真的带了商务字段才覆盖（model_fields_set），旧客户端 / 只改决议的保存不动它们
         commercial = (b.model_dump(include=set(COMMERCIAL_INPUT_FIELDS))
                       if b.model_fields_set & set(COMMERCIAL_INPUT_FIELDS) else None)
         # 先在副本上合并，再过商务门槛（明确答 No 的拒绝，留空放行），通过才落到内存态与库
         candidate = deepcopy(case)
         logic.apply_case_edit(candidate, edit, commercial)
-        gate = logic.validate_commercial_state(candidate)
-        if gate:
-            raise HTTPException(422, gate)
+        problems += logic.commercial_state_problems(candidate)
+        if problems:
+            raise HTTPException(422, "\n".join(problems))
+        if new_day is not None:
+            logic.move_case_to_week(candidate, new_day, state["cases"])
         case.clear()
         case.update(candidate)
         await service.upsert_case(session, case)
@@ -716,7 +728,7 @@ async def export_week(kind: str, week: int = Query(ge=1, le=53), year: int = Que
         state = await service.load_state(session)
     cases = [c for c in state["cases"] if int(c.get("weekNum") or 0) == week
              and (not c.get("meetingYear") or int(c["meetingYear"]) == year)]
-    label = logic.wk(week)
+    label = logic.wk(week, year)
     return _xlsx_response(kind, exports.build(kind, cases, label), exports.filename(kind, label))
 
 
@@ -1090,6 +1102,114 @@ async def import_library_file(b: LibraryImportIn, user: Admin) -> dict:
     async with SessionLocal() as session, _write_lock:
         state = await service.load_state(session)
         return await _import_workbook(session, state, data, path.name, day=day, source_url=b.sourceUrl, commit=b.commit, user=user)
+
+
+# ============================= 演示文件库（v3 Phase-18） =============================
+
+
+def _library_listing(cases: list[dict]) -> list[dict]:
+    """库文件 + 自动匹配到的案例（v3 Phase-20）+ 是否已挂在那个案例上。"""
+    by_id = {c["id"]: c for c in cases}
+    listed = files.library_files()
+    for f in listed:
+        m = presentation_match.match(f["path"], cases)
+        if m:
+            m["attached"] = presentation_match.attached_to(f["name"], by_id[m["rowId"]])
+        f["match"] = m
+    return listed
+
+
+@app.get("/api/presentation-library", dependencies=[Depends(require_manager)])
+async def presentation_library() -> dict:
+    """服务器上管理员放好的演示文件（SC_PRESENTATION_LIBRARY_DIR，可分子文件夹）：案例页与首页下拉框的数据源。
+    v3 Phase-20：每份文件带自动匹配到的案例（SWAT / bundle 号 → 零件号 → 周 + 案例序号）。"""
+    async with SessionLocal() as session, _write_lock:
+        cases = (await service.load_state(session))["cases"]
+    return {"ok": True, "folder": str(files.library_root()), "files": _library_listing(cases)}
+
+
+@app.post("/api/presentation-library/files")
+async def upload_to_library(request: Request, user: Admin, name: str = Query(max_length=300),
+                            folder: str = Query(default="", max_length=120)) -> dict:
+    """v3 Phase-20：Sourcing admin 从本机把演示文件上传进服务器文件库。文件夹缺省按匹配到的案例的周
+    （"KW15, 08.04.2026"，与 SharePoint 一致），对不上案例的放 "Unsorted"；同名自动加 (2)。"""
+    clean = files.checked_name(name, files.LIBRARY_EXTENSIONS)
+    async with SessionLocal() as session, _write_lock:
+        cases = (await service.load_state(session))["cases"]
+    if not folder.strip():
+        m = presentation_match.match(clean, cases)
+        case = next((c for c in cases if m and c["id"] == m["rowId"]), None)
+        folder = presentation_match.week_folder(case) if case else "Unsorted"
+    tmp, _size = await files.receive(request)
+    rel = files.place_in_library(tmp, files.folder_name(folder), clean)
+    async with SessionLocal() as session, _write_lock:
+        cases = (await service.load_state(session))["cases"]
+    listed = _library_listing(cases)
+    return {"ok": True, "path": rel, "file": next((f for f in listed if f["path"] == rel), None), "files": listed}
+
+
+@app.post("/api/presentation-library/attach")
+async def attach_matched(b: LibraryAttachManyIn, user: Manager) -> dict:
+    """v3 Phase-20：按自动匹配把库文件挂到各自的案例（已挂过的、对不上的、案例文件已满的跳过并说明原因）。"""
+    attached: list[dict] = []
+    skipped: list[dict] = []
+    for rel in dict.fromkeys(b.paths):
+        try:
+            path = files.library_path(rel)
+        except HTTPException as exc:
+            skipped.append({"path": rel, "reason": str(exc.detail)})
+            continue
+        async with SessionLocal() as session, _write_lock:
+            cases = (await service.load_state(session))["cases"]
+        m = presentation_match.match(rel, cases)
+        case = next((c for c in cases if m and c["id"] == m["rowId"]), None)
+        if case is None:
+            skipped.append({"path": rel, "reason": "No matching case — attach it on the case page."})
+            continue
+        if presentation_match.attached_to(path.name, case):
+            skipped.append({"path": rel, "reason": f"Already attached to {m['label']}."})
+            continue
+        if len(case.get("files") or []) >= files.MAX_FILES_PER_RECORD:
+            skipped.append({"path": rel, "reason": f"{m['label']} already has {files.MAX_FILES_PER_RECORD} files."})
+            continue
+        record = await files.store_from_library(path, case, user["name"])
+        async with SessionLocal() as session, _write_lock:
+            state = await service.load_state(session)
+            target = next((c for c in state["cases"] if c["id"] == case["id"]), None)
+            if target is None or len(target.get("files") or []) >= files.MAX_FILES_PER_RECORD:
+                await files.remove(record)
+                skipped.append({"path": rel, "reason": f"{m['label']} changed while attaching — try again."})
+                continue
+            target.setdefault("files", []).append(record)
+            await service.upsert_case(session, target)
+            await session.commit()
+        attached.append({"path": rel, "label": m["label"], "name": record["name"], "by": m["by"]})
+    async with SessionLocal() as session, _write_lock:
+        state = await service.load_state(session)
+        return {"ok": True, "attached": attached, "skipped": skipped, "snapshot": service.snapshot(state),
+                "files": _library_listing(state["cases"])}
+
+
+@app.post("/api/cases/{row_id}/files/from-library")
+async def attach_library_file(row_id: str, b: LibraryAttachIn, user: Manager) -> dict:
+    """把库里的一份文件挂到案例上：复制进案例文件存放处（本地或 SharePoint）、按案例改名；库里的原件不动。"""
+    path = files.library_path(b.path)
+    async with SessionLocal() as session, _write_lock:
+        case = next((c for c in (await service.load_state(session))["cases"] if c["id"] == row_id), None)
+        if case is None:
+            raise HTTPException(404, f"Case row {row_id} not found.")
+        files.check_room(case)
+    record = await files.store_from_library(path, case, user["name"])
+    async with SessionLocal() as session, _write_lock:
+        state = await service.load_state(session)
+        case = next((c for c in state["cases"] if c["id"] == row_id), None)
+        if case is None or len(case.get("files") or []) >= files.MAX_FILES_PER_RECORD:
+            await files.remove(record)
+            raise HTTPException(409, f"Case row {row_id} changed while the file was being attached. Please reload and try again.")
+        case.setdefault("files", []).append(record)
+        await service.upsert_case(session, case)
+        await session.commit()
+        return {"ok": True, "file": record, "case": case, "snapshot": service.snapshot(state)}
 
 
 # ============================= 静态前端（挂载在最后，/api 优先匹配） =============================

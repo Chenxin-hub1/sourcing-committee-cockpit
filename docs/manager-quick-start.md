@@ -40,11 +40,16 @@ Viewing does not require login. Submitting does.
 
 **After the meeting (case page → Edit)**
 - Set **Sourcing Decision** (Approved / Approved with conditions / Rejected). Any decision other than Pending needs the **Sourcing Presentation Link**.
-- Add **follow-up tasks**: task, owner, due date, category, and the owner's email (required for open tasks — that is where reminders go).
+- Add **follow-up tasks**: task, owner, the owner's **function** (Purchasing, Supplier Quality, Engineering …), due date, free-text **tags**, and the owner's email (required for open tasks — that is where reminders go). Categories (CQA, Volume, Technical, Timing, Supplier strategy, BPG, Saving, Further VAVE) are derived automatically from the task text and tags — no boxes to tick.
+- A presentation **file** on the case counts as the Sourcing Presentation — the link is then optional. You can add or remove files while editing; your other changes stay in the form until **Save Changes**.
+- If anything is missing, the page lists **all** missing points at once.
+- The Sourcing admin can move a case to another committee week (Edit → *Committee week*).
+- Sourcing admin, home page: the upload card has **Meeting minutes** (weekly Excel → cases) and **Presentations** (PDF / PPT → matched to their case by SWAT number, part number or week folder + case #; **Attach all matched** does them in one go).
+- Presentations: **Add files** uploads from your PC; **Attach from server** picks a file the Sourcing admin already placed in the server folder (no upload needed).
 - **Save Changes**. **Dashboard → Minutes** exports the minutes plus an Actions sheet.
 
 **Follow-ups page**
-- Open and overdue tasks across all cases. Filter by category or owner.
+- Open and overdue tasks across all cases. Filter by status, year, category, function or owner.
 - Anyone can post progress on a task (text + attachment, e.g. an Outlook .msg). You get "n feedback to approve": **Approve** closes the task, **Reject** needs a remark and keeps it open.
 - Closing the last open task closes the case and asks for the **Final PPT / Supporting Document Link**.
 - **Send reminder** sends a manual reminder to the owner. Until IT connects the mail relay, reminders are logged as "skipped" and nothing is sent — chase by email meanwhile.

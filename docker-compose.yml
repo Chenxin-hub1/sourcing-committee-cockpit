@@ -39,6 +39,7 @@ services:
       SC_SP_LIST_NAME: ${SC_SP_LIST_NAME:-}
       SC_SP_LIBRARY_NAME: ${SC_SP_LIBRARY_NAME:-}
       SC_SP_FOLDER: ${SC_SP_FOLDER:-Sourcing Cockpit}
+      SC_PRESENTATION_LIBRARY_DIR: ${SC_PRESENTATION_LIBRARY_DIR:-./data/presentations}
       SC_GRAPH_SENDER: ${SC_GRAPH_SENDER:-}
     volumes:
       - ./data:/app/data

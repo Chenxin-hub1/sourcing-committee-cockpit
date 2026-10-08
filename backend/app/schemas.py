@@ -88,7 +88,8 @@ DecisionLevel = Literal["", "Level 2", "Level 3", "Level 4"]
 YesNo = Literal["", "Yes", "No"]
 Channel = Literal["Email", "Teams", "Email + Teams"]
 Currency = Literal["EUR", "USD", "CNY"]
-ToolingPayment = Literal["", "Lumpsum", "MPC"]
+# v3 Phase-19：没有模具的案例选 "No tooling involved"
+ToolingPayment = Literal["", "Lumpsum", "MPC", "No tooling involved"]
 # 单价 / 模具费 / 摊销额：十进制，最多 4 位小数（0,02 EUR/pc 这类件价必须保留小数），按提交币种填写
 Money = Annotated[Decimal, Field(ge=0, le=MAX_SAFE_INTEGER, decimal_places=4)]
 Weeks = Annotated[int, Field(strict=True, ge=0, le=520)]
@@ -205,6 +206,18 @@ class LibraryImportIn(In):
     sourceUrl: Text = ""
 
 
+class LibraryAttachIn(In):
+    """v3 Phase-18：从服务器演示文件库挂一份文件到案例（库目录里的相对路径）。"""
+
+    path: Annotated[Text, Field(min_length=1)]
+
+
+class LibraryAttachManyIn(In):
+    """v3 Phase-20：把库里的演示文件按自动匹配挂到各自的案例。"""
+
+    paths: Annotated[list[Text], Field(min_length=1, max_length=500)]
+
+
 class FollowUpIn(In):
     id: Annotated[Text, Field(min_length=1)]
     task: LongText = ""
@@ -213,6 +226,8 @@ class FollowUpIn(In):
     notes: LongText = ""
     status: Literal["Open", "Overdue", "Closed"] = "Open"
     tags: Annotated[list[Text], Field(max_length=20)] = Field(default_factory=list)
+    # v3 Phase-18：负责人的职能（Dashboard 按职能统计 open / overdue actions）
+    ownerFunction: Annotated[str, AfterValidator(_single_line), StringConstraints(strip_whitespace=True, max_length=80)] = ""
     notify: Text = ""
     notifyEmail: Email = ""
     cc: RecipientText = ""
@@ -228,7 +243,8 @@ class CaseEditIn(CommercialIn):
     region: Region = ""
     project: Text = ""
     family: Text = ""
-    cluster: Cluster = ""
+    # 编辑页放宽为文本（v3 Phase-18）：从 Excel 导入、词表还认不出的 Commodity（如 "MI01"）编辑时原样保留；提交页仍限三个 Cluster
+    cluster: Annotated[str, AfterValidator(_single_line), StringConstraints(strip_whitespace=True, max_length=120)] = ""
     parentPF: Text = ""
     partFamilyCode: Text = ""
     sourcingType: SourcingType = ""
@@ -241,6 +257,8 @@ class CaseEditIn(CommercialIn):
     sourcingPresentationLink: Text = ""
     finalDocLink: Text = ""
     followUps: Annotated[list[FollowUpIn], Field(max_length=100)] = Field(default_factory=list)
+    # v3 Phase-19：Sourcing admin 把案例改到另一周（任意一天，按所在 ISO 周的周三存）；空 = 不改
+    meetingDate: CalendarDate = ""
 
     @field_validator("partNumbers")
     @classmethod

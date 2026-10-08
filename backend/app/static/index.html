@@ -369,10 +369,30 @@
   .fb-closure{font-size:11.5px;color:var(--green);font-weight:600;margin-bottom:4px;}
   .fb-hint{font-size:11px;color:var(--ink-faint);}
   .file-list{list-style:none;margin:10px 0 0;padding:0;}
-  .file-list li{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--border);font-size:12.5px;}
+  /* v3 Phase-18（领导：文件名竖排成一字一行）：文件名占满一行、按需折行，元信息另起一行，删除按钮靠右跨两行 */
+  .file-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;row-gap:2px;align-items:center;padding:7px 0;border-top:1px solid var(--border);font-size:12.5px;}
   .file-list li:first-child{border-top:none;}
-  .file-list .fname{flex:1;min-width:0;word-break:break-all;}
-  .file-list .fmeta{color:var(--ink-faint);font-size:11.5px;white-space:nowrap;}
+  .file-list .fname{grid-column:1;min-width:0;overflow-wrap:anywhere;word-break:normal;}
+  .file-list .fmeta{grid-column:1;color:var(--ink-faint);font-size:11.5px;overflow-wrap:anywhere;}
+  .file-list .fremove{grid-column:2;grid-row:1 / span 2;}
+  .lib-pick{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;}
+  .lib-pick select{flex:1 1 260px;min-width:0;max-width:520px;}
+  .auto-cats{margin-top:6px;font-size:11px;color:var(--ink-faint);display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+  .data-table th.sortable-th{white-space:nowrap;}
+  .data-table th.sortable-th.active{color:var(--ink);}
+  .dash-year-select{border:1px solid var(--border-strong);border-radius:6px;padding:4px 7px;font-size:11.5px;background:#fff;}
+  .fn-sub{display:block;font-size:10.5px;color:var(--ink-faint);font-weight:400;}
+  .problem-list{margin:6px 0 0;padding-left:18px;font-weight:600;}
+  .upload-kind{font-size:13px;font-weight:700;margin:14px 0 6px;color:var(--ink);border-top:1px solid var(--border);padding-top:14px;}
+  .upload-kind span{font-weight:400;color:var(--ink-faint);font-size:12px;margin-left:6px;}
+  .pres-results{margin-top:8px;font-size:12px;}
+  .pres-results li{margin:2px 0;}
+  .problem-list li{margin:2px 0;}
+  .week-move{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .week-move input{max-width:180px;}
+  .commodity-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:24px;}
+  .commodity-grid .bar-row .blabel{width:190px;}
+  @media(max-width:880px){.commodity-grid{grid-template-columns:1fr;}}
   .block-warning{display:none;margin-top:8px;background:var(--red-tint);border:1px solid #EFC2BC;color:var(--red);padding:9px 12px;border-radius:6px;font-size:12px;font-weight:600;}
   .screening-section{margin-top:20px;padding-top:18px;border-top:1px solid var(--border);}
   .screening-section h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);margin:0 0 14px;font-weight:600;}
@@ -529,16 +549,10 @@ const DECISION_OPTIONS = [{v:"PENDING",l:"Pending"},{v:"APPROVED",l:"Approved"},
 // Illustrative only — meant to be redefined to match your own taxonomy. Multi-select: an action can carry more than one tag
 // so it surfaces under every relevant filter later (e.g. a case that's both Cost- and Timing-related).
 const ACTION_TAGS = ["Cost","Volume","Timing","Quality","Capacity","Commercial Terms","Compliance / Documentation"];
-// 反馈 PPT 第 4 页：待办固定分类（编辑页只提供这八个；旧任务上的自由标签保留显示、可取消）
+// 反馈 PPT 第 4 页的八个固定分类。v3 Phase-18（领导）：编辑页不再手点，分类由关键词自动判定（categorizeTask），标签回到自由文本
 const ACTION_CATEGORIES = ["CQA","Volume","Technical","Timing","Supplier strategy","BPG","Saving","Further VAVE"];
-function categoryChecks(id, tags){
-  const picked = tags || [];
-  const legacy = picked.filter(t=>!ACTION_CATEGORIES.includes(t));
-  return `<div class="region-checks" id="${id}" role="group" aria-label="Categories">${[...ACTION_CATEGORIES, ...legacy].map(t=>
-    `<label class="region-check"><input type="checkbox" value="${escapeAttr(t)}" ${picked.includes(t)?'checked':''}/>${esc(t)}${ACTION_CATEGORIES.includes(t)?'':' (legacy)'}</label>`).join('')}</div>`;
-}
 // 反馈 PPT 第 2、3 页：商务字段（金额按提交币种填写，服务端折算欧元；件价保留 4 位小数）
-const TOOLING_PAYMENTS = ["Lumpsum","MPC"];
+const TOOLING_PAYMENTS = ["Lumpsum","MPC","No tooling involved"];  // v3 Phase-19：没有模具的案例
 const BPG_THRESHOLD_EUR = 3000000; // Lifetime Spend 超过 3 Mio EUR 必须有 BPG
 // 反馈人 MM 模板（2026-09-24）：件价 / 模具费 / 产量按零件行填写；案例级只剩摊销总额
 const ROW_MONEY_KEYS = ["pcPriceCQA","supplierPriceLanded","toolingCQA","supplierToolingCost"];
@@ -560,6 +574,48 @@ function weekDate(w){
   return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
 }
 function wk(w, year=weekYear()){ return year+"-KW"+String(w).padStart(2,'0'); }
+// v3 Phase-18（领导：2025 年的 KW51 被显示成 2026-KW51）：周标签、周筛选、驾驶舱都按案例自己的年份。
+// meetingYear 是导入 / 确认登记时记下的会议年份；没有的按会议日期算；模板演示数据两样都没有，按当年。
+function caseYear(c){
+  if(c && c.meetingYear) return Number(c.meetingYear);
+  const iso = c && c.meetingDateISO;
+  if(iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) return isoWeekYear(new Date(iso+'T12:00:00'));
+  if(c && c.meetingDateLabel){ const d = new Date(c.meetingDateLabel); if(!isNaN(d)) return isoWeekYear(d); }
+  return weekYear();
+}
+function caseWeekLabel(c){ return wk(c.weekNum, caseYear(c)); }
+function weekKey(c){ return caseYear(c)*100 + Number(c.weekNum||0); }
+function weekKeyOf(year, w){ return Number(year)*100 + Number(w); }
+function weekDateOf(w, year){
+  const jan4 = new Date(year,0,4);
+  const monday1 = new Date(year,0,4-((jan4.getDay()+6)%7));
+  const d = new Date(monday1.getFullYear(),monday1.getMonth(),monday1.getDate()+(w-1)*7+2);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+function yearsPresent(){ return uniq(ALL_CASES.map(caseYear)).sort((a,b)=>a-b); }
+// 待办分类规则由服务端随 bootstrap 下发（logic.task_rules）：编辑页实时预览与保存结果一致
+let TASK_RULES = {categories: ACTION_CATEGORIES, keywords: {}, tagSynonyms: {}, functions: []};
+function keywordRe(k){
+  const escaped = k.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
+  return new RegExp(k.length<=4 ? `(?<![a-z0-9])${escaped}(?![a-z])` : `(?<![a-z0-9])${escaped}`);
+}
+function categorizeTask(t){
+  const tags = (t.tags||[]).map(x=>String(x).trim().toLowerCase()).filter(Boolean);
+  const text = [t.task||'', tags.join(' '), t.notes||''].join(' ').toLowerCase();
+  const hits = new Set(tags.map(x=>TASK_RULES.tagSynonyms[x]).filter(Boolean));
+  Object.entries(TASK_RULES.keywords||{}).forEach(([cat, words])=>{ if(words.some(w=>keywordRe(w).test(text))) hits.add(cat); });
+  return (TASK_RULES.categories||ACTION_CATEGORIES).filter(c=>hits.has(c));
+}
+function taskCategories(t){ return Array.isArray(t.categories) ? t.categories : categorizeTask(t); }
+function splitTags(text){ return String(text||'').split(',').map(x=>x.trim()).filter(Boolean); }
+function autoCatsHtml(cats){ return `Auto categories: ${cats.length ? cats.map(c=>`<span class="cat-tag">${esc(c)}</span>`).join(' ') : '<span class="cat-tag none">none yet — type the task or tags</span>'}`; }
+function functionDatalist(){
+  const names = uniq([...(TASK_RULES.functions||[]), ...ALL_CASES.flatMap(c=>(c.followUps||[]).map(t=>t.ownerFunction||''))].map(x=>x.trim()).filter(Boolean));
+  return `<datalist id="functionOptions">${names.map(n=>`<option value="${escapeAttr(n)}"></option>`).join('')}</datalist>`;
+}
+// 已决议案例的待办，一条一项（驾驶舱三格与 by function / by owner 图都数这个）
+function decidedTasks(cases){ return cases.filter(c=>c.meetingDecision!=='PENDING').flatMap(c=>(c.followUps||[]).map(t=>({c,t}))); }
+function countBy(items, keyFn){ const m = {}; items.forEach(x=>{ const k = keyFn(x) || '—'; m[k]=(m[k]||0)+1; }); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
 // 该日期所在周的周四：ISO 周号与周年份都按它算
 function isoThursday(d){ return new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()+3-((d.getDay()+6)%7))); }
 function isoWeekYear(d){ return isoThursday(d).getUTCFullYear(); }
@@ -875,7 +931,7 @@ function nextSwatId(){
 /* ============================= STATE ============================= */
 const state = {
   view:'home',
-  filters:{year:'', weekFrom:'', weekTo:'', region:'', cluster:'', supplier:'', decision:'', status:''},
+  filters:{year:'', weekFrom:'', weekTo:'', region:'', cluster:'', commodity:'', supplier:'', decision:'', status:''},
   searchQuery:'',
   selectedSwatId:null,
   selectedEntryIndex:0,
@@ -897,11 +953,18 @@ const state = {
   decisionOpenId:null,   // feedback entry whose approve / reject panel is open
   flash:null,            // one-time confirmation message shown on the next case detail render
   editError:null,        // validation message shown in the case editor (e.g. closing without a final document link)
-  dashPeriod:'ytd', // 'ytd' | 'week'
-  dashWeek:null,    // set on first dashboard render to the latest week present
+  dashPeriod:'year', // 'year' | 'week'（v3 Phase-18：YTD 改为按年选择）
+  dashYear:null,     // set on first dashboard render to the latest year present
+  dashWeek:null,     // set on first dashboard render to the latest week present
+  dbSort:{key:'week', dir:'desc'}, // Database 表头排序（v3 Phase-18）
   followupSortDir:'asc',
   followupTag:'',
   followupOwner:'',
+  followupFunction:'',
+  followupStatus:'active', // 'active' (Open + Overdue) | 'Open' | 'Overdue' | 'Closed' | 'all'
+  followupYear:'',
+  presentationLibrary:null, // 服务器演示文件库（案例页下拉框，经理及以上）
+  presentationLibraryAt:0,
   detailEditMode:false,
   editBuffer:null,
 };
@@ -999,6 +1062,7 @@ function applySnapshot(j){
   if(j.registrationSettings) REGISTRATION_SETTINGS = j.registrationSettings;
   if(j.autoLog){ AUTO_LOG.length = 0; AUTO_LOG.push(...j.autoLog); }
   if(j.serverTimezone) SERVER_TZ = j.serverTimezone; // "today" follows the server's SC_TIMEZONE
+  if(j.taskRules) TASK_RULES = j.taskRules;
 }
 let SERVER_TZ = null; // server reference timezone from the bootstrap snapshot (null = ET default below)
 /* Global error feedback + server-reachability banner. */
@@ -1155,8 +1219,124 @@ function filesListHtml(list, removable){
   return `<ul class="file-list">${list.map(f=>`<li>
     <span class="fname">📎 <a href="/api/files/${encodeURIComponent(f.id)}" download>${esc(f.name)}</a></span>
     <span class="fmeta">${esc(fileSizeText(f.size))} · ${esc(f.uploadedBy||'')} · ${esc(f.uploadedAt||'')}${f.originalName && f.originalName!==f.name ? ` · uploaded as ${esc(f.originalName)}` : ''}</span>
-    ${removable ? `<button type="button" class="btn-danger" style="padding:3px 8px;font-size:11px;" data-file-remove="${escapeAttr(f.id)}">Remove</button>` : ''}
+    ${removable ? `<button type="button" class="btn-danger fremove" style="padding:3px 8px;font-size:11px;" data-file-remove="${escapeAttr(f.id)}">Remove</button>` : ''}
   </li>`).join('')}</ul>`;
+}
+// v3 Phase-19：管理员改周的预览 —— 任意一天都按所在 ISO 周的周三存
+function meetingWeekPreview(iso, c){
+  if(!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+  const d = new Date(iso+'T12:00:00'); if(isNaN(d)) return '';
+  const wed = new Date(d.getFullYear(), d.getMonth(), d.getDate() + (3 - ((d.getDay()+6)%7) - 1));
+  const label = wk(dateToWeekNum(wed), isoWeekYear(wed));
+  const same = c && label===caseWeekLabel(c);
+  return `→ ${label} · ${formatDateLong(wed)}${same ? ' (unchanged)' : ' — the case number moves to the end of that week'}`;
+}
+// v3 Phase-19：校验问题清单 —— 只有一条时原样显示；多条时列成清单（服务端用换行分隔，前端同样收集全部再显示）
+function problemListHtml(list, when){
+  const items = list.map(m=>String(m||'').replace(/^⚠\s*/,'').trim()).filter(Boolean);
+  if(items.length<=1) return esc('⚠ '+(items[0]||''));
+  return `<div>⚠ Please fix these ${items.length} points ${esc(when)}:</div><ul class="problem-list">${items.map(m=>`<li>${esc(m)}</li>`).join('')}</ul>`;
+}
+// 服务器演示文件库（v3 Phase-18）：案例页下拉框的数据；按子文件夹分组
+function libraryFiles(){ return (state.presentationLibrary && state.presentationLibrary.files) || []; }
+function libraryOptionsHtml(){
+  const lib = state.presentationLibrary;
+  if(lib===null) return '<option value="">Loading the server library…</option>';
+  if(lib.error) return `<option value="">${esc(lib.error)}</option>`;
+  const files = libraryFiles();
+  if(!files.length) return '<option value="">No files in the server library yet</option>';
+  const groups = {};
+  files.forEach(f=>{ (groups[f.folder||''] = groups[f.folder||''] || []).push(f); });
+  const opt = f => `<option value="${escapeAttr(f.path)}">${esc(f.name)} (${esc(fileSizeText(f.size))})</option>`;
+  return '<option value="">Select a file from the server library…</option>' + Object.entries(groups).map(([folder, list])=>
+    folder ? `<optgroup label="${escapeAttr(folder)}">${list.map(opt).join('')}</optgroup>` : list.map(opt).join('')).join('');
+}
+// 演示文件库只收 PDF / PowerPoint（与服务端 files.LIBRARY_EXTENSIONS 一致）
+const PRESENTATION_EXTENSIONS = ['.pdf','.ppt','.pptx'];
+// v3 Phase-20：首页 "Presentations" 区 —— 库里的演示文件按 SWAT / bundle 号、零件号、周 + 案例序号自动对到案例
+function presMatchText(f){
+  if(!f.match) return 'no matching case — attach it on the case page';
+  return `${f.match.attached ? '✓ attached to' : '→'} ${f.match.label}`;
+}
+function presentationSectionHtml(){
+  const lib = state.presentationLibrary;
+  if(lib===null){ if(state.isSysAdmin) loadPresentationLibrary(); return '<div class="fx-hint">Loading the presentation library…</div>'; }
+  const files = libraryFiles();
+  const pending = files.filter(f=>f.match && !f.match.attached);
+  const groups = {};
+  files.forEach(f=>{ (groups[f.folder||'(no folder)'] = groups[f.folder||'(no folder)'] || []).push(f); });
+  const opt = f => `<option value="${escapeAttr(f.path)}">${esc(f.name)} — ${esc(presMatchText(f))}</option>`;
+  const r = state.presResults;
+  return `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <select id="presSelect" class="edit-input" style="flex:1;min-width:260px;" aria-label="Presentations">${files.length
+        ? '<option value="">Choose a presentation…</option>' + Object.entries(groups).map(([g,list])=>`<optgroup label="${escapeAttr(g)}">${list.map(opt).join('')}</optgroup>`).join('')
+        : `<option value="">${lib.error ? esc(lib.error) : 'No presentations in the library yet — upload them below'}</option>`}</select>
+      <button type="button" class="btn-secondary" id="presAttachOne" ${files.length?'':'disabled'}>Attach to matched case</button>
+      <button type="button" class="btn-secondary" id="presAttachAll" ${pending.length?'':'disabled'}>Attach all matched, not yet attached (${pending.length})</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+      <button type="button" class="btn-secondary" id="presUploadBtn">Upload presentations…</button>
+      <input type="file" id="presUploadInput" multiple accept="${PRESENTATION_EXTENSIONS.join(',')}" style="display:none;"/>
+      <span id="presUploadMsg" style="font-size:12px;color:var(--ink-soft);"></span>
+    </div>
+    <div class="fx-hint">PDF or PowerPoint only. Files go to the server library${lib.folder ? ` <span class="mono">${esc(lib.folder)}</span>` : ''}, in the week folder of the case they match (e.g. "KW15, 08.04.2026"), or "Unsorted". A name like <span class="mono">1. 110000034978 SPR8 Tube_34235239A_…pdf</span> is matched by its SWAT / bundle number, then part number, then week folder + leading case number.</div>
+    ${r ? `<div class="pres-results">${r.attached.length ? `<div style="color:var(--green);font-weight:600;">✓ ${r.attached.length} attached</div><ul>${r.attached.map(a=>`<li>${esc(a.path.split('/').pop())} → ${esc(a.label)}</li>`).join('')}</ul>` : ''}${r.skipped.length ? `<div style="color:var(--amber);font-weight:600;">${r.skipped.length} skipped</div><ul>${r.skipped.map(x=>`<li>${esc(x.path.split('/').pop())}: ${esc(x.reason)}</li>`).join('')}</ul>` : ''}</div>` : ''}`;
+}
+function refreshPresentationSection(){
+  const box = document.getElementById('presLibrary');
+  if(box){ box.innerHTML = presentationSectionHtml(); wireEvents(); }
+}
+async function attachPresentations(paths){
+  try{
+    const r = await API.post('/api/presentation-library/attach', {paths});
+    applySnapshot(r.snapshot);
+    state.presentationLibrary = {...(state.presentationLibrary||{}), files: r.files||[]};
+    state.presentationLibraryAt = Date.now();
+    state.presResults = {attached: r.attached||[], skipped: r.skipped||[]};
+  }catch(err){ state.presResults = {attached:[], skipped: paths.map(p=>({path:p, reason: err.detail||err.message}))}; }
+  refreshPresentationSection();
+}
+async function uploadPresentations(list){
+  const msg = t=>{ const m = document.getElementById('presUploadMsg'); if(m) m.textContent = t; };
+  const uploaded = [], failed = [];
+  for(let i=0;i<list.length;i++){
+    const f = list[i];
+    const ext = (f.name.match(/\.[^.]+$/)||[''])[0].toLowerCase();
+    const problem = !PRESENTATION_EXTENSIONS.includes(ext) ? `${f.name}: only PDF or PowerPoint files go into the presentation library (meeting Excel files go under Meeting minutes).` : fileProblem(f);
+    if(problem){ failed.push({path:f.name, reason:problem}); continue; }
+    try{
+      const r = await uploadFile(`/api/presentation-library/files?name=${encodeURIComponent(f.name)}`, f,
+        {'X-Session-Token': API.sessionToken()}, p=>msg(`Uploading ${i+1} of ${list.length}: ${f.name} — ${Math.round(p*100)}%`));
+      state.presentationLibrary = {...(state.presentationLibrary||{}), files: r.files||[]};
+      uploaded.push(r.file);
+    }catch(err){ failed.push({path:f.name, reason: err.detail||err.message}); }
+  }
+  state.presentationLibraryAt = Date.now();
+  state.presResults = {attached:[], skipped: failed};
+  refreshPresentationSection();
+  const matched = uploaded.filter(f=>f && f.match && !f.match.attached).length;
+  msg(`${uploaded.length} uploaded${matched ? `, ${matched} matched to a case — press "Attach all matched"` : ''}${failed.length ? `, ${failed.length} failed` : ''}.`);
+}
+function libraryHintHtml(){
+  const folder = state.presentationLibrary && state.presentationLibrary.folder;
+  return `Files the Sourcing admin placed in the server folder${folder ? ` <span class="mono">${esc(folder)}</span>` : ''} — pick one to attach it to this case without uploading it again. The original stays in the folder.`;
+}
+async function loadPresentationLibrary(force){
+  if(!force && state.presentationLibrary && Date.now()-state.presentationLibraryAt < 60000) return;
+  if(state.presentationLibraryLoading) return;
+  state.presentationLibraryLoading = true;
+  try{
+    const j = await API.get('/api/presentation-library');
+    state.presentationLibrary = {folder: j.folder||'', files: j.files||[]};
+  }catch(err){ state.presentationLibrary = {folder:'', files:[], error: 'Server library unavailable — '+(err.detail||err.message)}; }
+  state.presentationLibraryAt = Date.now();
+  state.presentationLibraryLoading = false;
+  const sel = document.getElementById('caseLibSelect'), btn = document.getElementById('caseLibAttach'), hint = document.getElementById('caseLibHint');
+  if(sel){ sel.innerHTML = libraryOptionsHtml(); }
+  if(btn){ btn.disabled = !libraryFiles().length; }
+  if(hint){ hint.innerHTML = libraryHintHtml(); }
+  if(document.getElementById('presLibrary')) refreshPresentationSection();
 }
 // 提交成功后逐个上传排队的文件，进度与结果写进提交页横幅（上传失败不影响已提交的登记）
 async function uploadSubmissionFiles(subId, key, list, doneText){
@@ -1338,16 +1518,16 @@ function deleteCase(swatId){
   return true;
 }
 
-function latestByCase(){
+function latestByCase(list){
   const map = new Map();
-  ALL_CASES.forEach(c=>{
+  (list||ALL_CASES).forEach(c=>{
     const prev = map.get(c.swatId);
-    if(!prev || c.weekNum > prev.weekNum || (c.weekNum===prev.weekNum && c.caseNumber>prev.caseNumber)) map.set(c.swatId, c);
+    if(!prev || weekKey(c) > weekKey(prev) || (weekKey(c)===weekKey(prev) && c.caseNumber>prev.caseNumber)) map.set(c.swatId, c);
   });
   return [...map.values()];
 }
 function historyFor(swatId){
-  return ALL_CASES.filter(c=>c.swatId===swatId).sort((a,b)=> a.weekNum-b.weekNum || a.caseNumber-b.caseNumber);
+  return ALL_CASES.filter(c=>c.swatId===swatId).sort((a,b)=> weekKey(a)-weekKey(b) || a.caseNumber-b.caseNumber);
 }
 function uniq(arr){ return [...new Set(arr)]; }
 // 区域存成固定顺序的 "EU + NA" 文本（服务端统一整理），这里拆回列表用于筛选和统计。
@@ -1367,17 +1547,20 @@ function matchesQuery(c,q){
   if(!q) return true;
   q = q.toLowerCase();
   const extraPns = partNumberLines(c).map(p=>p.partNumber+' '+p.partDescription).join(' ');
-  return [c.swatId,c.partNumber,c.recommendedSupplier,c.project,c.cluster,c.region,wk(c.weekNum),c.partDescription,extraPns]
+  return [c.swatId,c.partNumber,c.recommendedSupplier,c.project,c.cluster,c.commodity||'',c.region,caseWeekLabel(c),c.partDescription,extraPns]
     .join(' ').toLowerCase().includes(q);
 }
 function matchesFilters(c,f){
   if(f.region && !regionList(c).includes(f.region)) return false;
   if(f.cluster && c.cluster!==f.cluster) return false;
+  if(f.commodity && (c.commodity||'')!==f.commodity) return false;
   if(f.supplier && c.recommendedSupplier!==f.supplier) return false;
   if(f.decision && c.meetingDecision!==f.decision) return false;
   if(f.status && c.actionStatus!==f.status) return false;
-  if(f.weekFrom && c.weekNum < Number(f.weekFrom)) return false;
-  if(f.weekTo && c.weekNum > Number(f.weekTo)) return false;
+  // 周筛选按 "年份*100+周"（v3 Phase-18）：2025-KW51 与 2026-KW51 不再混在一起
+  if(f.year && caseYear(c)!==Number(f.year)) return false;
+  if(f.weekFrom && weekKey(c) < Number(f.weekFrom)) return false;
+  if(f.weekTo && weekKey(c) > Number(f.weekTo)) return false;
   return true;
 }
 
@@ -1741,20 +1924,15 @@ function renderHome(){
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
           <input class="qs-input" id="homeSearchInput" placeholder="e.g. PN: 12345678, SWAT-10482, Orion Gas Systems..." />
         </div>
-        <div class="qs-chip-row">
-          <span class="qs-chip" data-qs="12345678">PN 12345678</span>
-          <span class="qs-chip" data-qs="SWAT-10482">SWAT-10482</span>
-          <span class="qs-chip" data-qs="Orion Gas Systems">Orion Gas Systems</span>
-          <span class="qs-chip" data-qs="Metal">Metal cluster</span>
-          <span class="qs-chip" data-qs="China">China region</span>
-        </div>
         <div class="qs-fields">Search fields: Part Number · SWAT ID / Sourcing ID · Supplier · Project · Cluster · Region · Week</div>
       </div>
 
       ${state.isSysAdmin ? `
       <div class="card upload-card" style="margin-top:18px;">
-        <h2>Import weekly committee Excel</h2>
-        <p class="hint">Drop the week's Agenda or Meeting Minutes (.xlsx, the committee template) — several weeks at once is fine. Each file becomes that week's cases; importing the same week again replaces what was imported from Excel before. Sourcing admin only.</p>
+        <h2>Upload weekly committee data</h2>
+        <p class="hint">Two kinds of files, kept apart: <b>Meeting minutes</b> (the week's Agenda / MM Excel) become that week's cases; <b>Presentations</b> (the PDF / PowerPoint of each case) are attached to the matching case. Sourcing admin only.</p>
+        <h3 class="upload-kind">1 · Meeting minutes <span>weekly Agenda / MM Excel (.xlsx)</span></h3>
+        <p class="hint" style="margin-top:0;">Several weeks at once is fine. Importing the same week again replaces what was imported from Excel before.</p>
         <div class="dropzone" id="dropzone">
           <div class="icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
@@ -1767,6 +1945,8 @@ function renderHome(){
         </div>
         <div id="importLibrary">${importLibraryHtml()}</div>
         <div id="importQueue">${importQueueHtml()}</div>
+        <h3 class="upload-kind" style="margin-top:22px;">2 · Presentations <span>PDF / PowerPoint per case</span></h3>
+        <div id="presLibrary">${presentationSectionHtml()}</div>
       </div>` : ''}
     </div>
 
@@ -1780,7 +1960,7 @@ function renderHome(){
   `;
 }
 function recentActivityRows(){
-  const recent = [...ALL_CASES].sort((a,b)=> b.weekNum-a.weekNum || b.caseNumber-a.caseNumber).slice(0,6);
+  const recent = [...ALL_CASES].sort((a,b)=> weekKey(b)-weekKey(a) || b.caseNumber-a.caseNumber).slice(0,6);  // 按年 + 周（v3 Phase-20 修：之前只按周号，2025-KW51 排在 2026 前面）
   return recent.map(c=>{
     const rag = c.meetingDecision==='REJECTED'?'r':(c.meetingDecision==='CONDITIONAL APPROVAL'||c.meetingDecision==='PENDING')?'y':'g';
     return `<div class="activity-row">
@@ -1788,22 +1968,50 @@ function recentActivityRows(){
       <div class="atxt">
         <div><b>${esc(c.swatId)}</b> — ${esc(c.recommendedSupplier)}</div>
         <div style="color:var(--ink-soft);">${esc(c.meetingDecision)} · ${esc(c.region)} · ${esc(c.cluster)}</div>
-        <div class="atime">${wk(c.weekNum)} · ${esc(caseDateLabel(c))}</div>
+        <div class="atime">${caseWeekLabel(c)} · ${esc(caseDateLabel(c))}</div>
       </div>
     </div>`;
   }).join('');
 }
 
 /* ============================= RENDER: DATABASE ============================= */
+// Database 表排序（v3 Phase-18，领导：所有列表头都要能排序）。默认仍是周 / 案例号倒序。
+const DB_SORT_KEYS = {
+  week: c=>weekKey(c)*1000 + Number(c.caseNumber||0),
+  date: c=>c.meetingDateISO || '',
+  caseNumber: c=>Number(c.caseNumber||0),
+  swat: c=>c.swatId||'', pn: c=>c.partNumber||'', project: c=>c.project||'',
+  cluster: c=>(c.cluster||'')+' '+(c.commodity||''),
+  supplier: c=>c.recommendedSupplier||'', presenter: c=>c.presenter||'', level: c=>c.decisionLevel||'',
+  spend: c=>Number(c.peakYearSpend||0), decision: c=>c.meetingDecision||'',
+  action: c=>c.meetingDecision==='PENDING' ? '' : (c.actionStatus||'No action'),
+};
+function sortDbRows(rows){
+  const {key, dir} = state.dbSort;
+  const keyFn = DB_SORT_KEYS[key] || DB_SORT_KEYS.week, sign = dir==='asc' ? 1 : -1;
+  return rows.sort((a,b)=>{
+    const ka = keyFn(a), kb = keyFn(b);
+    const cmp = (typeof ka==='number' && typeof kb==='number') ? ka-kb : String(ka).localeCompare(String(kb), undefined, {numeric:true, sensitivity:'base'});
+    return sign*cmp || (weekKey(b)-weekKey(a)) || (b.caseNumber-a.caseNumber);
+  });
+}
+function dbRows(){ return sortDbRows(ALL_CASES.filter(c=>matchesQuery(c,state.searchQuery) && matchesFilters(c,state.filters))); }
+function sortTh(key, label){
+  const on = state.dbSort.key===key;
+  return `<th class="sortable-th ${on?'active':''}" data-sort="${key}" title="Click to sort">${label} <span class="arrow">${on ? (state.dbSort.dir==='asc'?'▲':'▼') : '↕'}</span></th>`;
+}
 function renderDatabase(){
   const f = state.filters;
-  let rows = ALL_CASES.filter(c=>matchesQuery(c,state.searchQuery) && matchesFilters(c,f));
-  rows.sort((a,b)=> b.weekNum-a.weekNum || b.caseNumber-a.caseNumber);
+  const rows = dbRows();
 
   const regionOpts = REGIONS;
   const clusterOpts = uniq(ALL_CASES.map(c=>c.cluster)).sort();
+  const commodityOpts = uniq(ALL_CASES.map(c=>c.commodity||'')).filter(Boolean).sort();
   const supplierOpts = uniq(ALL_CASES.map(c=>c.recommendedSupplier)).sort();
-  const weekOpts = uniq(ALL_CASES.map(c=>c.weekNum)).sort((a,b)=>a-b);
+  const yearOpts = yearsPresent();
+  // 周选项带年份（"2025-KW51"），选了年份只列那一年的周
+  const weekOpts = uniq(ALL_CASES.filter(c=>!f.year || caseYear(c)===Number(f.year)).map(c=>weekKey(c))).sort((a,b)=>a-b);
+  const weekLabel = k => wk(k%100, Math.floor(k/100));
 
   return `
   <div class="pagehead">
@@ -1813,10 +2021,12 @@ function renderDatabase(){
 
   <div class="filters-bar">
     <div class="searchbox"><input id="dbSearch" placeholder="Search PN, SWAT ID, supplier, project..." value="${escapeAttr(state.searchQuery)}"/></div>
-    <select id="fWeekFrom"><option value="">From week</option>${weekOpts.map(w=>`<option value="${w}" ${f.weekFrom==w?'selected':''}>${wk(w)}</option>`).join('')}</select>
-    <select id="fWeekTo"><option value="">To week</option>${weekOpts.map(w=>`<option value="${w}" ${f.weekTo==w?'selected':''}>${wk(w)}</option>`).join('')}</select>
+    <select id="fYear"><option value="">Year: All</option>${yearOpts.map(y=>`<option value="${y}" ${f.year==y?'selected':''}>${y}</option>`).join('')}</select>
+    <select id="fWeekFrom"><option value="">From week</option>${weekOpts.map(w=>`<option value="${w}" ${f.weekFrom==w?'selected':''}>${weekLabel(w)}</option>`).join('')}</select>
+    <select id="fWeekTo"><option value="">To week</option>${weekOpts.map(w=>`<option value="${w}" ${f.weekTo==w?'selected':''}>${weekLabel(w)}</option>`).join('')}</select>
     <select id="fRegion"><option value="">Region: All</option>${regionOpts.map(r=>`<option ${f.region===r?'selected':''}>${esc(r)}</option>`).join('')}</select>
     <select id="fCluster"><option value="">Cluster: All</option>${clusterOpts.map(r=>`<option ${f.cluster===r?'selected':''}>${esc(r)}</option>`).join('')}</select>
+    ${commodityOpts.length ? `<select id="fCommodity"><option value="">Commodity: All</option>${commodityOpts.map(r=>`<option ${f.commodity===r?'selected':''}>${esc(r)}</option>`).join('')}</select>` : ''}
     <select id="fSupplier"><option value="">Supplier: All</option>${supplierOpts.map(r=>`<option ${f.supplier===r?'selected':''}>${esc(r)}</option>`).join('')}</select>
     <select id="fDecision"><option value="">Decision: All</option>${['APPROVED','REJECTED','CONDITIONAL APPROVAL','PENDING'].map(r=>`<option ${f.decision===r?'selected':''}>${r}</option>`).join('')}</select>
     <select id="fStatus"><option value="">Action Status: All</option>${['Open','Overdue','Closed'].map(r=>`<option ${f.status===r?'selected':''}>${r}</option>`).join('')}</select>
@@ -1831,19 +2041,19 @@ function renderDatabase(){
     ${rows.length===0 ? emptyState() : `
     <table class="data-table">
       <thead><tr>
-        <th>Week</th><th>Date</th><th>Case #</th><th>SWAT Case</th><th>Part Number</th><th>Project</th><th>Cluster</th>
-        <th>Recommended Supplier</th><th>Presenter</th><th>Decision Level</th><th>Spend (Peak Yr)</th><th>Sourcing Decision</th><th>Action Status</th>${state.isAdmin?'<th></th>':''}
+        ${sortTh('week','Week')}${sortTh('date','Date')}${sortTh('caseNumber','Case #')}${sortTh('swat','SWAT Case')}${sortTh('pn','Part Number')}${sortTh('project','Project')}${sortTh('cluster','Cluster')}
+        ${sortTh('supplier','Recommended Supplier')}${sortTh('presenter','Presenter')}${sortTh('level','Decision Level')}${sortTh('spend','Spend (Peak Yr)')}${sortTh('decision','Sourcing Decision')}${sortTh('action','Action Status')}${state.isAdmin?'<th></th>':''}
       </tr></thead>
       <tbody>
         ${rows.map(c=>`
         <tr data-swat="${escapeAttr(c.swatId)}">
-          <td class="mono">${wk(c.weekNum)}</td>
+          <td class="mono" style="white-space:nowrap;">${caseWeekLabel(c)}</td>
           <td style="white-space:nowrap;">${esc(caseDateLabel(c))}</td>
           <td>${c.caseNumber}</td>
           <td class="mono swat">${esc(c.swatId)}</td>
           <td class="pn-link mono">${esc(c.partNumber)}${(c.partNumbers&&c.partNumbers.length>1)?` <span style="color:var(--ink-faint);font-weight:400;">(+${c.partNumbers.length-1})</span>`:''}</td>
           <td>${esc(c.project)}</td>
-          <td>${esc(c.cluster)}</td>
+          <td>${esc(c.cluster)}${(c.commodity && c.commodity!==c.cluster) ? `<span class="fn-sub">${esc(c.commodity)}</span>` : ''}</td>
           <td>${esc(c.recommendedSupplier)}</td>
           <td>${esc(c.presenter||'')}</td>
           <td style="white-space:nowrap;">${esc(c.decisionLevel)}</td>
@@ -1909,7 +2119,7 @@ async function saveBlobFile(blob, filename){
 
 async function downloadCasesCsv(rows, filename){
   const anyDecided = rows.some(c=>c.meetingDecision!=='PENDING');
-  const headers = ['Week','Case #','SWAT Case Number','Part Number(s)','Part Description(s)','Region','Project','Product Family','Cluster',
+  const headers = ['Week','Case #','SWAT Case Number','Part Number(s)','Part Description(s)','Region','Project','Product Family','Cluster','Commodity',
     'Parent PF','Part Family Code','Sourcing Type','Recommended Supplier','Presenter','Decision Level',
     'Bundle Peak Year Spend','Bundle Lifetime Spend','Spend Currency','Pc Price CQA','Supplier Price (landed)','Tooling CQA','Supplier Tooling Cost','Average Volume','Lifetime Volume','Tooling Payment',
     'BPG available','FRA available','Sourcing Decision','Case Comments'].concat(anyDecided ? ['Action Status','Open Follow-up Tasks'] : []);
@@ -1922,7 +2132,7 @@ async function downloadCasesCsv(rows, filename){
     // 项目 / 类型 / 供应商按零件行（v3 Phase-15）；旧多零件案例的行上没有就用案例级值
     const pdSummary = pnLines.map(p=>`${p.partNumber}: ${p.partDescription} [${p.project||c.project} / ${p.sourcingType||c.sourcingType} / ${p.recommendedSupplier||c.recommendedSupplier}]`).join(' | ');
     const perRow = k => pnLines.map(p=>p[k]??'').join(' | ');  // 件价 / 模具费 / 产量按零件行，多行用 " | " 分隔
-    lines.push([wk(c.weekNum),c.caseNumber,c.swatId,pnSummary,pdSummary,c.region,c.project,c.family,c.cluster,
+    lines.push([caseWeekLabel(c),c.caseNumber,c.swatId,pnSummary,pdSummary,c.region,c.project,c.family,c.cluster,c.commodity||'',
       c.parentPF,c.partFamilyCode,c.sourcingType,c.recommendedSupplier,c.presenter,c.decisionLevel,
       c.peakYearSpend,c.lifetimeSpend,spendCurrency(c),perRow('pcPriceCQA'),perRow('supplierPriceLanded'),perRow('toolingCQA'),perRow('supplierToolingCost'),perRow('averageVolume'),perRow('lifetimeVolume'),c.toolingPayment||'',
       c.bpgAvailable||'',c.fraAvailable||'',c.meetingDecision,c.submitterComments||''
@@ -1938,14 +2148,14 @@ async function downloadExport(kind, selection){
   const headers = API.sessionToken() ? {'X-Session-Token': API.sessionToken()} : {};
   const resp = selection.ids
     ? await fetch(`/api/exports/${kind}`, {method:'POST', headers:{...headers, 'Content-Type':'application/json'}, body: JSON.stringify({ids: selection.ids})})
-    : await fetch(`/api/exports/${kind}?week=${encodeURIComponent(selection.week)}`, {headers});
+    : await fetch(`/api/exports/${kind}?week=${encodeURIComponent(selection.week)}${selection.year ? `&year=${encodeURIComponent(selection.year)}` : ''}`, {headers});
   if(!resp.ok){
     let detail = resp.statusText;
     try{ const j = await resp.json(); detail = typeof j.detail==='string' ? j.detail : detail; }catch(e){}
     throw new Error(detail);
   }
   const m = /filename="([^"]+)"/.exec(resp.headers.get('content-disposition')||'');
-  const filename = m ? m[1] : `Sourcing_Committee_${kind==='agenda'?'Agenda':'Minutes'}_${selection.ids ? 'Database' : wk(selection.week)}.xlsx`;
+  const filename = m ? m[1] : `Sourcing_Committee_${kind==='agenda'?'Agenda':'Minutes'}_${selection.ids ? 'Database' : wk(selection.week, selection.year||weekYear())}.xlsx`;
   await saveBlobFile(await resp.blob(), filename);
 }
 function downloadWeekExport(kind, week){ return downloadExport(kind, {week}); }
@@ -1962,52 +2172,68 @@ function bindExportButton(id, kind, selectionFn){
 }
 
 /* ============================= RENDER: DASHBOARD ============================= */
-function renderDashboard(){
-  const allWeeks = uniq(ALL_CASES.map(c=>c.weekNum)).sort((a,b)=>a-b);
+// v3 Phase-18：驾驶舱按年份选（领导：去掉 YTD，可以选 2025 / 2026）；周视图只列所选年份的周
+function dashScope(){
+  const years = yearsPresent();
+  if(!years.includes(state.dashYear)) state.dashYear = years.length ? years[years.length-1] : weekYear();
+  const yearCases = ALL_CASES.filter(c=>caseYear(c)===state.dashYear);
+  const allWeeks = uniq(yearCases.map(c=>c.weekNum)).sort((a,b)=>a-b);
   if(!allWeeks.includes(state.dashWeek)) state.dashWeek = allWeeks[allWeeks.length-1] ?? dateToWeekNum(getNATime());
-
   // period-scoped case set:
-  //  - YTD: current state of every unique case (one row per SWAT ID, its latest appearance)
+  //  - By Year: current state of every unique case seen that year (one row per SWAT ID, its latest appearance in the year)
   //  - By Week: every case actually on the agenda in the selected week (row-level, not deduped)
-  const periodCases = state.dashPeriod==='ytd' ? latestByCase() : ALL_CASES.filter(c=>c.weekNum===state.dashWeek);
+  const periodCases = state.dashPeriod==='week' ? yearCases.filter(c=>c.weekNum===state.dashWeek) : latestByCase(yearCases);
+  return {years, yearCases, allWeeks, periodCases, label: state.dashPeriod==='week' ? wk(state.dashWeek, state.dashYear) : String(state.dashYear)};
+}
+function renderDashboard(){
+  const {years, yearCases, allWeeks, periodCases, label} = dashScope();
 
   const totalCount = periodCases.length;
   const approved = periodCases.filter(c=>c.meetingDecision==='APPROVED').length;
   const rejected = periodCases.filter(c=>c.meetingDecision==='REJECTED').length;
   const conditional = periodCases.filter(c=>c.meetingDecision==='CONDITIONAL APPROVAL').length;
   const pending = periodCases.filter(c=>c.meetingDecision==='PENDING').length;
-  const decided = periodCases.filter(c=>c.meetingDecision!=='PENDING');
-  const openA = decided.filter(c=>c.actionStatus==='Open').length;
-  const overdueA = decided.filter(c=>c.actionStatus==='Overdue').length;
-  const closedA = decided.filter(c=>c.actionStatus==='Closed' || c.actionStatus===null).length;
+  // 行动状态数真实的待办（领导：没有待办就是 0，不把"已决议但没待办"的案例算成 Closed）
+  const tasks = decidedTasks(periodCases);
+  const openTasks = tasks.filter(x=>x.t.status==='Open'), overdueTasks = tasks.filter(x=>x.t.status==='Overdue');
+  const openA = openTasks.length, overdueA = overdueTasks.length, closedA = tasks.filter(x=>x.t.status==='Closed').length;
+  const ownerKey = x => x.t.responsible || '—';
+  const functionKey = x => x.t.ownerFunction || 'Function not set';
+  const chart = (title, items, keyFn, empty) => {
+    const rows = countBy(items, keyFn), max = Math.max(1, ...rows.map(r=>r[1]));
+    return `<div class="card breakdown-card"><h4>${title}</h4>${rows.length ? rows.map(([k,v])=>barRow(k,v,max)).join('') : `<div class="breakdown-note" style="margin-top:0;">${empty}</div>`}</div>`;
+  };
 
-  // Cluster / region breakdowns always reflect current state (YTD) regardless of toggle
-  const latest = latestByCase();
-  const byCluster = {}; latest.forEach(c=>{ byCluster[c.cluster]=(byCluster[c.cluster]||0)+1; });
+  // Cluster / commodity / region breakdowns: current state of the cases seen in the selected year
+  const latest = latestByCase(yearCases);
+  const byCluster = {}; latest.forEach(c=>{ byCluster[c.cluster||'—']=(byCluster[c.cluster||'—']||0)+1; });
+  const byCommodity = {}; latest.forEach(c=>{ const k = c.commodity||c.cluster||'—'; byCommodity[k]=(byCommodity[k]||0)+1; });
   const byRegion = {}; latest.forEach(c=>{ const rs = regionList(c); (rs.length ? rs : ['—']).forEach(r=>{ byRegion[r]=(byRegion[r]||0)+1; }); });
   const multiRegion = latest.some(c=>regionList(c).length>1);
-  const maxC = Math.max(...Object.values(byCluster));
-  const maxR = Math.max(...Object.values(byRegion));
+  const maxC = Math.max(1, ...Object.values(byCluster));
+  const maxCo = Math.max(1, ...Object.values(byCommodity));
+  const maxR = Math.max(1, ...Object.values(byRegion));
 
   return `
   <div class="pagehead">
     <h1>Management Cockpit</h1>
-    <p>Status across all sourcing cases. Switch between a single week's committee agenda and the running YTD picture. Click any number to see the underlying cases.</p>
+    <p>Status across all sourcing cases. Pick a year, then switch between the whole year and a single week's committee agenda. Click any number to see the underlying cases or actions.</p>
   </div>
 
   <div class="card" style="padding:16px 18px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <span style="font-size:12.5px;color:var(--ink-soft);font-weight:600;">Total Cases</span>
     <span style="font-size:22px;font-weight:700;">${totalCount}</span>
-    <div class="period-toggle" style="margin-left:auto;">
-      <button data-period="ytd" class="${state.dashPeriod==='ytd'?'active':''}">By YTD</button>
+    <select class="dash-year-select" id="dashYearSelect" style="margin-left:auto;" aria-label="Year">${years.map(y=>`<option value="${y}" ${y===state.dashYear?'selected':''}>${y}</option>`).join('')}</select>
+    <div class="period-toggle">
+      <button data-period="year" class="${state.dashPeriod==='year'?'active':''}">Whole year</button>
       <button data-period="week" class="${state.dashPeriod==='week'?'active':''}">By Week</button>
     </div>
-    ${state.dashPeriod==='week' ? `<select class="period-week-select" id="dashWeekSelect">${allWeeks.map(w=>`<option value="${w}" ${w===state.dashWeek?'selected':''}>${wk(w)} — ${weekDate(w)}</option>`).join('')}</select>` : ''}
+    ${state.dashPeriod==='week' ? `<select class="period-week-select" id="dashWeekSelect">${allWeeks.map(w=>`<option value="${w}" ${w===state.dashWeek?'selected':''}>${wk(w, state.dashYear)} — ${weekDateOf(w, state.dashYear)}</option>`).join('')}</select>` : ''}
     <button class="clearbtn" id="dashExportBtn" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">⬇ Export CSV (this scope)</button>
     ${state.dashPeriod==='week' ? `<button class="clearbtn" id="dashAgendaBtn" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">📋 Export Agenda (.xlsx)</button><button class="clearbtn" id="dashMinutesBtn" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">📝 Export Meeting Minutes (.xlsx)</button>` : ''}
   </div>
-  ${state.dashPeriod==='week' ? `<div style="font-size:11px;color:var(--ink-faint);margin:-10px 0 16px;">"Agenda" is the pre-meeting file: one row per case of ${esc(wk(state.dashWeek))} with the commercial data, no decisions. "Meeting Minutes" is the post-meeting file: the same cases with Sourcing Decision, discussion and action status, plus an "Actions" sheet listing every follow-up task (owner, category, due date). Both open as real Excel workbooks.</div>` : ''}
-  <div class="breakdown-row-title">Approval Status ${state.dashPeriod==='week'? '· '+wk(state.dashWeek) : '· current, YTD'} — 4 states</div>
+  ${state.dashPeriod==='week' ? `<div style="font-size:11px;color:var(--ink-faint);margin:-10px 0 16px;">"Agenda" is the pre-meeting file: one row per case of ${esc(label)} with the commercial data, no decisions. "Meeting Minutes" is the post-meeting file: the same cases with Sourcing Decision, discussion and action status, plus an "Actions" sheet listing every follow-up task (owner, category, due date). Both open as real Excel workbooks.</div>` : ''}
+  <div class="breakdown-row-title">Approval Status · ${esc(label)} — 4 states</div>
   <div class="tile-row four">
     ${tile('Approved', approved, 'g', 'approved')}
     ${tile('Rejected', rejected, rejected>0?'r':'g', 'rejected')}
@@ -2015,22 +2241,34 @@ function renderDashboard(){
     ${tile('Pending', pending, 'y', 'pending')}
   </div>
 
-  <div class="breakdown-row-title">Action Status ${state.dashPeriod==='week'? '· '+wk(state.dashWeek) : '· current, YTD'} — 3 states (decided cases; Pending cases have no actions yet)</div>
+  <div class="breakdown-row-title">Action Status · ${esc(label)} — follow-up actions of the decided cases (${tasks.length} in total; Pending cases have no actions yet)</div>
   <div class="tile-row three">
     ${tile('Open', openA, 'y', 'open')}
     ${tile('Overdue', overdueA, overdueA>0?'r':'g', 'overdue')}
     ${tile('Closed', closedA, 'g', 'closedaction')}
   </div>
+  <div class="breakdown-note" style="margin:6px 0 0;">Each action is counted once by its own status: an action past its due date is Overdue, not Open, so the three numbers add up to the total.</div>
 
-  <div class="breakdown-grid" style="margin-top:26px;">
+  <div class="breakdown-grid" style="margin-top:18px;">
+    ${chart('Open actions by function', openTasks, functionKey, 'No open actions in this scope.')}
+    ${chart('Overdue actions by function', overdueTasks, functionKey, 'No overdue actions in this scope.')}
+    ${chart('Open actions by owner', openTasks, ownerKey, 'No open actions in this scope.')}
+    ${chart('Overdue actions by owner', overdueTasks, ownerKey, 'No overdue actions in this scope.')}
+  </div>
+
+  <div class="breakdown-grid" style="margin-top:16px;">
     <div class="card breakdown-card">
-      <h4>Current Cases by Cluster</h4>
+      <h4>Cases by Cluster · ${esc(String(state.dashYear))}</h4>
       ${Object.entries(byCluster).sort((a,b)=>b[1]-a[1]).map(([k,v])=>barRow(k,v,maxC)).join('')}
     </div>
     <div class="card breakdown-card">
-      <h4>Current Cases by Region</h4>
+      <h4>Cases by Region · ${esc(String(state.dashYear))}</h4>
       ${Object.entries(byRegion).sort((a,b)=>b[1]-a[1]).map(([k,v])=>barRow(k,v,maxR)).join('')}
       ${multiRegion ? '<div class="breakdown-note">A case covering several regions is counted once in each, so the bars can add up to more than the total.</div>' : ''}
+    </div>
+    <div class="card breakdown-card" style="grid-column:1 / -1;">
+      <h4>Cases by Commodity · ${esc(String(state.dashYear))}</h4>
+      <div class="commodity-grid">${Object.entries(byCommodity).sort((a,b)=>b[1]-a[1]).map(([k,v])=>barRow(k,v,maxCo)).join('')}</div>
     </div>
   </div>
   ${state.isSysAdmin ? renderFxCard() + renderRegistrationCard() : ''}
@@ -2128,24 +2366,26 @@ function renderAutoReminderCard(){
 }
 function renderFollowups(){
   const latest = latestByCase();
-  // Flatten: one row per open/overdue TASK (a case can now carry several tasks)
+  // Flatten: one row per TASK (a case can carry several). Default: Open + Overdue; the Dashboard tiles open Closed too (v3 Phase-18).
+  const statusOk = t => state.followupStatus==='all' ? true : state.followupStatus==='active' ? (t.status==='Open'||t.status==='Overdue') : t.status===state.followupStatus;
   let items = [];
   latest.forEach(c=>{
-    (c.followUps||[]).forEach(t=>{
-      if(t.status==='Open' || t.status==='Overdue') items.push({c, t});
-    });
+    if(state.followupYear && String(caseYear(c))!==String(state.followupYear)) return;
+    (c.followUps||[]).forEach(t=>{ if(statusOk(t)) items.push({c, t}); });
   });
 
-  // 固定八类始终可选；旧任务上的自由标签和"未分类"跟在后面
-  const present = uniq(items.flatMap(x=> (x.t.tags&&x.t.tags.length)?x.t.tags:['Uncategorized']));
-  const tagOpts = [...ACTION_CATEGORIES, ...present.filter(t=>!ACTION_CATEGORIES.includes(t)).sort()];
-  const ownerOpts = uniq(items.map(x=>x.t.responsible)).sort();
+  // 分类由关键词自动判定（v3 Phase-18）；没命中任何分类的归 "Uncategorized"
+  const catsOf = t => { const cats = taskCategories(t); return cats.length ? cats : ['Uncategorized']; };
+  const tagOpts = [...ACTION_CATEGORIES, 'Uncategorized'];
+  // 负责人 / 职能选项取自全部待办（不随状态筛选变化），否则切到 Closed 时筛选框会消失、选中的值卡住
+  const allTasks = latest.flatMap(c=>c.followUps||[]);
+  const ownerOpts = uniq(allTasks.map(t=>t.responsible)).filter(Boolean).sort();
+  const functionOpts = uniq(allTasks.map(t=>t.ownerFunction||'')).filter(Boolean).sort();
+  const yearOpts = yearsPresent();
 
-  if(state.followupTag) items = items.filter(x=> {
-    const t = (x.t.tags&&x.t.tags.length) ? x.t.tags : ['Uncategorized'];
-    return t.includes(state.followupTag);
-  });
+  if(state.followupTag) items = items.filter(x=> catsOf(x.t).includes(state.followupTag));
   if(state.followupOwner) items = items.filter(x=> x.t.responsible===state.followupOwner);
+  if(state.followupFunction) items = items.filter(x=> (x.t.ownerFunction||'')===state.followupFunction);
 
   items.sort((a,b)=>{
     const da = a.t.dueDate==='—' ? '9999-99-99' : a.t.dueDate;
@@ -2159,20 +2399,23 @@ function renderFollowups(){
   return `
   <div class="pagehead">
     <h1>Follow-ups to Track</h1>
-    <p>Every open task across all cases — a case can carry more than one — with owner, due date and category, so nothing gets missed before the next meeting. Categories: ${ACTION_CATEGORIES.join(' · ')}.</p>
+    <p>Every follow-up task across all cases — a case can carry more than one — with owner, function, due date and category, so nothing gets missed before the next meeting. Categories are derived automatically from the task text and tags: ${ACTION_CATEGORIES.join(' · ')}.</p>
   </div>
 
   <div class="filters-bar">
+    <select id="fFollowupStatus">${[['active','Status: Open + Overdue'],['Open','Open'],['Overdue','Overdue'],['Closed','Closed'],['all','All statuses']].map(([v,l])=>`<option value="${v}" ${state.followupStatus===v?'selected':''}>${l}</option>`).join('')}</select>
+    <select id="fFollowupYear"><option value="">Year: All</option>${yearOpts.map(y=>`<option value="${y}" ${String(state.followupYear)===String(y)?'selected':''}>${y}</option>`).join('')}</select>
     <select id="fFollowupTag"><option value="">Category: All</option>${tagOpts.map(c=>`<option ${state.followupTag===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+    ${(functionOpts.length || state.followupFunction) ? `<select id="fFollowupFunction"><option value="">Function: All</option>${uniq([...functionOpts, state.followupFunction]).filter(Boolean).map(o=>`<option ${state.followupFunction===o?'selected':''}>${esc(o)}</option>`).join('')}</select>` : ''}
     <select id="fFollowupOwner"><option value="">Owner: All</option>${ownerOpts.map(o=>`<option ${state.followupOwner===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
-    <div class="resultcount">${items.length} open task${items.length!==1?'s':''}${overdueCount>0?` · <span style="color:var(--red);font-weight:600;">${overdueCount} overdue</span>`:''}${pendingFeedback>0?` · <span style="color:var(--amber);font-weight:600;">${pendingFeedback} feedback to approve</span>`:''}</div>
+    <div class="resultcount">${items.length} ${state.followupStatus==='active'?'open ':''}task${items.length!==1?'s':''}${overdueCount>0?` · <span style="color:var(--red);font-weight:600;">${overdueCount} overdue</span>`:''}${pendingFeedback>0?` · <span style="color:var(--amber);font-weight:600;">${pendingFeedback} feedback to approve</span>`:''}</div>
   </div>
 
   <div class="card" style="overflow-x:auto;">
     ${items.length===0 ? emptyState() : `
     <table class="data-table">
       <thead><tr>
-        <th>SWAT Case</th><th>Category</th><th>Task</th><th>Owner</th><th>Reminder goes to</th>
+        <th>SWAT Case</th><th>Category</th><th>Task</th><th>Owner / Function</th><th>Reminder goes to</th>
         <th class="sortable-th" id="sortDueTh">Due Date <span class="arrow">${state.followupSortDir==='asc'?'▲':'▼'}</span></th>
         <th>Status</th><th></th>
       </tr></thead>
@@ -2185,9 +2428,9 @@ function renderFollowups(){
           const fbOpen = state.feedbackRowId===t.id, fbPending = (t.feedback||[]).filter(f=>f.status==='pending').length;
           return `<tr>
             <td class="mono swat" style="cursor:pointer;" data-swat-link="${escapeAttr(c.swatId)}">${esc(c.swatId)}</td>
-            <td>${(t.tags||[]).length ? t.tags.map(tg=>`<span class="cat-tag">${esc(tg)}</span>`).join(' ') : `<span class="cat-tag none">Uncategorized</span>`}</td>
+            <td>${catsOf(t).map(tg=>`<span class="cat-tag ${tg==='Uncategorized'?'none':''}">${esc(tg)}</span>`).join(' ')}${(t.tags||[]).length ? `<span class="fn-sub">${esc(t.tags.join(', '))}</span>` : ''}</td>
             <td>${esc(t.task)}</td>
-            <td>${esc(t.responsible)}</td>
+            <td>${esc(t.responsible)}${t.ownerFunction ? `<span class="fn-sub">${esc(t.ownerFunction)}</span>` : ''}</td>
             <td style="font-size:11px;color:var(--ink-soft);line-height:1.5;">
               <span class="mono" style="color:var(--ink);font-weight:600;">${rc.email ? esc(rc.email) : '<span style="color:var(--red);">no email on file</span>'}</span><br/>
               ${rc.cc?`CC: ${esc(rc.cc)}<br/>`:''}<span class="cat-tag">${esc(rc.channel)}</span>
@@ -2599,8 +2842,13 @@ function renderDetail(){
         <span>SWAT Case: <b class="mono" style="color:var(--ink);">${esc(c.swatId)}</b></span>
       </div>
       <div class="meta">
-        <span class="mono">${wk(c.weekNum)} · ${esc(caseDateLabel(c))} · Case #${c.caseNumber} · ${esc(c.decisionLevel)}</span>
+        <span class="mono">${caseWeekLabel(c)} · ${esc(caseDateLabel(c))} · Case #${c.caseNumber} · ${esc(c.decisionLevel)}</span>
       </div>
+      ${(editing && state.isSysAdmin) ? `<div class="week-move" style="margin-top:8px;">
+        <label for="editMeetingDate" style="font-size:12px;color:var(--ink-soft);font-weight:600;">Committee week (Sourcing admin)</label>
+        <input type="date" class="edit-input" id="editMeetingDate" value="${escapeAttr(b.meetingDate||'')}"/>
+        <span class="mono" id="editMeetingWeek" style="font-size:12px;">${esc(meetingWeekPreview(b.meetingDate, c))}</span>
+      </div>` : ''}
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
       ${editing ? `<span class="badge pending">Editing (Admin)</span>` : `
@@ -2616,11 +2864,11 @@ function renderDetail(){
   <div class="status-row">
     ${editing ? `
     <div class="status-tile"><div class="k">Sourcing Decision</div><select class="edit-input" id="editDecision">${DECISION_OPTIONS.map(o=>`<option value="${o.v}" ${b.meetingDecision===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
-    <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation Link ${b.meetingDecision!=='PENDING'?'*':''}</div>${ef('editPresentationLink', b.sourcingPresentationLink||'')}<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">Required to save any decision other than Pending.</div></div>
+    <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation Link ${(b.meetingDecision!=='PENDING' && !(c.files&&c.files.length))?'*':''}</div>${ef('editPresentationLink', b.sourcingPresentationLink||'')}<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">${(c.files&&c.files.length) ? `Optional — ${c.files.length} presentation file${c.files.length===1?' is':'s are'} attached below.` : 'A decision other than Pending needs this link, or a presentation file added under Sourcing Presentation Files below.'}</div></div>
     <div class="status-tile"><div class="k">Action Status</div>${b.meetingDecision==='PENDING' ? '<span class="no-action-txt">—</span>' : actionCell(rolledUpStatus)}<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">${b.meetingDecision==='PENDING' ? 'Blank until a Sourcing Decision is recorded' : 'Computed from task statuses below'}</div></div>
     ` : `
     <div class="status-tile"><div class="k">Sourcing Decision</div><span class="badge ${decisionBadgeClass(c.meetingDecision)}">${esc(c.meetingDecision)}</span>${c.decisionText ? `<div style="font-size:11px;color:var(--ink-soft);margin-top:5px;white-space:pre-line;">Excel: ${esc(c.decisionText)}</div>` : ''}</div>
-    <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation</div><div style="font-size:12px;word-break:break-all;">${c.sourcingPresentationLink ? documentLink(c.sourcingPresentationLink) : `<span style="color:var(--ink-faint);">Not yet provided — required when a decision is recorded</span>`}</div></div>
+    <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation</div><div style="font-size:12px;word-break:break-all;">${c.sourcingPresentationLink ? documentLink(c.sourcingPresentationLink) : (c.files&&c.files.length) ? `<span>📎 ${c.files.length} file${c.files.length===1?'':'s'} under Sourcing Presentation Files</span>` : `<span style="color:var(--ink-faint);">Not yet provided — required when a decision is recorded</span>`}</div></div>
     <div class="status-tile"><div class="k">Action Status</div>${actionCellFor(c)}</div>
     `}
   </div>
@@ -2706,6 +2954,7 @@ function renderDetail(){
           ${infoItem('Project', c.project)}
           ${infoItem('Product Family', c.family)}
           ${infoItem('Cluster', c.cluster)}
+          ${c.commodity ? infoItem('Commodity', c.commodity + ((c.commodityRaw && c.commodityRaw!==c.commodity) ? ` (Excel: ${c.commodityRaw})` : '')) : ''}
           ${infoItem('Parent PF', c.parentPF)}
           ${infoItem('Part Family Code', c.partFamilyCode)}
           ${infoItem('Sourcing Type', c.sourcingType)}
@@ -2750,12 +2999,19 @@ function renderDetail(){
 
       <div class="card section-card">
         <h3>Sourcing Presentation Files</h3>
-        ${(c.files&&c.files.length) ? filesListHtml(c.files, state.isAdmin && !editing) : `<div style="color:var(--ink-faint);font-size:12.5px;">No files uploaded for this registration.</div>`}
-        ${(state.isAdmin && !editing) ? `<div class="form-actions" style="margin-top:10px;">
+        ${(c.files&&c.files.length) ? filesListHtml(c.files, state.isAdmin) : `<div style="color:var(--ink-faint);font-size:12.5px;">No files uploaded for this registration.</div>`}
+        ${editing ? `<div class="fb-hint" style="margin-top:6px;">Files are saved as soon as you add or remove them — your other changes stay in the form until you press Save Changes. A file here counts as the Sourcing Presentation.</div>` : ''}
+        ${state.isAdmin ? `<div class="form-actions" style="margin-top:10px;">
           <button type="button" class="btn-secondary" id="caseFileAdd">Add files</button>
           <input type="file" id="caseFileInput" multiple accept="${FILE_EXTENSIONS.join(',')}" style="display:none;"/>
           <span id="caseFileMsg" style="font-size:12px;color:var(--ink-soft);"></span>
-        </div>` : ''}
+        </div>
+        <div class="lib-pick">
+          <select class="edit-input" id="caseLibSelect" aria-label="Server library">${libraryOptionsHtml()}</select>
+          <button type="button" class="btn-secondary" id="caseLibAttach" ${libraryFiles().length ? '' : 'disabled'}>Attach from server</button>
+          <button type="button" class="link-btn" id="caseLibRefresh">Refresh list</button>
+        </div>
+        <div class="fb-hint" id="caseLibHint">${libraryHintHtml()}</div>` : ''}
       </div>
 
       <div class="card section-card">
@@ -2773,8 +3029,9 @@ function renderDetail(){
               <button data-remove-task="${i}" class="btn-danger" style="position:absolute;top:10px;right:10px;padding:4px 9px;font-size:11px;">Remove</button>
               <div class="followup-grid" style="margin-right:80px;">
                 <div class="form-field"><label>Task</label>${ef('editFuTask_'+i, t.task)}</div>
-                <div class="form-field"><label>Categories</label>${categoryChecks('editFuCat_'+i, t.tags)}</div>
+                <div class="form-field"><label>Tags (comma-separated, free text)</label>${ef('editFuTags_'+i, (t.tags||[]).join(', '))}<div class="auto-cats" id="editFuAuto_${i}">${autoCatsHtml(categorizeTask(t))}</div></div>
                 <div class="form-field"><label>Owner</label>${ef('editFuResp_'+i, t.responsible)}</div>
+                <div class="form-field"><label>Owner's function</label><input class="edit-input" id="editFuFunc_${i}" list="functionOptions" value="${escapeAttr(t.ownerFunction||'')}" placeholder="e.g. Purchasing, Supplier Quality, Engineering"/></div>
                 <div class="form-field"><label>Due Date</label><input type="date" class="edit-input" id="${'editFuDue_'+i}" value="${escapeAttr(/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate||'')?t.dueDate:'')}"/></div>
                 <div class="form-field"><label>Status</label>${esel('editFuStatus_'+i, t.status, ['Open','Overdue','Closed'])}</div>
                 <div class="form-field"><label>Channel</label>${esel('editFuChannel_'+i, t.channel||'Email + Teams', REMINDER_CHANNELS)}</div>
@@ -2784,8 +3041,9 @@ function renderDetail(){
               </div>
             </div>
           `).join('')}
+          ${functionDatalist()}
           <button class="btn-secondary" id="addTaskBtn">+ Add Follow-up Task</button>
-          ${state.editError ? `<div class="block-warning" style="display:block;margin-top:14px;">⚠ ${esc(state.editError)}</div>` : ''}
+          ${state.editError ? `<div class="block-warning" style="display:block;margin-top:14px;">${problemListHtml(state.editError.split('\n'), 'before saving')}</div>` : ''}
           <div class="form-actions">
             <button class="btn-primary" id="saveCaseBtn">Save Changes</button>
             <button class="btn-secondary" id="cancelEditBtn">Cancel</button>
@@ -2795,8 +3053,9 @@ function renderDetail(){
             <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;">
               <div class="followup-grid">
                 ${infoItem('Task', t.task)}
-                ${infoItem('Categories', (t.tags && t.tags.length) ? t.tags.join(', ') : '—')}
-                ${infoItem('Owner', t.responsible)}
+                ${infoItem('Categories (auto)', taskCategories(t).length ? taskCategories(t).join(', ') : '—')}
+                ${infoItem('Owner', t.ownerFunction ? `${t.responsible} (${t.ownerFunction})` : t.responsible)}
+                ${infoItem('Tags', (t.tags && t.tags.length) ? t.tags.join(', ') : '—')}
                 ${infoItem('Due Date', t.dueDate)}
                 ${infoItem('Status', t.status===null ? 'No action required' : t.status)}
                 ${infoItem('Reminder to', (()=>{ const rc=taskRecipient(t); return `${rc.email||'no email on file'}${rc.cc?' · cc: '+rc.cc:''} · ${rc.channel}`; })())}
@@ -2820,7 +3079,7 @@ function renderDetail(){
               <div class="tl-node ${rag}"></div>
               <div class="tl-body">
                 <div class="tl-top">
-                  <span class="tl-week">${wk(h.weekNum)}<span class="tl-case">Case #${h.caseNumber}</span></span>
+                  <span class="tl-week">${caseWeekLabel(h)}<span class="tl-case">Case #${h.caseNumber}</span></span>
                   <span class="badge ${decisionBadgeClass(h.meetingDecision)}">${esc(h.meetingDecision)}</span>
                 </div>
                 <div class="tl-note">${esc(h.committeeDiscussion.slice(0,90))}${h.committeeDiscussion.length>90?'…':''}</div>
@@ -2898,14 +3157,15 @@ function canRefresh(){
     && !document.activeElement?.matches('input, textarea, select');
 }
 function applyKpiFilter(key){
-  if(key==='open' || key==='overdue'){
-    state.view='followups'; state.followupTag=''; state.followupOwner='';
+  if(key==='open' || key==='overdue' || key==='closedaction'){
+    state.view='followups'; state.followupTag=''; state.followupOwner=''; state.followupFunction='';
+    state.followupStatus = key==='open' ? 'Open' : key==='overdue' ? 'Overdue' : 'Closed';
+    state.followupYear = String(state.dashYear || '');
     render(); window.scrollTo(0,0); return;
   }
   state.view='database'; state.searchQuery='';
-  state.filters = {year:'',weekFrom:'',weekTo:'',region:'',cluster:'',supplier:'',decision:'',status:''};
-  if(key==='closedaction') state.filters.status='Closed';
-  else if(key==='pending') state.filters.decision='PENDING';
+  state.filters = {year:'',weekFrom:'',weekTo:'',region:'',cluster:'',commodity:'',supplier:'',decision:'',status:''};
+  if(key==='pending') state.filters.decision='PENDING';
   else if(key==='approved') state.filters.decision='APPROVED';
   else if(key==='rejected') state.filters.decision='REJECTED';
   else if(key==='conditional') state.filters.decision='CONDITIONAL APPROVAL';
@@ -2932,16 +3192,17 @@ function wireEvents(){
   document.querySelectorAll('[data-period]').forEach(el=>{
     el.onclick = ()=>{ state.dashPeriod = el.dataset.period; render(); };
   });
+  const dys = document.getElementById('dashYearSelect');
+  if(dys) dys.onchange = ()=>{ state.dashYear = Number(dys.value); state.dashWeek = null; render(); };
   const dws = document.getElementById('dashWeekSelect');
   if(dws) dws.onchange = ()=>{ state.dashWeek = Number(dws.value); render(); };
   const dashExportBtn = document.getElementById('dashExportBtn');
   if(dashExportBtn) dashExportBtn.onclick = ()=>{
-    const periodCases = state.dashPeriod==='ytd' ? latestByCase() : ALL_CASES.filter(c=>c.weekNum===state.dashWeek);
-    const label = state.dashPeriod==='ytd' ? 'ytd' : wk(state.dashWeek);
+    const {periodCases, label} = dashScope();
     downloadCasesCsv(periodCases, `sourcing_committee_dashboard_${label}.csv`);
   };
   for(const [id, kind] of [['dashAgendaBtn','agenda'],['dashMinutesBtn','minutes']]){
-    bindExportButton(id, kind, ()=>({week: state.dashWeek}));
+    bindExportButton(id, kind, ()=>({week: state.dashWeek, year: state.dashYear}));
   }
 
   // Home view: weekly Excel import (v3 Phase-17)
@@ -2962,6 +3223,22 @@ function wireEvents(){
   document.querySelectorAll('[data-import-remove]').forEach(el=>{ el.onclick = ()=>{ state.importQueue.splice(Number(el.dataset.importRemove),1); refreshImportQueue(); }; });
   document.querySelectorAll('[data-import-warn]').forEach(el=>{ el.onclick = ()=>{ const e = state.importQueue[Number(el.dataset.importWarn)]; e.showWarnings = !e.showWarnings; refreshImportQueue(); }; });
   document.querySelectorAll('[data-import-date]').forEach(el=>{ el.onchange = ()=>{ const e = state.importQueue[Number(el.dataset.importDate)]; e.meetingDate = el.value; if(e.meetingDate) previewImportFile(e); }; });
+  // v3 Phase-20：首页 Presentations 区
+  const presAttachOne = document.getElementById('presAttachOne'), presSelect = document.getElementById('presSelect');
+  if(presAttachOne && presSelect) presAttachOne.onclick = ()=>{
+    if(!presSelect.value){ toast('Choose a presentation first.'); return; }
+    presAttachOne.disabled = true; attachPresentations([presSelect.value]);
+  };
+  const presAttachAll = document.getElementById('presAttachAll');
+  if(presAttachAll) presAttachAll.onclick = ()=>{
+    const paths = libraryFiles().filter(f=>f.match && !f.match.attached).map(f=>f.path);
+    if(paths.length){ presAttachAll.disabled = true; attachPresentations(paths); }
+  };
+  const presUploadBtn = document.getElementById('presUploadBtn'), presUploadInput = document.getElementById('presUploadInput');
+  if(presUploadBtn && presUploadInput){
+    presUploadBtn.onclick = ()=> presUploadInput.click();
+    presUploadInput.onchange = ()=>{ const list = [...presUploadInput.files]; presUploadInput.value=''; if(list.length){ presUploadBtn.disabled = true; uploadPresentations(list); } };
+  }
   const importSourceUrl = document.getElementById('importSourceUrl');
   if(importSourceUrl) importSourceUrl.oninput = ()=>{ state.importSourceUrl = importSourceUrl.value; };
   const importRun = document.getElementById('importRunBtn');
@@ -2975,9 +3252,6 @@ function wireEvents(){
     hsi.oninput = (e)=>{ };
     hsi.onkeydown = (e)=>{ if(e.key==='Enter'){ state.searchQuery=hsi.value; state.view='database'; render(); } };
   }
-  document.querySelectorAll('[data-qs]').forEach(el=>{
-    el.onclick = ()=>{ state.searchQuery = el.dataset.qs; state.view='database'; render(); window.scrollTo(0,0); };
-  });
   document.querySelectorAll('.activity-row').forEach((el,i)=>{
     // recent activity click -> open that case
   });
@@ -2987,18 +3261,23 @@ function wireEvents(){
   if(dbSearch){
     dbSearch.oninput = ()=>{ state.searchQuery = dbSearch.value; refreshDbTableOnly(); };
   }
-  ['fWeekFrom','fWeekTo','fRegion','fCluster','fSupplier','fDecision','fStatus'].forEach(id=>{
+  ['fYear','fWeekFrom','fWeekTo','fRegion','fCluster','fCommodity','fSupplier','fDecision','fStatus'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.onchange = ()=>{
-      const map={fWeekFrom:'weekFrom',fWeekTo:'weekTo',fRegion:'region',fCluster:'cluster',fSupplier:'supplier',fDecision:'decision',fStatus:'status'};
+      const map={fYear:'year',fWeekFrom:'weekFrom',fWeekTo:'weekTo',fRegion:'region',fCluster:'cluster',fCommodity:'commodity',fSupplier:'supplier',fDecision:'decision',fStatus:'status'};
       state.filters[map[id]] = el.value;
+      if(id==='fYear'){ state.filters.weekFrom=''; state.filters.weekTo=''; }  // 换年份后周范围重选
       render();
     };
   });
-  const filteredDbRows = ()=>{
-    const f = state.filters;
-    return ALL_CASES.filter(c=>matchesQuery(c,state.searchQuery) && matchesFilters(c,f)).sort((a,b)=> b.weekNum-a.weekNum || b.caseNumber-a.caseNumber);
-  };
+  document.querySelectorAll('th[data-sort]').forEach(th=>{
+    th.onclick = ()=>{
+      const key = th.dataset.sort;
+      state.dbSort = {key, dir: state.dbSort.key===key ? (state.dbSort.dir==='asc'?'desc':'asc') : (key==='week'||key==='date'||key==='spend' ? 'desc' : 'asc')};
+      refreshDbTableOnly();
+    };
+  });
+  const filteredDbRows = ()=> dbRows();
   const exportBtn = document.getElementById('exportCsvBtn');
   if(exportBtn) exportBtn.onclick = ()=>downloadCasesCsv(filteredDbRows(), 'sourcing_committee_export.csv');
   // 议程 / 纪要按当前筛选结果导出（Database 页，2026-09-24 用户要求）
@@ -3006,7 +3285,7 @@ function wireEvents(){
   bindExportButton('dbMinutesBtn', 'minutes', ()=>({ids: filteredDbRows().map(c=>c.id)}));
   const clearBtn = document.getElementById('clearFilters');
   if(clearBtn) clearBtn.onclick = ()=>{
-    state.filters = {year:'',weekFrom:'',weekTo:'',region:'',cluster:'',supplier:'',decision:'',status:''};
+    state.filters = {year:'',weekFrom:'',weekTo:'',region:'',cluster:'',commodity:'',supplier:'',decision:'',status:''};
     state.searchQuery='';
     render();
   };
@@ -3079,6 +3358,12 @@ function wireEvents(){
   if(fTag) fTag.onchange = ()=>{ state.followupTag = fTag.value; render(); };
   const fOwner = document.getElementById('fFollowupOwner');
   if(fOwner) fOwner.onchange = ()=>{ state.followupOwner = fOwner.value; render(); };
+  const fFunction = document.getElementById('fFollowupFunction');
+  if(fFunction) fFunction.onchange = ()=>{ state.followupFunction = fFunction.value; render(); };
+  const fFuStatus = document.getElementById('fFollowupStatus');
+  if(fFuStatus) fFuStatus.onchange = ()=>{ state.followupStatus = fFuStatus.value; render(); };
+  const fFuYear = document.getElementById('fFollowupYear');
+  if(fFuYear) fFuYear.onchange = ()=>{ state.followupYear = fFuYear.value; render(); };
   const sortDueTh = document.getElementById('sortDueTh');
   if(sortDueTh) sortDueTh.onclick = ()=>{ state.followupSortDir = state.followupSortDir==='asc'?'desc':'asc'; render(); };
   document.querySelectorAll('[data-swat-link]').forEach(el=>{
@@ -3248,6 +3533,7 @@ function wireEvents(){
       sourcingPresentationLink:c.sourcingPresentationLink||'',
       finalDocLink:c.finalDocLink||'',
       followUps: JSON.parse(JSON.stringify(c.followUps||[])),
+      meetingDate: c.meetingDateISO || '',  // v3 Phase-19：管理员可改周
     };
     // 商务字段按录入币种编辑（外币折算来的用原币值）；服务端保存时按案例记录的汇率重新折算
     COMMERCIAL_MONEY_KEYS.forEach(k=>{ const v = isConverted(c) && c[k+'Entered']!==undefined ? c[k+'Entered'] : c[k]; state.editBuffer[k] = (v===undefined||v===null) ? null : v; });
@@ -3274,6 +3560,7 @@ function wireEvents(){
     setIf('decisionLevel','editDecisionLevel'); setIf('leadTime','editLeadTime');
     setIf('committeeDiscussion','editDiscussion'); setIf('meetingDecision','editDecision'); setIf('sourcingPresentationLink','editPresentationLink');
     setIf('finalDocLink','editFinalDocLink');
+    setIf('meetingDate','editMeetingDate');
     const editIds = {amortizationTotal:'editAmortizationTotal', toolingPayment:'editToolingPayment', bpgAvailable:'editBpgAvailable', fraAvailable:'editFraAvailable', belowCQA:'editBelowCQA',
       cqaJustification:'editCqaJustification', strategicSupplier:'editStrategicSupplier', ltaAvailable:'editLtaAvailable', usmcaEligible:'editUsmcaEligible',
       fotLeadTimeWeeks:'editFotLeadTimeWeeks', ppapLeadTimeWeeks:'editPpapLeadTimeWeeks', amortizationPcs:'editAmortizationPcs', annualCapacity:'editAnnualCapacity', lifetimeCapacity:'editLifetimeCapacity'};
@@ -3295,7 +3582,8 @@ function wireEvents(){
     });
     b.followUps.forEach((t,i)=>{
       const task = val('editFuTask_'+i); if(task!==undefined) t.task=task;
-      const cats = document.getElementById('editFuCat_'+i); if(cats) t.tags = [...cats.querySelectorAll('input:checked')].map(el=>el.value);
+      const tagsText = val('editFuTags_'+i); if(tagsText!==undefined) t.tags = splitTags(tagsText);
+      const fn = val('editFuFunc_'+i); if(fn!==undefined) t.ownerFunction = fn.trim();
       const resp = val('editFuResp_'+i); if(resp!==undefined) t.responsible=resp;
       const due = val('editFuDue_'+i); if(due!==undefined) t.dueDate=due;
       const status = val('editFuStatus_'+i); if(status!==undefined) t.status=status;
@@ -3321,10 +3609,22 @@ function wireEvents(){
       render();
     };
   });
+  document.querySelectorAll('[id^="editFuTask_"], [id^="editFuTags_"], [id^="editFuNotes_"]').forEach(el=>{
+    el.addEventListener('input', ()=>{
+      const i = el.id.split('_')[1], g = id => (document.getElementById(id)||{}).value||'';
+      const box = document.getElementById('editFuAuto_'+i);
+      if(box) box.innerHTML = autoCatsHtml(categorizeTask({task:g('editFuTask_'+i), tags:splitTags(g('editFuTags_'+i)), notes:g('editFuNotes_'+i)}));
+    });
+  });
+  const editMeetingDate = document.getElementById('editMeetingDate');
+  if(editMeetingDate) editMeetingDate.oninput = ()=>{
+    const hist = historyFor(state.selectedSwatId), cur = hist[Math.min(state.selectedEntryIndex, hist.length-1)];
+    const out = document.getElementById('editMeetingWeek'); if(out) out.textContent = meetingWeekPreview(editMeetingDate.value, cur);
+  };
   const addTaskBtn = document.getElementById('addTaskBtn');
   if(addTaskBtn) addTaskBtn.onclick = ()=>{
     syncEditBufferFromDom();
-    state.editBuffer.followUps.push({id:'FU-NEW-'+Date.now(), task:'', tags:[], responsible:'', dueDate:'', notes:'', status:'Open', notify:'', notifyEmail:'', cc:'', channel:'Email + Teams'});
+    state.editBuffer.followUps.push({id:'FU-NEW-'+Date.now(), task:'', tags:[], ownerFunction:'', responsible:'', dueDate:'', notes:'', status:'Open', notify:'', notifyEmail:'', cc:'', channel:'Email + Teams'});
     render();
   };
   document.querySelectorAll('[data-remove-task]').forEach(el=>{
@@ -3345,31 +3645,32 @@ function wireEvents(){
     const isUrl = isHttpUrl;
     b.finalDocLink = (b.finalDocLink||'').trim();
     b.sourcingPresentationLink = (b.sourcingPresentationLink||'').trim();
-    if(b.sourcingPresentationLink && !isUrl(b.sourcingPresentationLink)){ state.editError = 'The Sourcing Presentation Link must be a full URL (starting with http:// or https://).'; render(); return; }
-    if(b.finalDocLink && !isUrl(b.finalDocLink)){ state.editError = 'The Final PPT / Supporting Document Link must be a full URL (starting with http:// or https://).'; render(); return; }
-    // Rule 1: recording a Sourcing Decision (anything other than Pending) requires the Sourcing Presentation Link.
+    // v3 Phase-19：全部问题一次列出；案例上已有演示文件（上传或从服务器挂接）即满足规则 1
+    const problems = [];
+    const hasFiles = !!(c.files && c.files.length);
+    // Rule 1: recording a Sourcing Decision (anything other than Pending) requires the Sourcing Presentation (link or file).
     // A newly registered case sits at Pending and is exempt until an admin records a decision.
-    if(b.meetingDecision!=='PENDING'){
-      if(!b.sourcingPresentationLink){ state.editError = 'A Sourcing Decision cannot be saved without the Sourcing Presentation Link. Enter the link, then save the decision.'; render(); return; }
-      if(!isUrl(b.sourcingPresentationLink)){ state.editError = 'The Sourcing Presentation Link must be a full URL (starting with http:// or https://).'; render(); return; }
-    }
-    if(!regionList(b).length){ state.editError = 'Select at least one Region.'; render(); return; }
+    if(b.meetingDecision!=='PENDING' && !b.sourcingPresentationLink && !hasFiles && !(c.source && c.source.kind==='excel'))
+      problems.push('A Sourcing Decision cannot be saved without the Sourcing Presentation — enter the Sourcing Presentation Link, or add the presentation file under Sourcing Presentation Files.');
+    if(b.sourcingPresentationLink && !isUrl(b.sourcingPresentationLink)) problems.push('The Sourcing Presentation Link must be a full URL (starting with http:// or https://).');
+    if(!regionList(b).length) problems.push('Select at least one Region.');
     // Rule 0: a Pending case has not been reviewed — it cannot carry post-decision follow-up tasks.
-    if(b.meetingDecision==='PENDING' && b.followUps.length>0){ state.editError = 'A case that is Pending for Sourcing Committee Review cannot have follow-up tasks. Record the Sourcing Decision first, or remove the tasks.'; render(); return; }
+    if(b.meetingDecision==='PENDING' && b.followUps.length>0) problems.push('A case that is Pending for Sourcing Committee Review cannot have follow-up tasks. Record the Sourcing Decision first, or remove the tasks.');
     // 未关闭的待办要能收到提醒：必须填写收件邮箱（系统不再按姓名猜测）。
-    const noEmailIdx = b.followUps.findIndex(t=>t.status!=='Closed' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(t.notifyEmail||''));
-    if(noEmailIdx>=0){ state.editError = `Follow-up task ${noEmailIdx+1}: enter a valid "Send reminder to" email, so the reminder reaches someone.`; render(); return; }
+    b.followUps.forEach((t,i)=>{ if(t.status!=='Closed' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(t.notifyEmail||'')) problems.push(`Follow-up task ${i+1}: enter a valid "Send reminder to" email, so the reminder reaches someone.`); });
     // Rule 2: closing the case (every follow-up action closed) requires the Final PPT / Supporting Document Link.
-    const newActionStatus = rollupActionStatus(b.followUps);
-    if(newActionStatus==='Closed'){
-      if(!b.finalDocLink){ state.editError = 'All follow-up actions are now Closed, which closes the case — enter the Final PPT / Supporting Document Link first.'; render(); return; }
-      if(!isUrl(b.finalDocLink)){ state.editError = 'The Final PPT / Supporting Document Link must be a full URL (starting with http:// or https://).'; render(); return; }
-    }
+    if(rollupActionStatus(b.followUps)==='Closed' && !b.finalDocLink) problems.push('All follow-up actions are now Closed, which closes the case — enter the Final PPT / Supporting Document Link first.');
+    if(b.finalDocLink && !isUrl(b.finalDocLink)) problems.push('The Final PPT / Supporting Document Link must be a full URL (starting with http:// or https://).');
+    if(problems.length){ state.editError = problems.join('\n'); render(); return; }
+    if(!state.isSysAdmin) delete b.meetingDate;  // 改周只给 Sourcing admin（服务端同样强制）
     // Server is the authority: it re-runs the same three rules, merges, recomputes rollups and persists.
     saveCaseBtn.disabled = true; // 防双击（两条路径随后都会 render 重建按钮，无需手工恢复）
     try{
       const resp = await API.put('/api/cases/'+encodeURIComponent(c.id), b);
       applySnapshot(resp.snapshot);
+      // 改了周以后这条记录在时间线里的位置可能变了：跟着它走
+      const newHist = historyFor(state.selectedSwatId), pos = newHist.findIndex(x=>x.id===c.id);
+      if(pos>=0) state.selectedEntryIndex = pos;
     }catch(err){
       if(state.editBuffer!==b){ toast('⚠ '+(err.detail||err.message)); return; }
       state.editError = err.detail || err.message;
@@ -3497,10 +3798,12 @@ function wireEvents(){
     if(submitBtn.disabled) return;
     const val = id=> (document.getElementById(id)||{}).value || '';
     const banner = document.getElementById('submitBanner');
+    // v3 Phase-19（同事反馈）：缺项一次全部列出，不再修一条弹一条
     const showError = (msg)=>{
-      banner.textContent = msg;
+      banner.innerHTML = problemListHtml(Array.isArray(msg) ? msg : String(msg).split('\n'), 'before submitting');
       banner.style.background = 'var(--red-tint)'; banner.style.color='var(--red)'; banner.style.borderColor='#EFC2BC';
       banner.classList.add('show');
+      banner.scrollIntoView({block:'nearest'});
     };
     const name = val('fSubmitter'), email = val('fSubmitterEmail');
     const rowVal = (row, f)=>((row.querySelector(`[data-pn-field="${f}"]`)||{}).value||'').trim();
@@ -3516,51 +3819,48 @@ function wireEvents(){
       toolingCQA: rowStr(row,'toolingCQA'), supplierToolingCost: rowStr(row,'supplierToolingCost'),
       averageVolume: rowInt(row,'averageVolume'), lifetimeVolume: rowInt(row,'lifetimeVolume'),
     }));
-    if(!name || !email){
-      showError('⚠ Please fill in Name and Email before submitting.');
-      return;
-    }
-    if(pnRows.length===0 || pnRows.some(r=>!r.partNumber || !r.partDescription)){
-      showError('⚠ Please fill in Part Number and Part Description for every part number row before submitting.');
-      return;
-    }
-    if(pnRows.some(r=>!r.project || !r.sourcingType || !r.recommendedSupplier)){ showError('⚠ Please fill in Project, Sourcing Type and Recommended Supplier for every part number row before submitting.'); return; }
-    if(!checkedRegions('fRegionIn').length){ showError('⚠ Please select at least one Region before submitting.'); return; }
+    const problems = [];
+    const need = msg => problems.push(msg);
+    if(!name || !email) need('⚠ Please fill in Name and Email before submitting.');
+    if(pnRows.length===0 || pnRows.some(r=>!r.partNumber || !r.partDescription)) need('⚠ Please fill in Part Number and Part Description for every part number row before submitting.');
+    if(pnRows.some(r=>!r.project || !r.sourcingType || !r.recommendedSupplier)) need('⚠ Please fill in Project, Sourcing Type and Recommended Supplier for every part number row before submitting.');
+    if(!checkedRegions('fRegionIn').length) need('⚠ Please select at least one Region before submitting.');
     const currency = submitCurrency();
-    if(!fxRate(currency)){ showError(`⚠ No exchange rate is set for ${currency} yet. Enter the amounts in EUR, or ask the Sourcing admin to set the ${currency} rate.`); return; }
+    const rateOk = !!fxRate(currency);
+    if(!rateOk) need(`⚠ No exchange rate is set for ${currency} yet. Enter the amounts in EUR, or ask the Sourcing admin to set the ${currency} rate.`);
     // v3 Phase-15：bundle 金额必填（整个登记一个数）
     const bundlePeak = Number(val('fBundlePeak'))||0, bundleLife = Number(val('fBundleLife'))||0;
-    if(bundlePeak<=0 || bundleLife<=0){ showError('⚠ Please enter the bundle Peak Year Spend and Lifetime Spend (the total for all part numbers) before submitting.'); return; }
+    if(bundlePeak<=0 || bundleLife<=0) need('⚠ Please enter the bundle Peak Year Spend and Lifetime Spend (the total for all part numbers) before submitting.');
     const caseNo = caseNoStatus(val('fExistingSwat'));
-    if(!caseNo){ showError('⚠ Please enter the SWAT Case # or Supplyon Case #. Every case has one — it is required.'); return; }
-    if(SUBMISSIONS.some(x=>x.caseId===caseNo.id && x.status==='Waiting for Registration Confirmation')){ showError('⚠ '+caseNo.id+' already has a registration waiting for confirmation. Please wait for that one to be processed.'); return; }
-    const existingSwat = caseNo.existing ? caseNo.id : '';
+    if(!caseNo) need('⚠ Please enter the SWAT Case # or Supplyon Case #. Every case has one — it is required.');
+    else if(SUBMISSIONS.some(x=>x.caseId===caseNo.id && x.status==='Waiting for Registration Confirmation')) need('⚠ '+caseNo.id+' already has a registration waiting for confirmation. Please wait for that one to be processed.');
+    const existingSwat = caseNo && caseNo.existing ? caseNo.id : '';
     const famAns = val('qFamily'), famAligned = val('qFamilyAligned');
     const ecmAns = val('qECM'), ccbAns = val('qCCB');
-    if(!famAns){ showError('⚠ Please answer "Is this a Family Case?" before submitting.'); return; }
-    if(!ecmAns){ showError('⚠ Please answer "Does this case involve an Engineering Change (ECM)?" before submitting.'); return; }
+    if(!famAns) need('⚠ Please answer "Is this a Family Case?" before submitting.');
+    if(!ecmAns) need('⚠ Please answer "Does this case involve an Engineering Change (ECM)?" before submitting.');
     if(famAns==='Yes'){
-      if(!famAligned){ showError('⚠ Please answer whether Family Alignment has been completed.'); return; }
-      if(famAligned==='No'){ showError('⚠ This case cannot be registered until Family Alignment is completed.'); return; }
+      if(!famAligned) need('⚠ Please answer whether Family Alignment has been completed.');
+      else if(famAligned==='No') need('⚠ This case cannot be registered until Family Alignment is completed.');
     }
     if(ecmAns==='Yes'){
-      if(!ccbAns){ showError('⚠ Please answer whether this case has passed CCB2.'); return; }
-      if(ccbAns==='No'){ showError('⚠ This case cannot be registered until it has passed CCB2 (Change Control Board 2).'); return; }
+      if(!ccbAns) need('⚠ Please answer whether this case has passed CCB2.');
+      else if(ccbAns==='No') need('⚠ This case cannot be registered until it has passed CCB2 (Change Control Board 2).');
     }
-    // 商务字段（反馈 PPT 第 2、3 页）：文案与服务端 logic.validate_commercial 一致
+    // 商务字段（反馈 PPT 第 2、3 页）：文案与服务端 logic.commercial_problems 一致
     const numOrNull = id => { const v = val(id).trim(); return v==='' ? null : v; };
-    if(pnRows.some(r=>ROW_MONEY_KEYS.some(k=>r[k]===null))){ showError('⚠ Please fill in Pc Price CQA, Supplier Price (landed), Tooling CQA and Supplier Tooling Cost for every part number row before submitting (enter 0 if not applicable).'); return; }
-    if(!val('fToolingPayment')){ showError('⚠ Please select the Tooling Payment (Lumpsum or MPC) before submitting.'); return; }
-    const lifetimeEur = eurPreview(bundleLife, currency);
+    if(pnRows.some(r=>ROW_MONEY_KEYS.some(k=>r[k]===null))) need('⚠ Please fill in Pc Price CQA, Supplier Price (landed), Tooling CQA and Supplier Tooling Cost for every part number row before submitting (enter 0 if not applicable).');
+    if(!val('fToolingPayment')) need('⚠ Please select the Tooling Payment (Lumpsum, MPC or No tooling involved) before submitting.');
+    const lifetimeEur = rateOk ? eurPreview(bundleLife, currency) : 0;
     if(lifetimeEur > BPG_THRESHOLD_EUR){
-      if(!val('qBPG')){ showError('⚠ Lifetime Spend is above 3 Mio EUR — please answer whether a BPG is available.'); return; }
-      if(val('qBPG')==='No'){ showError('⚠ This case cannot be registered: Lifetime Spend above 3 Mio EUR requires an available BPG.'); return; }
+      if(!val('qBPG')) need('⚠ Lifetime Spend is above 3 Mio EUR — please answer whether a BPG is available.');
+      else if(val('qBPG')==='No') need('⚠ This case cannot be registered: Lifetime Spend above 3 Mio EUR requires an available BPG.');
     }
     if(val('fDecisionLevelIn')==='Level 2'){
-      if(!val('qFRA')){ showError('⚠ Please answer whether an FRA is available (required for Level 2 cases).'); return; }
-      if(val('qFRA')==='No'){ showError('⚠ This case cannot be registered: a Level 2 case requires an available FRA.'); return; }
+      if(!val('qFRA')) need('⚠ Please answer whether an FRA is available (required for Level 2 cases).');
+      else if(val('qFRA')==='No') need('⚠ This case cannot be registered: a Level 2 case requires an available FRA.');
     }
-    if(val('qBelowCQA')==='No' && !val('fCqaJustification').trim()){ showError('⚠ Please provide a justification when the price is not below CQA.'); return; }
+    if(val('qBelowCQA')==='No' && !val('fCqaJustification').trim()) need('⚠ Please provide a justification when the price is not below CQA.');
     const intOrNull = id => { const v = val(id).trim(); return v==='' ? null : Number(v); };
     const commercial = {
       toolingPayment: val('fToolingPayment'), bpgAvailable: val('qBPG'), fraAvailable: val('qFRA'),
@@ -3573,8 +3873,9 @@ function wireEvents(){
     const meetingDateObj = meetingDateStr ? new Date(meetingDateStr+'T00:00:00') : getEarliestSelectableWednesday();
     const lateBox = document.getElementById('fLateException');
     const pickedLate = !!(document.querySelector('#fMeetingDate option:checked')||{}).dataset?.late;
-    if(pickedLate && !val('fLateReason').trim()){ showError('⚠ Please give the reason for the late registration, so the Sourcing admin can approve the exception.'); return; }
-    if(pickedLate && !(lateBox && lateBox.checked)){ showError('⚠ Tick "Request an exception" to register for a meeting whose deadline has passed.'); return; }
+    if(pickedLate && !val('fLateReason').trim()) need('⚠ Please give the reason for the late registration, so the Sourcing admin can approve the exception.');
+    if(pickedLate && !(lateBox && lateBox.checked)) need('⚠ Tick "Request an exception" to register for a meeting whose deadline has passed.');
+    if(problems.length){ showError(problems); return; }
     // Persist on the server; its snapshot wholesale-replaces the in-memory state.
     const payload = {
       submitterName:name, submitterEmail:email, caseNo: caseNo.id,
@@ -3598,7 +3899,7 @@ function wireEvents(){
       const resp = await API.post('/api/submissions', payload);
       applySnapshot(resp.snapshot);
       subId = resp.subId; uploadKey = resp.uploadKey || '';
-    }catch(err){ showError('⚠ '+(err.detail||err.message)); submitBtn.disabled = false; return; }
+    }catch(err){ showError(String(err.detail||err.message).split('\n')); submitBtn.disabled = false; return; }
     submitBtn.disabled = false;
     const queued = SUBMIT_FILES; SUBMIT_FILES = [];
     const doneText = `✓ Submitted for Registration (${subId}) — Waiting for the Registration Confirmation. The SBS Procurement approver has been notified.`;
@@ -3638,11 +3939,29 @@ function wireEvents(){
     fileDrop.ondragleave = ()=> fileDrop.classList.remove('over');
     fileDrop.ondrop = e=>{ e.preventDefault(); fileDrop.classList.remove('over'); addFiles([...((e.dataTransfer&&e.dataTransfer.files)||[])]); };
   }
-  // 案例页（管理员）：加文件 / 删文件
+  // 案例页（管理员）：加文件 / 删文件；从服务器文件库挂文件（v3 Phase-18）
+  // v3 Phase-19：编辑状态下也能加 / 删文件 —— 重画页面前先把还没保存的编辑内容收进 editBuffer，一次保存不丢
+  const keepEdits = ()=>{ if(state.detailEditMode && state.editBuffer) syncEditBufferFromDom(); };
   const caseFileAdd = document.getElementById('caseFileAdd'), caseFileInput = document.getElementById('caseFileInput');
   if(caseFileAdd && caseFileInput){
     const hist = historyFor(state.selectedSwatId);
     const row = hist[Math.min(state.selectedEntryIndex, hist.length-1)];
+    const libSelect = document.getElementById('caseLibSelect'), libAttach = document.getElementById('caseLibAttach'), libRefresh = document.getElementById('caseLibRefresh');
+    if(libSelect){
+      if(state.presentationLibrary===null || Date.now()-state.presentationLibraryAt > 60000) loadPresentationLibrary();
+      if(libRefresh) libRefresh.onclick = ()=> loadPresentationLibrary(true);
+      if(libAttach) libAttach.onclick = async ()=>{
+        const path = libSelect.value;
+        if(!path || libAttach.disabled) return;
+        libAttach.disabled = true;
+        try{
+          const resp = await API.post(`/api/cases/${encodeURIComponent(row.id)}/files/from-library`, {path});
+          applySnapshot(resp.snapshot);
+          keepEdits(); render();
+          toast(`✓ ${resp.file.originalName} attached as ${resp.file.name}.`);
+        }catch(err){ libAttach.disabled = false; toast('⚠ Not attached — '+(err.detail||err.message)); }
+      };
+    }
     caseFileAdd.onclick = ()=> caseFileInput.click();
     caseFileInput.onchange = async ()=>{
       const list = [...caseFileInput.files]; caseFileInput.value = '';
@@ -3658,7 +3977,7 @@ function wireEvents(){
           applySnapshot(resp.snapshot);
         }catch(err){ failed.push(`${f.name}: ${err.detail||err.message}`); }
       }
-      render();
+      keepEdits(); render();
       if(failed.length) toast('⚠ Not uploaded — '+failed.join(' '));
       else toast(`✓ ${list.length} file${list.length===1?'':'s'} added.`);
     };
@@ -3670,7 +3989,7 @@ function wireEvents(){
         el.disabled = true;
         try{ applySnapshot((await API.del(`/api/cases/${encodeURIComponent(row.id)}/files/${encodeURIComponent(f.id)}`)).snapshot); }
         catch(err){ el.disabled = false; toast('⚠ '+(err.detail||err.message)); return; }
-        render();
+        keepEdits(); render();
         toast(`✓ ${f.name} removed.`);
       };
     });
@@ -3723,12 +4042,15 @@ function refreshDbTableOnly(){
   // lightweight re-render preserving focus in search box
   const scrollY = window.scrollY;
   const app = document.getElementById('app');
+  const hadFocus = document.activeElement && document.activeElement.id==='dbSearch';
   app.innerHTML = renderDatabase();
   wireEvents();
-  document.getElementById('dbSearch').focus();
-  const v = document.getElementById('dbSearch').value;
-  document.getElementById('dbSearch').value=v;
-  document.getElementById('dbSearch').selectionStart = document.getElementById('dbSearch').selectionEnd = v.length;
+  if(hadFocus){
+    document.getElementById('dbSearch').focus();
+    const v = document.getElementById('dbSearch').value;
+    document.getElementById('dbSearch').value=v;
+    document.getElementById('dbSearch').selectionStart = document.getElementById('dbSearch').selectionEnd = v.length;
+  }
   window.scrollTo(0,scrollY);
 }
 

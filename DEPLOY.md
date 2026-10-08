@@ -75,6 +75,7 @@ docker compose up -d --build
 | 健康检查 | compose 已内置（`/api/health`，30s 一次）；`docker compose ps` 看 `(healthy)` |
 | 备份数据 | 演示文件存本地时连 `data/uploads/` 一起备份（见 Graph 接入 → 演示文件）。数据库：WAL 模式下直接 `cp` 数据库文件有风险，用在线备份（不用停服务）：`docker compose exec cockpit python -c "import sqlite3; s=sqlite3.connect('/app/data/cockpit.db'); d=sqlite3.connect('/app/data/cockpit-backup.db'); s.backup(d); d.close()"`，再把 `data/cockpit-backup.db` 拷走 |
 | 恢复/迁移服务器 | 停止目标服务，将上面的在线备份放到新的 `data/cockpit.db`，确认目录所有者与 `SC_UID` / `SC_GID` 一致，再启动；勿与旧库的 WAL/SHM 文件混放 |
+| 术语归一（Cluster / Commodity） | 从 Excel 导入的 Commodity 原文自动映射到三个固定 Cluster + 规范 Commodity 名（词表在 `backend/app/commodities.py`，v3 Phase-18）；服务启动时按词表版本自动重算一次，`python -m app.migrations normalize-clusters` 可先看映射表（`--apply` 写回）。认不出的原文保持原样，列在预览的 notes 里，补进词表后把 `VERSION` 加一即可 |
 | 导入历史 Excel | 最简单：Sourcing admin 登录首页，"Stored weekly files" 下拉框旁点 "Add all not yet imported" 再 Import（36 周历史文件随程序放在 `backend/app/history/`，`git pull` 就有）。命令行方式：把 "KW39, 23.09.2026" 这类周文件夹（含里面的 Agenda / MM .xlsx）拷到服务器，`python -m app.migrations import-excel <文件夹> --apply`（免安装方式用 `..\windows-portable\python\python.exe -m app.migrations …`，在 backend 目录下跑）；先不带 `--apply` 看预览。每周只放一份文件（优先 MM）。同一周再跑会替换上次导入的案例 |
 | 改端口 | `docker-compose.yml` 里 `"8062:8000"` 左边（对外端口）改成想要的端口，如 `"80:8000"`；右边 8000 是容器内监听，保持不动 |
 | 改提醒时区 | `.env` 里 `SC_TIMEZONE=Asia/Shanghai`（IANA 名）后 `docker compose up -d` |
@@ -183,6 +184,8 @@ SC_TEAMS_WEBHOOK_FORMAT=flow    # 工作流接收下方 to / subject / text 契�
 - **上线决定（2026-09-28）**：先按**本地存放**上线（不填 `SC_GRAPH_*` / `SC_SP_*`），文件落在 `data/uploads/`，随 `./data` 卷持久化；服务器磁盘按每条登记最多 10 × 100 MB 估算预留。SharePoint 凭据到位后填进 `.env` 重启即切换，之前存在本地的文件照样能下载，不用迁移。
 - **备份**：文件存在本地时，备份数据库之外还要带上 `data/uploads/`（如 `tar czf uploads-backup.tgz data/uploads`）。
 - **边界**：退回的登记、删除的案例，其文件不会自动从存放处删除；上传中途断网不续传，重新上传即可。
+- **首页上传区分两类（v3 Phase-20）**：Sourcing admin 首页的 "Upload weekly committee data" 卡片分 **1 · Meeting minutes**（周会 Agenda / MM Excel，导入成案例）与 **2 · Presentations**（每个案例的 PDF / PPT）。Presentations 下拉框列出文件库里的文件和自动匹配到的案例（依次按 SWAT / bundle 号、零件号、周文件夹 + 文件名开头的案例序号，与 SharePoint 周文件夹里 `1. 110000034978 SPR8 Tube_….pdf` 的命名一致），可单个或 "Attach all matched" 批量挂到各自案例；"Upload presentations…" 从本机传进文件库，自动放进匹配案例所在周的文件夹（如 `KW15, 08.04.2026/`），对不上的放 `Unsorted/`，再到案例页手工挂。
+- **服务器演示文件库（v3 Phase-18，领导要求"从服务器上选"）**：历史案例的演示文件逐案上传太慢，管理员把 PPT / PDF / Excel / Word 直接放进服务器目录 `SC_PRESENTATION_LIBRARY_DIR`（默认 `data/presentations/`，可按周建子文件夹如 `KW39, 23.09.2026/`；免安装部署就是 `D:\apps\sourcing-committee-cockpit\backend\data\presentations\`），Manager 及以上在案例页 "Sourcing Presentation Files" 卡片的下拉框里选一个点 **Attach from server**，文件按案例改名复制进 `data/uploads/`（配了 SharePoint 就进文档库），库里的原件不动、同一份可挂到多个案例。只列允许的类型，`~$` 临时文件与子目录外的路径一律忽略。
 
 ### SharePoint 建单
 

@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     sp_folder: str = "Sourcing Cockpit"
     # SharePoint 未配置时的本地存放目录（相对路径基于进程工作目录，Docker 里落在 ./data 卷）
     upload_dir: str = "./data/uploads"
+    # v3 Phase-18：演示文件库 —— 管理员把历史案例的 PPT / PDF 放进这个目录（可分子文件夹），
+    # 案例页的下拉框列出它们，经理选一个就挂到案例上（文件复制进 upload_dir / SharePoint，库里的原件不动）
+    presentation_library_dir: str = "./data/presentations"
 
     # Graph 发件的发件邮箱（需 Mail.Send 权限 + 应用有权以其发送）；SMTP 未配置时生效，
     # 两者皆空 = 邮件通道停用（提醒/审批通知记 skipped）

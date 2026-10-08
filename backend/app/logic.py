@@ -24,6 +24,41 @@ from .config import get_settings
 ACTION_TAGS = ["Cost", "Volume", "Timing", "Quality", "Capacity", "Commercial Terms", "Compliance / Documentation"]
 # 反馈 PPT 第 4 页：待办的固定分类（编辑页只提供这八个；ACTION_TAGS 是种子数据里的旧标签，旧任务上保留显示）
 ACTION_CATEGORIES = ["CQA", "Volume", "Technical", "Timing", "Supplier strategy", "BPG", "Saving", "Further VAVE"]
+# v3 Phase-18（领导：去掉手点分类，回到自由文本标签，由系统按关键词归类）。
+# 规则：任务 / 标签 / 备注里出现关键词即归入该分类；一个待办可落多类，顺序按 ACTION_CATEGORIES。
+# 匹配按词首：不超过 4 个字母的关键词要整词匹配（"kw"、"sop" 不能在别的词里误中），更长的按前缀（"sample" 命中 "samples"）。
+# 同一份规则随 bootstrap 下发给浏览器（task_rules），编辑页实时预览与服务端保存结果一致。
+CATEGORY_KEYWORDS: dict[str, list[str]] = {
+    "CQA": ["cqa", "quality", "ppap", "fai", "psw", "apqp", "imds", "sample", "audit", "defect", "capabilit",
+            "qualif", "inspect", "reject", "complaint", "8d", "ppm"],
+    "Volume": ["volume", "capacit", "quantit", "qty", "demand", "ramp", "forecast", "pcs", "eau"],
+    "Technical": ["technical", "drawing", "spec", "specification", "design", "toleranc", "validat", "material",
+                  "process", "feasib", "prototyp", "engineer", "test", "tests", "testing", "dv", "pv",
+                  "ecm", "ecr"],
+    "Timing": ["timing", "deadline", "schedul", "lead time", "leadtime", "sop", "delay", "milestone", "date",
+               "dates", "due", "week", "weeks", "kw", "urgent", "asap", "timeline", "eop"],
+    "Supplier strategy": ["strateg", "dual source", "second source", "localiz", "localis", "lfl", "local for local",
+                          "footprint", "nominat", "supplier base", "award", "phase out", "exit", "allocation"],
+    "BPG": ["bpg", "business plan"],
+    "Saving": ["saving", "cost", "costs", "price", "pricing", "reduc", "negotiat", "target price", "quote",
+               "quotation", "rfq", "payment", "tooling", "amortiz", "amortis", "lta"],
+    "Further VAVE": ["vave", "va/ve", "value analysis", "value engineering", "optimi", "idea", "ideas", "redesign"],
+}
+# 标签的同义词（含模板演示数据的旧标签）：标签整体等于左边的词就直接归类
+TAG_SYNONYMS: dict[str, str] = {
+    "cqa": "CQA", "quality": "CQA", "compliance / documentation": "CQA", "compliance": "CQA",
+    "volume": "Volume", "capacity": "Volume",
+    "technical": "Technical", "engineering": "Technical",
+    "timing": "Timing", "schedule": "Timing",
+    "supplier strategy": "Supplier strategy", "strategy": "Supplier strategy", "sourcing strategy": "Supplier strategy",
+    "bpg": "BPG",
+    "saving": "Saving", "savings": "Saving", "cost": "Saving", "commercial terms": "Saving", "commercial": "Saving",
+    "further vave": "Further VAVE", "vave": "Further VAVE", "va/ve": "Further VAVE",
+}
+# 待办负责人的职能（v3 Phase-18，领导：Add function for the task owner）。编辑页给建议、可自由输入；
+# Dashboard 的 "actions by function" 按这个字段分组
+FUNCTIONS = ["Purchasing", "Supplier Quality", "Engineering", "Logistics", "Program Management",
+             "Finance", "Sales", "Manufacturing", "Quality"]
 CONTACTS = {
     "W. Chen": "w.chen@zf.com", "M. Okafor": "m.okafor@zf.com", "L. Novak": "l.novak@zf.com",
     "R. Fischer": "r.fischer@zf.com", "S. Iyer": "s.iyer@zf.com", "J. Park": "j.park@zf.com",
@@ -157,9 +192,52 @@ def cutoff_moment_label(meeting_date: date, settings: dict) -> str:
     return f"{calendar.day_abbr[c.weekday()]}, {calendar.month_abbr[c.month]} {c.day}, {c.year} {c:%H:%M} ({c.tzinfo.key})"
 
 
-def wk(w: int) -> str:
-    # ISO 周（KW）标签，如 "2026-KW40"。年份随当前日期走（原硬编码 2026，跨年后生成的周标签全部错位）
-    return f"{na_now().year}-KW{w:02d}"
+def wk(w: int, year: int | None = None) -> str:
+    # ISO 周（KW）标签，如 "2026-KW40"。year 缺省随当前日期走（v3 Phase-18：导入了往年历史后，有记录的地方传 meetingYear）
+    return f"{int(year) if year else na_now().year}-KW{w:02d}"
+
+
+def case_year(record: dict) -> int | None:
+    """案例的会议年份：meetingYear，缺的按会议日期的 ISO 年算；都没有（模板演示数据）返回 None。"""
+    if record.get("meetingYear"):
+        return int(record["meetingYear"])
+    meeting = _meeting_date(record)
+    return meeting.isocalendar().year if meeting else None
+
+
+def week_label(record: dict) -> str:
+    return wk(int(record.get("weekNum") or 0), case_year(record))
+
+
+# ---- 待办分类（v3 Phase-18）：按关键词自动判定，编辑页只填自由文本标签 ----
+
+def _keyword_pattern(keyword: str) -> re.Pattern[str]:
+    escaped = re.escape(keyword)
+    # 短关键词整词匹配，但后面允许跟数字（"KW45"、"8D"）；长关键词按前缀
+    return re.compile(rf"(?<![a-z0-9]){escaped}(?![a-z])" if len(keyword) <= 4 else rf"(?<![a-z0-9]){escaped}")
+
+
+_CATEGORY_PATTERNS = [(category, [_keyword_pattern(k) for k in keywords]) for category, keywords in CATEGORY_KEYWORDS.items()]
+
+
+def categorize_task(task: dict) -> list[str]:
+    """任务 / 标签 / 备注 → 命中的固定分类（按 ACTION_CATEGORIES 顺序）；什么都没命中返回 []。"""
+    tags = [str(t).strip().lower() for t in task.get("tags") or [] if str(t).strip()]
+    text = " ".join([str(task.get("task") or ""), " ".join(tags), str(task.get("notes") or "")]).lower()
+    hits = {TAG_SYNONYMS[t] for t in tags if t in TAG_SYNONYMS}
+    hits.update(category for category, patterns in _CATEGORY_PATTERNS if any(p.search(text) for p in patterns))
+    return [c for c in ACTION_CATEGORIES if c in hits]
+
+
+def task_categories(task: dict) -> list[str]:
+    """保存时写入的 categories；旧记录没有就按同一规则现算。"""
+    saved = task.get("categories")
+    return list(saved) if isinstance(saved, list) else categorize_task(task)
+
+
+def task_rules() -> dict:
+    """随 bootstrap 下发给浏览器：编辑页实时预览用同一套关键词，和服务端保存结果一致。"""
+    return {"categories": ACTION_CATEGORIES, "keywords": CATEGORY_KEYWORDS, "tagSynonyms": TAG_SYNONYMS, "functions": FUNCTIONS}
 
 
 def iso_week_of_record(record: dict) -> int:
@@ -334,27 +412,39 @@ def convert_money(amount: Decimal, fx: Fx) -> Decimal:
     return fx.eur(amount).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
 
-def validate_commercial(b: dict, lifetime_spend_eur: int) -> str | None:
-    """商务字段门禁；返回 None 表示通过。文案与前端提交页一致。"""
+def commercial_problems(b: dict, lifetime_spend_eur: int | None) -> list[str]:
+    """商务字段门禁：返回全部问题（v3 Phase-19：一次列全）。文案与前端提交页一致。
+    lifetime_spend_eur 为 None（汇率缺失、折算不了）时跳过 BPG 门槛。"""
+    out: list[str] = []
     rows = b.get("partNumbers") or []
     if not rows or any(row.get(k) in (None, "") for row in rows for k in ROW_MONEY_KEYS):
-        return ("⚠ Please fill in Pc Price CQA, Supplier Price (landed), Tooling CQA and Supplier Tooling Cost "
-                "for every part number row before submitting (enter 0 if not applicable).")
+        out.append("⚠ Please fill in Pc Price CQA, Supplier Price (landed), Tooling CQA and Supplier Tooling Cost "
+                   "for every part number row before submitting (enter 0 if not applicable).")
     if not b.get("toolingPayment"):
-        return "⚠ Please select the Tooling Payment (Lumpsum or MPC) before submitting."
-    if lifetime_spend_eur > BPG_THRESHOLD_EUR:
+        out.append("⚠ Please select the Tooling Payment (Lumpsum, MPC or No tooling involved) before submitting.")
+    if lifetime_spend_eur is not None and lifetime_spend_eur > BPG_THRESHOLD_EUR:
         if not b.get("bpgAvailable"):
-            return "⚠ Lifetime Spend is above 3 Mio EUR — please answer whether a BPG is available."
-        if b.get("bpgAvailable") == "No":
-            return "⚠ This case cannot be registered: Lifetime Spend above 3 Mio EUR requires an available BPG."
+            out.append("⚠ Lifetime Spend is above 3 Mio EUR — please answer whether a BPG is available.")
+        elif b.get("bpgAvailable") == "No":
+            out.append("⚠ This case cannot be registered: Lifetime Spend above 3 Mio EUR requires an available BPG.")
     if b.get("decisionLevel") == "Level 2":
         if not b.get("fraAvailable"):
-            return "⚠ Please answer whether an FRA is available (required for Level 2 cases)."
-        if b.get("fraAvailable") == "No":
-            return "⚠ This case cannot be registered: a Level 2 case requires an available FRA."
+            out.append("⚠ Please answer whether an FRA is available (required for Level 2 cases).")
+        elif b.get("fraAvailable") == "No":
+            out.append("⚠ This case cannot be registered: a Level 2 case requires an available FRA.")
     if b.get("belowCQA") == "No" and not (b.get("cqaJustification") or "").strip():
-        return "⚠ Please provide a justification when the price is not below CQA."
-    return None
+        out.append("⚠ Please provide a justification when the price is not below CQA.")
+    return out
+
+
+def validate_commercial(b: dict, lifetime_spend_eur: int) -> str | None:
+    """兼容旧调用：全部问题换行连接；None 表示通过。"""
+    return "\n".join(commercial_problems(b, lifetime_spend_eur)) or None
+
+
+def commercial_state_problems(c: dict) -> list[str]:
+    msg = validate_commercial_state(c)
+    return msg.split("\n") if msg else []
 
 
 def validate_commercial_state(c: dict) -> str | None:
@@ -362,14 +452,15 @@ def validate_commercial_state(c: dict) -> str | None:
 
     与 validate_commercial 的区别：提交时四个价格与 Tooling Payment 必填，编辑时不强求，
     否则登记在商务字段之前的案例连决议都记录不了。"""
+    out: list[str] = []
     if (c.get("spendCurrency") == "EUR" and int(c.get("lifetimeSpend") or 0) > BPG_THRESHOLD_EUR
             and c.get("bpgAvailable") == "No"):
-        return "⚠ Lifetime Spend above 3 Mio EUR requires an available BPG — set BPG available to Yes, or leave it blank."
+        out.append("⚠ Lifetime Spend above 3 Mio EUR requires an available BPG — set BPG available to Yes, or leave it blank.")
     if c.get("decisionLevel") == "Level 2" and c.get("fraAvailable") == "No":
-        return "⚠ A Level 2 case requires an available FRA — set FRA available to Yes, or leave it blank."
+        out.append("⚠ A Level 2 case requires an available FRA — set FRA available to Yes, or leave it blank.")
     if c.get("belowCQA") == "No" and not (c.get("cqaJustification") or "").strip():
-        return "⚠ Please provide a justification when the price is not below CQA."
-    return None
+        out.append("⚠ Please provide a justification when the price is not below CQA.")
+    return "\n".join(out) or None
 
 
 def commercial_fields(b: dict, fx: Fx) -> dict:
@@ -603,37 +694,63 @@ def seed_presentation_links(cases: list[dict]) -> None:
 # ============================= 详情编辑：三条规则与合并 =============================
 
 
-def validate_case_edit(b: dict, *, imported: bool = False) -> str | None:
-    """三条规则，文案与模板 saveCaseBtn 完全一致；返回 None 表示通过。
+def case_edit_problems(b: dict, *, imported: bool = False, has_files: bool = False) -> list[str]:
+    """编辑保存的全部问题（v3 Phase-19：一次列全，不再修一条弹一条），文案与前端 saveCaseBtn 一致。
 
-    imported=True（v3 Phase-17，从周会 Excel 导入的历史案例）：Excel 里没有演示文稿链接，规则 1 不强求。"""
+    imported=True（v3 Phase-17，从周会 Excel 导入的历史案例）：Excel 里没有演示文稿链接，规则 1 不强求。
+    has_files=True（v3 Phase-19）：案例上已有上传 / 挂接的演示文件，等同于提供了演示文稿，规则 1 满足。"""
+    out: list[str] = []
     presentation = (b.get("sourcingPresentationLink") or "").strip()
     final_doc = (b.get("finalDocLink") or "").strip()
     follow_ups = b.get("followUps") or []
-    # 规则 1：记录任何非 Pending 决议必须有寻源演示文稿链接。
-    if b.get("meetingDecision") != "PENDING" and not presentation and not imported:
-        return ("A Sourcing Decision cannot be saved without the Sourcing Presentation Link. "
-                "Enter the link, then save the decision.")
+    # 规则 1：记录任何非 Pending 决议必须有寻源演示文稿（链接或上传的文件）。
+    if b.get("meetingDecision") != "PENDING" and not presentation and not imported and not has_files:
+        out.append("A Sourcing Decision cannot be saved without the Sourcing Presentation — "
+                   "enter the Sourcing Presentation Link, or add the presentation file under Sourcing Presentation Files.")
     if presentation and not valid_http_url(presentation):
-        return "The Sourcing Presentation Link must be a full URL (starting with http:// or https://)."
+        out.append("The Sourcing Presentation Link must be a full URL (starting with http:// or https://).")
     # 反馈 #2：区域至少一个（前端也拦，服务端是权威）。
     if not (b.get("region") or "").strip():
-        return "Select at least one Region."
+        out.append("Select at least one Region.")
     # 规则 0（模板称 Rule 0）：Pending 案例尚未评审，不能携带会后待办。
     if b.get("meetingDecision") == "PENDING" and follow_ups:
-        return ("A case that is Pending for Sourcing Committee Review cannot have follow-up tasks. "
-                "Record the Sourcing Decision first, or remove the tasks.")
-    # 反馈 #8：未关闭的待办必须有收件邮箱，提醒才发得出去（系统不再按姓名猜邮箱）。
+        out.append("A case that is Pending for Sourcing Committee Review cannot have follow-up tasks. "
+                   "Record the Sourcing Decision first, or remove the tasks.")
+    # 反馈 #8：未关闭的待办必须有收件邮箱，提醒才发得出去（系统不再按姓名猜测）。
     for i, task in enumerate(follow_ups, start=1):
         if task.get("status") != "Closed" and not (task.get("notifyEmail") or "").strip():
-            return f'Follow-up task {i}: enter a valid "Send reminder to" email, so the reminder reaches someone.'
+            out.append(f'Follow-up task {i}: enter a valid "Send reminder to" email, so the reminder reaches someone.')
     # 规则 2：全部待办 Closed（案例闭环）必须有最终文件链接。
     if rollup_action_status(follow_ups) == "Closed" and not final_doc:
-        return ("All follow-up actions are now Closed, which closes the case — "
-                "enter the Final PPT / Supporting Document Link first.")
+        out.append("All follow-up actions are now Closed, which closes the case — "
+                   "enter the Final PPT / Supporting Document Link first.")
     if final_doc and not valid_http_url(final_doc):
-        return "The Final PPT / Supporting Document Link must be a full URL (starting with http:// or https://)."
-    return None
+        out.append("The Final PPT / Supporting Document Link must be a full URL (starting with http:// or https://).")
+    return out
+
+
+def validate_case_edit(b: dict, *, imported: bool = False, has_files: bool = False) -> str | None:
+    """全部问题换行连接；None 表示通过。"""
+    return "\n".join(case_edit_problems(b, imported=imported, has_files=has_files)) or None
+
+
+def move_case_to_week(case: dict, day: date, cases: list[dict]) -> bool:
+    """v3 Phase-19（Sourcing admin 要求）：把案例改到 day 所在 ISO 周（存那周的周三），案例号排到那周最后。
+
+    返回是否真的换了周（同一周内改日期只对齐到周三，不动案例号）。"""
+    year, week, _ = day.isocalendar()
+    wednesday = date.fromisocalendar(year, week, 3)
+    moved = (case_year(case), int(case.get("weekNum") or 0)) != (year, week)
+    if moved:
+        same_week = [int(c.get("caseNumber") or 0) for c in cases
+                     if c.get("id") != case.get("id") and int(c.get("weekNum") or 0) == week and case_year(c) == year]
+        case["caseNumber"] = (max(same_week) + 1) if same_week else 1
+    case.update({
+        "weekNum": week, "meetingYear": year, "meetingDateISO": wednesday.isoformat(),
+        "meetingDateLabel": (f"{calendar.day_abbr[wednesday.weekday()]}, {calendar.month_abbr[wednesday.month]} "
+                             f"{wednesday.day}, {wednesday.year}"),
+    })
+    return moved
 
 
 def apply_case_edit(c: dict, b: dict, commercial: dict | None = None) -> None:
@@ -680,6 +797,7 @@ def apply_case_edit(c: dict, b: dict, commercial: dict | None = None) -> None:
         days_until = _days_until_due(today, task.get("dueDate"))
         if task.get("status") in ("Open", "Overdue") and days_until is not None:
             task["status"] = "Overdue" if days_until < 0 else "Open"
+        task["categories"] = categorize_task(task)  # v3 Phase-18：分类由关键词判定，标签是自由文本
     c.update({
         "partNumber": part_numbers[0].get("partNumber", ""),
         "partDescription": part_numbers[0].get("partDescription", ""),

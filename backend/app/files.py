@@ -13,10 +13,14 @@ v3 Phase-15（领导要求）：演示文件在系统里统一改名 `YYYY.MM.DD
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import mimetypes
 import os
 import re
 import secrets
+import shutil
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -104,7 +108,8 @@ def checked_name(raw: str, allowed: set[str] | None = None) -> str:
     allowed = allowed or ALLOWED_EXTENSIONS
     name = clean_name(raw, allowed)
     if name is None:
-        types = FEEDBACK_TYPES_TEXT if allowed is FEEDBACK_EXTENSIONS else TYPES_TEXT
+        types = (FEEDBACK_TYPES_TEXT if allowed is FEEDBACK_EXTENSIONS
+                 else LIBRARY_TYPES_TEXT if allowed is LIBRARY_EXTENSIONS else TYPES_TEXT)
         raise HTTPException(422, f"Only {types} files can be uploaded "
                                  f"({', '.join(sorted(allowed))}), with a name up to {MAX_NAME_LENGTH} characters.")
     return name
@@ -190,3 +195,89 @@ async def remove(record: dict) -> None:
             log.warning("sharepoint delete failed for %s: %s", record.get("id"), exc)
         return
     (upload_root() / record["id"]).unlink(missing_ok=True)
+
+
+# ============================= 演示文件库（v3 Phase-18） =============================
+# 领导：逐案上传历史案例的演示文件太慢，"better that Xin could allow us to select from the server"。
+# 管理员把文件放进 SC_PRESENTATION_LIBRARY_DIR（可按周建子文件夹），案例页的下拉框列出来，经理选一个即挂到案例。
+
+
+def library_root() -> Path:
+    return Path(get_settings().presentation_library_dir)
+
+
+# v3 Phase-20（用户 2026-10-08 同意）：演示文件库只收 PDF / PowerPoint。SharePoint 周文件夹整个复制进来时，
+# 旁边的周会 MM / Agenda Excel 与 .msg 邮件不会出现在 Presentations 下拉框里（周会 Excel 走 Meeting minutes 导入）
+LIBRARY_EXTENSIONS = {".pdf", ".ppt", ".pptx"}
+LIBRARY_TYPES_TEXT = "PDF or PowerPoint"
+
+
+def _library_candidate(path: Path) -> bool:
+    return path.is_file() and not path.name.startswith(("~$", ".")) and path.suffix.lower() in LIBRARY_EXTENSIONS
+
+
+def library_files() -> list[dict]:
+    """库里的文件（按子文件夹、文件名排序）：{path（相对路径）, name, folder, size, modified}。"""
+    root = library_root()
+    if not root.is_dir():
+        return []
+    out: list[dict] = []
+    for path in root.rglob("*"):
+        if not _library_candidate(path):
+            continue
+        rel = path.relative_to(root)
+        st = path.stat()
+        out.append({"path": rel.as_posix(), "name": path.name, "folder": "" if rel.parent == Path() else rel.parent.as_posix(),
+                    "size": st.st_size, "modified": logic.fmt_when(datetime.fromtimestamp(st.st_mtime, tz=logic.app_tz()))})
+    return sorted(out, key=lambda f: (f["folder"].lower(), f["name"].lower()))
+
+
+def library_path(rel: str) -> Path:
+    """相对路径 → 库里的文件；不在库目录里、类型不对、不存在都按 404（防目录穿越）。"""
+    root = library_root().resolve()
+    if ".." in Path(rel).parts or Path(rel).is_absolute():
+        raise HTTPException(404, "That file is not in the server library any more. Reload the list and try again.")
+    try:
+        path = (root / rel).resolve()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(404, "That file is not in the server library any more. Reload the list and try again.") from exc
+    if root not in path.parents or not _library_candidate(path):
+        raise HTTPException(404, "That file is not in the server library any more. Reload the list and try again.")
+    return path
+
+
+def place_in_library(tmp: Path, folder: str, name: str) -> str:
+    """v3 Phase-20：把收好的临时文件放进库的子文件夹，同名加 " (2)"、" (3)"…；返回库内相对路径。"""
+    target_dir = library_root() / folder
+    target_dir.mkdir(parents=True, exist_ok=True)
+    stem, ext = os.path.splitext(name)
+    target, n = target_dir / name, 1
+    while target.exists():
+        n += 1
+        target = target_dir / f"{stem} ({n}){ext}"
+    try:
+        shutil.move(str(tmp), target)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return target.relative_to(library_root()).as_posix()
+
+
+async def store_from_library(path: Path, record: dict, uploaded_by: str) -> dict:
+    """复制库文件到临时目录，再走与上传相同的 store（改名、本地或 SharePoint）；库里的原件不动。"""
+    size = path.stat().st_size
+    if size == 0:
+        raise HTTPException(422, "The file is empty.")
+    if size > MAX_BYTES:
+        raise HTTPException(413, "The file is larger than 100 MB. Please put a smaller version in the library "
+                                 "(for example, save the PowerPoint as PDF or compress the pictures).")
+    incoming = upload_root() / ".incoming"
+    incoming.mkdir(parents=True, exist_ok=True)
+    tmp = incoming / secrets.token_hex(16)
+    try:
+        await asyncio.to_thread(shutil.copyfile, path, tmp)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    return await store(tmp, bundle_file_name(record, path.name), size, content_type, record.get("swatId", ""), uploaded_by,
+                       original_name=path.name)

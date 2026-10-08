@@ -4,6 +4,8 @@
     python -m app.migrations usd-to-eur --apply    # 按 Dashboard 汇率卡片上的 USD 汇率与口径换算
     python -m app.migrations usd-to-eur --per-eur 1.17 --basis "OP 2025 plan rates 2026" --apply
     python -m app.migrations import-excel "D:\\weekly\\KW39, 23.09.2026" --apply   # v3 Phase-17：周会 Excel 批量导入
+    python -m app.migrations normalize-clusters            # v3 Phase-18：预览 Commodity 原文 → Cluster / Commodity 的归一表
+    python -m app.migrations normalize-clusters --apply    # 写回（服务启动时也会按词表版本自动做一次）
 
 Docker 部署：docker compose exec cockpit python -m app.migrations usd-to-eur --apply
 先备份 data/cockpit.db，并在没人操作时运行：服务进程里的写锁管不到这个独立进程。
@@ -17,7 +19,7 @@ import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from . import excel_import, logic, service
+from . import commodities, excel_import, logic, service
 
 MAX_PER_EUR = Decimal(100_000)  # 与 schemas.FxRate 的上限一致
 
@@ -33,6 +35,8 @@ def _parser() -> argparse.ArgumentParser:
     xl.add_argument("paths", nargs="+", help=".xlsx files or folders (a folder is scanned recursively)")
     xl.add_argument("--source-url", default="", help="SharePoint folder link stored as the presentation link of decided cases")
     xl.add_argument("--apply", action="store_true", help="write the cases (default: dry run, prints the report only)")
+    nc = commands.add_parser("normalize-clusters", help="Map the Commodity text of imported cases to the fixed Clusters.")
+    nc.add_argument("--apply", action="store_true", help="write the changes (default: dry run, prints the mapping table)")
     return parser
 
 
@@ -109,11 +113,47 @@ async def _import_excel(args, sessions) -> int:
     return 1 if failed else 0
 
 
+async def _normalize_clusters(args, sessions) -> int:
+    """归一表：原文 → Cluster / Commodity × 条数；认不出的单独列出，由领导补词表（app/commodities.py）。"""
+    from collections import Counter
+    from copy import deepcopy
+
+    async with sessions() as session:
+        state = await service.load_state(session)
+        preview = deepcopy(state["cases"])
+        changed = service.normalize_commodities(preview)
+        table: Counter = Counter()
+        unknown: Counter = Counter()
+        for c in preview:
+            raw = c.get("commodityRaw") or ""
+            if not raw:
+                continue
+            result = commodities.classify(raw)
+            table[(raw, c["cluster"], c.get("commodity") or "")] += 1
+            if not result["known"]:
+                unknown[raw] += 1
+        for (raw, cluster, commodity), n in sorted(table.items(), key=lambda kv: (kv[0][1], kv[0][2], -kv[1])):
+            print(f"{n:4d}  {raw[:48]:48} -> {cluster[:26]:26} | {commodity}")
+        if unknown:
+            print("not in the vocabulary (kept as written): " + ", ".join(f"{k} ({n})" for k, n in unknown.most_common()))
+        print(f"{'applied' if args.apply else 'dry run'}: {len(changed)} of {len(preview)} case rows "
+              f"{'updated' if args.apply else 'would change'} (vocabulary version {commodities.VERSION}).")
+        if not args.apply:
+            return 0
+        for c in changed:
+            await service.upsert_case(session, c)
+        await service._set_kv(session, service.COMMODITY_KEY, {"version": commodities.VERSION})
+        await session.commit()
+    return 0
+
+
 async def run(argv: list[str], sessions) -> int:
     """返回进程退出码：0 成功，2 参数或汇率有误。sessions 是 async_sessionmaker（测试传隔离库）。"""
     args = _parser().parse_args(argv)
     if args.command == "import-excel":
         return await _import_excel(args, sessions)
+    if args.command == "normalize-clusters":
+        return await _normalize_clusters(args, sessions)
     async with sessions() as session:
         fx_settings = (await service.load_state(session))["fx"]
         per_eur = _per_eur(args.per_eur or fx_settings["perEur"].get("USD"))

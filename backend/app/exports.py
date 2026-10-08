@@ -126,7 +126,7 @@ def columns(kind: str) -> list[Col]:
     row_or_case = lambda key: (lambda c, r: r.get(key) or c.get(key) or "")
     cols = [
         Col("#", "case", lambda c, r: c.get("caseNumber")),
-        Col("KW", "case", lambda c, r: logic.wk(int(c.get("weekNum") or 0))),
+        Col("KW", "case", lambda c, r: logic.week_label(c)),
         Col("Meeting Date", "case", lambda c, r: _date(c.get("meetingDateISO")) or c.get("meetingDateLabel") or "", fmt=DATE_FMT),
         Col("Region", "case", lambda c, r: _regions(c)),
         Col("Type", "row", row_or_case("sourcingType")),
@@ -273,8 +273,9 @@ def build_minutes(cases: list[dict], week_label: str, when: datetime | None = No
     return build("minutes", cases, week_label, when)
 
 
-ACTION_HEADERS = ["#", "SWAT Case Number", "Part Description", "Sourcing Decision", "Task", "Category", "Owner",
-                  "Due Date", "Status", "Reminder to", "CC", "Notes"]
+# v3 Phase-18：Category 由关键词判定（Tags 是自由文本），Function 是负责人职能
+ACTION_HEADERS = ["#", "SWAT Case Number", "Part Description", "Sourcing Decision", "Task", "Category", "Tags", "Owner",
+                  "Function", "Due Date", "Status", "Reminder to", "CC", "Notes"]
 
 
 def _actions_sheet(ws, cases: list[dict], label: str) -> None:
@@ -290,7 +291,8 @@ def _actions_sheet(ws, cases: list[dict], label: str) -> None:
             n += 1
             recipient = logic.task_recipient(t)
             values = [n, c.get("swatId", ""), c.get("partDescription", ""), _decision(c), t.get("task", ""),
-                      ", ".join(t.get("tags") or []), t.get("responsible", ""), _date(t.get("dueDate")) or t.get("dueDate", ""),
+                      ", ".join(logic.task_categories(t)), ", ".join(t.get("tags") or []), t.get("responsible", ""),
+                      t.get("ownerFunction") or "", _date(t.get("dueDate")) or t.get("dueDate", ""),
                       t.get("status") or "", recipient["email"], recipient["cc"], t.get("notes") or ""]
             for i, value in enumerate(values, start=1):
                 _write_text_or_number(ws, r, i, value, DATE_FMT if ACTION_HEADERS[i - 1] == "Due Date" else None)

@@ -10,7 +10,11 @@ const require = createRequire(import.meta.url);
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const html = await readFile(new URL('../app/static/index.html', import.meta.url), 'utf8');
 const browser = await chromium.launch({headless:true});
-const empty = {cases:[], submissions:[], autoLog:[], serverTimezone:'America/New_York'};
+// v3 Phase-18：待办分类规则随 bootstrap 下发（这里是服务端 logic.task_rules 的子集，足够覆盖用例）
+const TASK_RULES = {categories:['CQA','Volume','Technical','Timing','Supplier strategy','BPG','Saving','Further VAVE'],
+  keywords:{CQA:['quality','sample','ppap'], Volume:['volume'], Technical:['drawing','test'], Timing:['timing','kw','deadline'], 'Supplier strategy':['strateg'], BPG:['bpg'], Saving:['saving','cost','costs','price'], 'Further VAVE':['vave']},
+  tagSynonyms:{cost:'Saving', quality:'CQA', timing:'Timing', vave:'Further VAVE'}, functions:['Purchasing','Supplier Quality','Engineering']};
+const empty = {cases:[], submissions:[], autoLog:[], serverTimezone:'America/New_York', taskRules:TASK_RULES};
 // v3 Phase-6 个人账号：bootstrap 的 currentUser 决定页面权限（服务端另行强制）
 const USER = {email:'test.user@zf.com', name:'Test owner', role:'user', roleLabel:'User', disabled:false, mustChangePassword:false, createdAt:'Sep 24, 9:00 AM', lastLoginAt:'Sep 24, 9:05 AM'};
 const MANAGER = {...USER, email:'npi@zf.com', name:'NPI Person', role:'npi_manager', roleLabel:'Manager'};
@@ -494,7 +498,7 @@ try{
     await context.close();
   });
 
-  await test('Follow-up categories are a fixed set of eight, legacy tags stay visible, and the filter lists every category', async()=>{
+  await test('Follow-up tags are free text, categories derive from keywords, and the owner gets a function', async()=>{
     let saved;
     const {page, context} = await fixture({api:async(route,path)=>{
       if(!path.startsWith('/api/cases/')) return false;
@@ -505,26 +509,45 @@ try{
     await seed(page,{meetingDecision:'APPROVED', sourcingPresentationLink:'https://example.com/deck.pptx', actionStatus:'Open',
       followUps:[{id:'FU-T1', task:'Negotiate consignment', responsible:'SP ABC', dueDate:'2027-02-18', notes:'', status:'Open', tags:['Cost'], notify:'SP ABC', notifyEmail:'sp@example.com', cc:''}]});
     await page.evaluate(()=>{ state.isAdmin=true; goToDetail('SWAT-TEST'); });
-    assert.ok((await page.locator('#app').innerText()).includes('Categories\nCost'));
+    let text = await page.locator('#app').innerText();
+    assert.ok(text.includes('Categories (auto)\nSaving') && text.includes('Tags\nCost'), text);  // 旧标签 Cost 按同义词归到 Saving
     await page.locator('#editCaseBtn').click();
-    const labels = await page.locator('#editFuCat_0 label').allTextContents();
-    assert.deepEqual(labels.map(l=>l.trim()), ['CQA','Volume','Technical','Timing','Supplier strategy','BPG','Saving','Further VAVE','Cost (legacy)']);
-    assert.ok(await page.locator('#editFuCat_0 input[value="Cost"]').isChecked());
-    await page.locator('#editFuCat_0 input[value="Saving"]').check();
-    await page.locator('#editFuCat_0 input[value="Further VAVE"]').check();
+    assert.equal(await page.locator('#editFuCat_0').count(), 0);  // 没有勾选框了
+    assert.equal(await page.locator('#editFuTags_0').inputValue(), 'Cost');
+    assert.ok((await page.locator('#editFuAuto_0').innerText()).includes('Saving'));
+    await page.locator('#editFuTask_0').fill('Check PPAP samples for KW45');
+    await page.locator('#editFuTags_0').fill('Cost, VAVE');
+    const auto = await page.locator('#editFuAuto_0 .cat-tag').allTextContents();
+    assert.deepEqual(auto, ['CQA','Timing','Saving','Further VAVE']);  // 边输入边预览，顺序按固定分类
+    await page.locator('#editFuFunc_0').fill('Purchasing');
+    assert.ok((await page.locator('#functionOptions option').allTextContents()).length>=3 || await page.locator('#functionOptions option').count()>=3);
     await page.locator('#saveCaseBtn').click();
     await page.waitForFunction(()=>!state.detailEditMode);
-    assert.deepEqual(saved.followUps[0].tags, ['Saving','Further VAVE','Cost']);
-    // Follow-ups 页：八个分类始终在筛选里，旧标签跟在后面
+    assert.deepEqual(saved.followUps[0].tags, ['Cost','VAVE']);
+    assert.equal(saved.followUps[0].ownerFunction, 'Purchasing');
+    assert.equal(saved.followUps[0].task, 'Check PPAP samples for KW45');
+    // Follow-ups 页：八个分类 + Uncategorized；按自动分类筛选；职能列与筛选
     await seed(page,{meetingDecision:'APPROVED', actionStatus:'Open',
-      followUps:[{id:'FU-T1', task:'Negotiate consignment', responsible:'SP ABC', dueDate:'2027-02-18', status:'Open', tags:['Cost'], notifyEmail:'sp@example.com'}]});
+      followUps:[{id:'FU-T1', task:'Negotiate consignment', responsible:'SP ABC', ownerFunction:'Purchasing', dueDate:'2027-02-18', status:'Open', tags:['Cost'], notifyEmail:'sp@example.com'},
+                 {id:'FU-T2', task:'Follow up', responsible:'Q Lee', dueDate:'2027-02-18', status:'Closed', tags:[], notifyEmail:'q@example.com'}]});
     await page.locator('[data-nav="followups"]').click();
     const options = await page.locator('#fFollowupTag option').allTextContents();
-    assert.deepEqual(options, ['Category: All','CQA','Volume','Technical','Timing','Supplier strategy','BPG','Saving','Further VAVE','Cost']);
-    await page.locator('#fFollowupTag').selectOption('Saving');
+    assert.deepEqual(options, ['Category: All','CQA','Volume','Technical','Timing','Supplier strategy','BPG','Saving','Further VAVE','Uncategorized']);
+    text = await page.locator('#app').innerText();
+    assert.ok(text.includes('1 open task') && text.includes('SP ABC\nPurchasing'), text);
+    await page.locator('#fFollowupTag').selectOption('CQA');
     assert.ok((await page.locator('#app').innerText()).includes('0 open tasks'));
-    await page.locator('#fFollowupTag').selectOption('Cost');
+    await page.locator('#fFollowupTag').selectOption('Saving');
     assert.ok((await page.locator('#app').innerText()).includes('1 open task'));
+    await page.locator('#fFollowupTag').selectOption('');
+    await page.locator('#fFollowupFunction').selectOption('Purchasing');
+    assert.ok((await page.locator('#app').innerText()).includes('1 open task'));
+    await page.locator('#fFollowupStatus').selectOption('Closed');
+    text = await page.locator('#app').innerText();
+    assert.ok(text.includes('0 tasks'), text);  // 职能筛选仍是 Purchasing，Closed 的那条属于 Q Lee
+    await page.locator('#fFollowupFunction').selectOption('');
+    text = await page.locator('#app').innerText();
+    assert.ok(text.includes('1 task') && text.includes('Uncategorized'), text);
     await context.close();
   });
 
@@ -1231,6 +1254,354 @@ try{
       await context.close();
     });
   }
+  // ===== v3 Phase-18：领导第三轮反馈 =====
+  await test('Week labels, week filters and sorting are year-aware; the home page has no example chips', async()=>{
+    const {page, context} = await fixture();
+    assert.equal(await page.locator('.qs-chip').count(), 0);
+    await page.evaluate(()=>{
+      const base = {partNumber:'1', partDescription:'P', recommendedSupplier:'S', presenter:'O', cluster:'Metal', meetingDecision:'APPROVED'};
+      applySnapshot({cases:[
+        mkCase({...base, id:'C-1', swatId:'SWAT-A', weekNum:51, caseNumber:1, meetingYear:2025, meetingDateISO:'2025-12-17', meetingDateLabel:'Wed, Dec 17, 2025', recommendedSupplier:'Zeta', peakYearSpend:300}),
+        mkCase({...base, id:'C-2', swatId:'SWAT-B', weekNum:51, caseNumber:2, meetingYear:2026, meetingDateISO:'2026-12-16', meetingDateLabel:'Wed, Dec 16, 2026', recommendedSupplier:'Alpha', peakYearSpend:100, commodity:'CA Casting', commodityRaw:'CA04'}),
+        mkCase({...base, id:'C-3', swatId:'SWAT-C', weekNum:40, caseNumber:3, meetingYear:2026, meetingDateISO:'2026-09-30', meetingDateLabel:'Wed, Sep 30, 2026', recommendedSupplier:'Mid', peakYearSpend:200}),
+      ]});
+      state.view='database'; render();
+    });
+    const col = async n => page.evaluate(n=>[...document.querySelectorAll('tbody tr')].map(r=>r.children[n].textContent.trim()), n);
+    assert.deepEqual(await col(0), ['2026-KW51','2026-KW40','2025-KW51']);  // 默认按年+周倒序，2025 的 KW51 不再冒充 2026
+    assert.deepEqual(await page.locator('#fYear option').allTextContents(), ['Year: All','2025','2026']);
+    assert.deepEqual(await page.locator('#fWeekFrom option').allTextContents(), ['From week','2025-KW51','2026-KW40','2026-KW51']);
+    await page.locator('#fYear').selectOption('2025');
+    assert.deepEqual(await col(0), ['2025-KW51']);
+    assert.deepEqual(await page.locator('#fWeekFrom option').allTextContents(), ['From week','2025-KW51']);
+    await page.locator('#fYear').selectOption('');
+    await page.locator('#fWeekFrom').selectOption('202640');
+    await page.locator('#fWeekTo').selectOption('202640');
+    assert.deepEqual(await col(0), ['2026-KW40']);
+    await page.locator('#clearFilters').click();
+    // 表头排序：供应商升序 → 再点降序；金额；周
+    await page.locator('th[data-sort="supplier"]').click();
+    assert.deepEqual(await col(7), ['Alpha','Mid','Zeta']);
+    await page.locator('th[data-sort="supplier"]').click();
+    assert.deepEqual(await col(7), ['Zeta','Mid','Alpha']);
+    await page.locator('th[data-sort="spend"]').click();
+    assert.deepEqual(await col(3), ['SWAT-A','SWAT-C','SWAT-B']);  // 金额默认降序
+    await page.locator('th[data-sort="week"]').click();
+    assert.deepEqual(await col(0), ['2026-KW51','2026-KW40','2025-KW51']);
+    await page.locator('th[data-sort="week"]').click();
+    assert.deepEqual(await col(0), ['2025-KW51','2026-KW40','2026-KW51']);
+    assert.ok((await page.locator('th[data-sort="week"]').innerText()).includes('▲'));
+    // Commodity 筛选与单元格副标题；搜索命中周标签
+    assert.deepEqual(await page.locator('#fCommodity option').allTextContents(), ['Commodity: All','CA Casting']);
+    await page.locator('#fCommodity').selectOption('CA Casting');
+    assert.deepEqual(await col(3), ['SWAT-B']);
+    assert.ok((await col(6))[0].includes('CA Casting'));
+    await page.locator('#clearFilters').click();
+    await page.locator('#dbSearch').fill('2025-KW51');
+    assert.deepEqual(await col(3), ['SWAT-A']);
+    await page.locator('#dbSearch').fill('');
+    // 详情页与时间线也带年份；Commodity 显示原文
+    await page.locator('tr[data-swat="SWAT-B"]').click();
+    const text = await page.locator('#app').innerText();
+    assert.ok(text.includes('2026-KW51 · Wed, Dec 16, 2026') && text.includes('Commodity\nCA Casting (Excel: CA04)'), text);
+    await context.close();
+  });
+
+  await test('Dashboard selects a year, counts real follow-up actions and charts them by function and owner', async()=>{
+    const requested = [];
+    const {page, context} = await fixture({api:async(route,path)=>{
+      if(!path.startsWith('/api/exports/')) return false;
+      requested.push(path+'?'+new URL(route.request().url()).searchParams.toString());
+      await route.fulfill({status:200, headers:{'content-disposition':'attachment; filename="x.xlsx"'}, contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body:Buffer.from('xlsx!!!')});
+      return true;
+    }});
+    await page.evaluate(()=>{ window.__saved = []; saveBlobFile = async (blob, filename)=>{ window.__saved.push(filename); }; });
+    await page.evaluate(()=>{
+      const base = {partNumber:'1', partDescription:'P', recommendedSupplier:'S', presenter:'O', cluster:'Metal', meetingDecision:'APPROVED'};
+      const task = (id, status, fn, owner) => ({id, task:'t '+id, status, ownerFunction:fn, responsible:owner, dueDate:'2027-01-01', tags:[], notifyEmail:'x@example.com'});
+      applySnapshot({cases:[
+        mkCase({...base, id:'C-1', swatId:'SWAT-A', weekNum:40, caseNumber:1, meetingYear:2026, meetingDateISO:'2026-09-30', actionStatus:'Overdue',
+          followUps:[task('T1','Open','Purchasing','Ann'), task('T2','Overdue','Supplier Quality','Bob'), task('T3','Closed','Purchasing','Ann')]}),
+        mkCase({...base, id:'C-2', swatId:'SWAT-B', weekNum:41, caseNumber:1, meetingYear:2026, meetingDateISO:'2026-10-07', actionStatus:null, followUps:[]}),  // 已决议、没有待办：Closed 必须是 0
+        mkCase({...base, id:'C-3', swatId:'SWAT-C', weekNum:51, caseNumber:1, meetingYear:2025, meetingDateISO:'2025-12-17', actionStatus:'Open',
+          followUps:[task('T4','Open','','Cid')]}),
+        mkCase({...base, id:'C-4', swatId:'SWAT-D', weekNum:41, caseNumber:2, meetingYear:2026, meetingDateISO:'2026-10-07', meetingDecision:'PENDING', actionStatus:null}),
+      ]});
+      state.view='dashboard'; render();
+    });
+    const tiles = async ()=> page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('.tile')].map(t=>[t.dataset.kpi, Number(t.querySelector('.num').textContent)])));
+    const bars = async title => page.evaluate(title=>{
+      const card=[...document.querySelectorAll('.breakdown-card')].find(el=>el.querySelector('h4').textContent===title);
+      return [...card.querySelectorAll('.bar-row')].map(r=>r.querySelector('.blabel').textContent+'='+r.querySelector('.bar-num').textContent);
+    }, title);
+    assert.deepEqual(await page.locator('#dashYearSelect option').allTextContents(), ['2025','2026']);
+    assert.equal(await page.locator('#dashYearSelect').inputValue(), '2026');
+    let t = await tiles();
+    assert.deepEqual([t.approved, t.pending, t.open, t.overdue, t.closedaction], [2, 1, 1, 1, 1]);
+    let text = await page.locator('#app').innerText();
+    assert.ok(text.includes('Total Cases\n3') && text.toLowerCase().includes('action status · 2026') && !text.includes('YTD'), text);
+    assert.deepEqual(await bars('Open actions by function'), ['Purchasing=1']);
+    assert.deepEqual(await bars('Overdue actions by function'), ['Supplier Quality=1']);
+    assert.deepEqual(await bars('Open actions by owner'), ['Ann=1']);
+    assert.deepEqual(await bars('Overdue actions by owner'), ['Bob=1']);
+    assert.deepEqual(await bars('Cases by Cluster · 2026'), ['Metal=3']);
+    await page.locator('#dashYearSelect').selectOption('2025');
+    t = await tiles();
+    assert.deepEqual([t.approved, t.open, t.overdue, t.closedaction], [1, 1, 0, 0]);
+    assert.deepEqual(await bars('Open actions by function'), ['Function not set=1']);
+    assert.ok((await page.locator('#app').innerText()).includes('No overdue actions in this scope.'));
+    // 周视图只列所选年份的周；导出带年份
+    await page.locator('[data-period="week"]').click();
+    assert.deepEqual(await page.locator('#dashWeekSelect option').allTextContents(), ['2025-KW51 — Dec 17, 2025']);
+    await page.locator('#dashAgendaBtn').click();
+    await page.waitForFunction(()=>window.__saved.length===1);
+    assert.deepEqual(requested, ['/api/exports/agenda?week=51&year=2025']);
+    // 点 Closed 格子 → Follow-ups 页按 Closed + 年份
+    await page.locator('[data-period="year"]').click();
+    await page.locator('#dashYearSelect').selectOption('2026');
+    await page.locator('.tile[data-kpi="closedaction"]').click();
+    assert.equal(await page.evaluate(()=>state.view), 'followups');
+    assert.equal(await page.locator('#fFollowupStatus').inputValue(), 'Closed');
+    assert.equal(await page.locator('#fFollowupYear').inputValue(), '2026');
+    text = await page.locator('#app').innerText();
+    assert.ok(text.includes('1 task') && text.includes('t T3'), text);
+    await context.close();
+  });
+
+  await test('Case page lists uploaded files on one line each and attaches presentations from the server library', async()=>{
+    const posted = [];
+    let seeded;
+    const {page, context} = await fixture({user:'manager', api:async(route,path)=>{
+      if(path==='/api/presentation-library'){
+        await route.fulfill({json:{ok:true, folder:'D:\\apps\\cockpit\\data\\presentations', files:[  // 服务端按文件夹、文件名排好序（根目录在前）
+          {path:'Final report.pdf', name:'Final report.pdf', folder:'', size:2048, modified:'Oct 1, 3:05 PM'},
+          {path:'KW39, 23.09.2026/MBEAL deck.pptx', name:'MBEAL deck.pptx', folder:'KW39, 23.09.2026', size:338000, modified:'Oct 1, 3:05 PM'}]}});
+        return true;
+      }
+      if(path.endsWith('/files/from-library')){
+        posted.push({path, body:route.request().postDataJSON(), token:route.request().headers()['x-session-token']});
+        const file = {id:'F-L1', name:'2026.10.08 Test project Test part 1234, Test supplier.pptx', originalName:'MBEAL deck.pptx', size:338000, uploadedBy:'NPI Person', uploadedAt:'Oct 8, 10:00 AM', store:'local'};
+        const c = {...seeded, files:[file]};
+        await route.fulfill({json:{ok:true, file, case:c, snapshot:{...empty, cases:[c]}}});
+        return true;
+      }
+      return false;
+    }});
+    await page.evaluate(()=>{
+      const c = mkCase({id:'C-TEST', swatId:'SWAT-TEST', partNumber:'1234', partDescription:'Test part', weekNum:40, caseNumber:1, project:'Test project', recommendedSupplier:'Test supplier', presenter:'O', region:'AP', cluster:'Metal', meetingDecision:'APPROVED',
+        files:[{id:'F-0', name:'2026.10.01 GM C1UC_UL2 APT Mount Bracket R003W668A, Proto Gage Tool & Die, Inc.pdf', originalName:'20260410 C1UCUL2 110000034383 Bundle Report - 10.04.2026 (4).pdf', size:346112, uploadedBy:'Ewa', uploadedAt:'Oct 1, 3:05 PM', store:'local'}]});
+      window.__case = c;
+      applySnapshot({cases:[c]}); goToDetail('SWAT-TEST');
+    });
+    seeded = await page.evaluate(()=>JSON.parse(JSON.stringify(window.__case)));
+    await page.setViewportSize({width:1100, height:900});
+    // 文件名一行显示（领导截图里是一字一行）：名称宽度接近卡片宽度，高度只有一两行
+    const box = await page.locator('.file-list .fname').boundingBox();
+    const li = await page.locator('.file-list li').boundingBox();
+    assert.ok(box.width > li.width*0.6 && box.height < 60, JSON.stringify({box, li}));
+    assert.ok((await page.locator('.file-list .fmeta').innerText()).includes('uploaded as 20260410'));
+    // 服务器文件库：下拉框按文件夹分组，选中后 POST 相对路径
+    await page.waitForFunction(()=>document.querySelectorAll('#caseLibSelect option').length>1);
+    assert.deepEqual(await page.locator('#caseLibSelect option').allTextContents(), ['Select a file from the server library…','Final report.pdf (2 KB)','MBEAL deck.pptx (330.1 KB)'.replace('330.1 KB','330 KB')]);
+    assert.deepEqual(await page.locator('#caseLibSelect optgroup').evaluateAll(els=>els.map(e=>e.label)), ['KW39, 23.09.2026']);
+    assert.ok((await page.locator('#app').innerText()).includes('D:\\apps\\cockpit\\data\\presentations'));
+    await page.locator('#caseLibSelect').selectOption('KW39, 23.09.2026/MBEAL deck.pptx');
+    await page.locator('#caseLibAttach').click();
+    await page.waitForFunction(()=>document.querySelectorAll('.file-list li').length===1 && document.body.innerText.includes('attached as'));
+    assert.deepEqual(posted, [{path:'/api/cases/C-TEST/files/from-library', body:{path:'KW39, 23.09.2026/MBEAL deck.pptx'}, token:'tok'}]);
+    assert.ok((await page.locator('.file-list .fmeta').innerText()).includes('uploaded as MBEAL deck.pptx'));
+    // 普通用户看不到文件库
+    const other = await fixture({user:'user'});
+    await other.page.evaluate(c=>{ applySnapshot({cases:[c]}); goToDetail('SWAT-TEST'); }, seeded);
+    assert.equal(await other.page.locator('#caseLibSelect').count(), 0);
+    await other.context.close();
+    await context.close();
+  });
+
+  // ===== v3 Phase-19：同事试用反馈 =====
+  await test('Submit lists every missing field at once and offers "No tooling involved"', async()=>{
+    let submitted;
+    const {page, context} = await fixture({user:'user', api:async(route,path)=>{
+      if(path!=='/api/submissions') return false;
+      submitted = route.request().postDataJSON();
+      await route.fulfill({json:{subId:'SUB-TEST',snapshot:empty}});
+      return true;
+    }});
+    await page.locator('[data-nav="submit"]').click();
+    assert.deepEqual(await page.locator('#fToolingPayment option').allTextContents(), ['Select...','Lumpsum','MPC','No tooling involved']);
+    await page.locator('#submitCaseBtn').click();
+    const items = await page.locator('#submitBanner .problem-list li').allTextContents();
+    assert.ok(items.length >= 8, items.join(' | '));
+    for(const needle of ['Part Number and Part Description','Project, Sourcing Type','Region','bundle Peak Year Spend','SWAT Case #','Family Case','Engineering Change','Pc Price CQA','Tooling Payment (Lumpsum, MPC or No tooling involved)'])
+      assert.ok(items.some(t=>t.includes(needle)), needle+' missing in: '+items.join(' | '));
+    assert.ok((await page.locator('#submitBanner').innerText()).startsWith(`⚠ Please fix these ${items.length} points before submitting:`));
+    assert.equal(submitted, undefined);
+    // 补齐后只剩一条：原样一句话显示
+    for(const [id,value] of Object.entries({fExistingSwat:'SWAT-1000',pnSupplier_0:'S',pnProject_0:'P',pnPartNumber_0:'1234',pnPartDescription_0:'Part',fBundlePeak:'10',fBundleLife:'20'}))
+      await page.locator('#'+id).fill(value);
+    await page.locator('#qFamily').selectOption('No');
+    await page.locator('#qECM').selectOption('No');
+    await fillCommercial(page);
+    await page.locator('#fToolingPayment').selectOption('No tooling involved');
+    await page.locator('#submitCaseBtn').click();
+    assert.equal(await page.locator('#submitBanner').innerText(), '⚠ Please select at least one Region before submitting.');
+    await page.locator('#fRegionIn input[value="EU"]').check();
+    await page.locator('#submitCaseBtn').click();
+    await page.waitForFunction(()=>document.getElementById('submitBanner')?.textContent.includes('SUB-TEST'));
+    assert.equal(submitted.toolingPayment, 'No tooling involved');
+    await context.close();
+  });
+
+  await test('Server-side problems arrive as one list in the submit banner', async()=>{
+    const {page, context} = await fixture({user:'user', api:async(route,path)=>{
+      if(path!=='/api/submissions') return false;
+      await route.fulfill({status:422, json:{detail:'⚠ First server problem.\n⚠ Second server problem.'}});
+      return true;
+    }});
+    await page.locator('[data-nav="submit"]').click();
+    for(const [id,value] of Object.entries({fExistingSwat:'SWAT-1000',pnSupplier_0:'S',pnProject_0:'P',pnPartNumber_0:'1234',pnPartDescription_0:'Part',fBundlePeak:'10',fBundleLife:'20'}))
+      await page.locator('#'+id).fill(value);
+    await page.locator('#fRegionIn input[value="EU"]').check();
+    await page.locator('#qFamily').selectOption('No');
+    await page.locator('#qECM').selectOption('No');
+    await fillCommercial(page);
+    await page.locator('#submitCaseBtn').click();
+    await page.waitForFunction(()=>document.querySelectorAll('#submitBanner .problem-list li').length===2);
+    assert.deepEqual(await page.locator('#submitBanner .problem-list li').allTextContents(), ['First server problem.','Second server problem.']);
+    await context.close();
+  });
+
+  await test('Case edit lists every problem, accepts an uploaded file as the presentation, keeps edits across uploads, and lets the admin move the week', async()=>{
+    let saved, uploads = 0;
+    let current;
+    const {page, context} = await fixture({user:'admin', api:async(route,path)=>{
+      if(path==='/api/presentation-library'){ await route.fulfill({json:{ok:true, folder:'', files:[]}}); return true; }
+      if(path==='/api/cases/C-TEST/files'){
+        uploads++;
+        current = {...current, files:[{id:'F-1', name:'2026.10.08 deck.pptx', originalName:'deck.pptx', size:2048, uploadedBy:'Sourcing Admin', uploadedAt:'Oct 8, 9:00 AM', store:'local'}]};
+        await route.fulfill({json:{ok:true, file:current.files[0], case:current, snapshot:{...empty, cases:[current]}}});
+        return true;
+      }
+      if(path==='/api/cases/C-TEST' && route.request().method()==='PUT'){
+        saved = route.request().postDataJSON();
+        const moved = {...current, weekNum:41, meetingYear:2026, meetingDateISO:'2026-10-07', meetingDateLabel:'Wed, Oct 7, 2026', meetingDecision:saved.meetingDecision, followUps:saved.followUps};
+        await route.fulfill({json:{ok:true, case:moved, snapshot:{...empty, cases:[moved]}}});
+        return true;
+      }
+      return false;
+    }});
+    current = await seed(page, {meetingYear:2026, meetingDateISO:'2026-09-30', meetingDateLabel:'Wed, Sep 30, 2026', files:[]});
+    await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    await page.locator('#editCaseBtn').click();
+    // 改周：只有 Sourcing admin 有这个输入框，预览新周
+    assert.equal(await page.locator('#editMeetingDate').inputValue(), '2026-09-30');
+    await page.locator('#editMeetingDate').fill('2026-10-09');
+    assert.ok((await page.locator('#editMeetingWeek').innerText()).startsWith('→ 2026-KW41 · Wed, Oct 7, 2026'));
+    // 多个问题一次列出
+    await page.locator('#editDecision').selectOption('APPROVED');
+    await page.locator('#addTaskBtn').click();
+    await page.locator('#editFuTask_0').fill('Send samples');
+    await page.locator('#saveCaseBtn').click();
+    const items = await page.locator('.block-warning .problem-list li').allTextContents();
+    assert.equal(items.length, 2, items.join(' | '));
+    assert.ok(items[0].includes('Sourcing Presentation') && items[1].includes('Follow-up task 1'), items.join(' | '));
+    assert.equal(saved, undefined);
+    // 编辑状态下上传演示文件：未保存的内容（待办、改周）不丢
+    await page.locator('#editFuEmail_0').fill('a@zf.com');
+    await page.locator('#caseFileInput').setInputFiles([{name:'deck.pptx', mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation', buffer:Buffer.alloc(2048,1)}]);
+    await page.waitForFunction(()=>document.querySelectorAll('.file-list li').length===1);
+    assert.equal(uploads, 1);
+    assert.equal(await page.evaluate(()=>state.detailEditMode), true);
+    assert.equal(await page.locator('#editFuTask_0').inputValue(), 'Send samples');
+    assert.equal(await page.locator('#editFuEmail_0').inputValue(), 'a@zf.com');
+    assert.equal(await page.locator('#editMeetingDate').inputValue(), '2026-10-09');
+    assert.ok((await page.locator('#app').innerText()).includes('Optional — 1 presentation file is attached below.'));
+    // 有文件即满足演示文稿规则：不填链接也能存，一次保存待办 + 改周
+    await page.locator('#saveCaseBtn').click();
+    await page.waitForFunction(()=>!state.detailEditMode);
+    assert.equal(saved.sourcingPresentationLink, '');
+    assert.equal(saved.meetingDate, '2026-10-09');
+    assert.equal(saved.followUps[0].task, 'Send samples');
+    const text = await page.locator('#app').innerText();
+    assert.ok(text.includes('2026-KW41 · Wed, Oct 7, 2026') && text.includes('1 file under Sourcing Presentation Files'), text);
+    await context.close();
+    // Manager：看不到改周输入框，载荷里也不带 meetingDate
+    let mgrSaved;
+    const mgr = await fixture({user:'manager', api:async(route,path)=>{
+      if(path==='/api/presentation-library'){ await route.fulfill({json:{ok:true, folder:'', files:[]}}); return true; }
+      if(path==='/api/cases/C-TEST'){ mgrSaved = route.request().postDataJSON(); await route.fulfill({json:{ok:true, case:{}, snapshot:{...empty, cases:[]}}}); return true; }
+      return false;
+    }});
+    await seed(mgr.page, {meetingYear:2026, meetingDateISO:'2026-09-30'});
+    await mgr.page.evaluate(()=>goToDetail('SWAT-TEST'));
+    await mgr.page.locator('#editCaseBtn').click();
+    assert.equal(await mgr.page.locator('#editMeetingDate').count(), 0);
+    await mgr.page.locator('#saveCaseBtn').click();
+    await mgr.page.waitForFunction(()=>!state.detailEditMode);
+    assert.ok(!('meetingDate' in mgrSaved), JSON.stringify(Object.keys(mgrSaved)));
+    await mgr.context.close();
+  });
+
+  // ===== v3 Phase-20：上传区分 Meeting minutes 与 Presentations =====
+  await test('Home upload card separates meeting minutes from presentations, attaches matched presentations and uploads new ones', async()=>{
+    const SAMPLE = '1. 110000034978 SPR8 Tube_34235239A_ NA_CO_L2_Iron Force Huzhou_Tube_Haojie.pdf';
+    let files = [
+      {path:'KW15, 08.04.2026/'+SAMPLE, name:SAMPLE, folder:'KW15, 08.04.2026', size:338000, modified:'Oct 8, 9:00 AM',
+        match:{rowId:'C-1', swatId:'110000034978', label:'2026-KW15 · Case #1 · 110000034978', by:'SWAT number', attached:false}},
+      {path:'Unsorted/random.pdf', name:'random.pdf', folder:'Unsorted', size:2048, modified:'Oct 8, 9:00 AM', match:null},
+    ];
+    const attachCalls = [], uploads = [];
+    const {page, context} = await fixture({user:'admin', api:async(route,path)=>{
+      if(path==='/api/import/library'){ await route.fulfill({json:{ok:true, files:[]}}); return true; }
+      if(path==='/api/presentation-library'){ await route.fulfill({json:{ok:true, folder:'data/presentations', files}}); return true; }
+      if(path==='/api/presentation-library/attach'){
+        const body = route.request().postDataJSON(); attachCalls.push(body.paths);
+        files = files.map(f=>f.match && body.paths.includes(f.path) ? {...f, match:{...f.match, attached:true}} : f);
+        await route.fulfill({json:{ok:true, snapshot:empty, files,
+          attached: body.paths.filter(p=>p.startsWith('KW15')).map(p=>({path:p, label:'2026-KW15 · Case #1 · 110000034978', name:'x.pdf', by:'SWAT number'})),
+          skipped: body.paths.filter(p=>!p.startsWith('KW15')).map(p=>({path:p, reason:'No matching case — attach it on the case page.'}))}});
+        return true;
+      }
+      if(path==='/api/presentation-library/files'){
+        const name = new URL(route.request().url()).searchParams.get('name'); uploads.push(name);
+        const file = {path:'KW20, 13.05.2026/'+name, name, folder:'KW20, 13.05.2026', size:10, modified:'Oct 8, 9:01 AM',
+          match:{rowId:'C-2', swatId:'110000035000', label:'2026-KW20 · Case #3 · 110000035000', by:'SWAT number', attached:false}};
+        files = [...files, file];
+        await route.fulfill({json:{ok:true, path:file.path, file, files}});
+        return true;
+      }
+      return false;
+    }});
+    const headings = await page.locator('.upload-kind').allTextContents();
+    assert.deepEqual(headings.map(h=>h.split(' ')[0]+' '+h.split(' ')[2]), ['1 Meeting','2 Presentations']);
+    await page.waitForFunction(()=>document.querySelectorAll('#presSelect option').length===3);
+    const opts = await page.locator('#presSelect option').allTextContents();
+    assert.equal(opts[1], SAMPLE+' — → 2026-KW15 · Case #1 · 110000034978');
+    assert.equal(opts[2], 'random.pdf — no matching case — attach it on the case page');
+    assert.deepEqual(await page.locator('#presSelect optgroup').evaluateAll(els=>els.map(e=>e.label)), ['KW15, 08.04.2026','Unsorted']);
+    assert.equal(await page.locator('#presAttachAll').innerText(), 'Attach all matched, not yet attached (1)');
+    // 单个挂接（对不上的会说明原因）
+    await page.locator('#presSelect').selectOption('Unsorted/random.pdf');
+    await page.locator('#presAttachOne').click();
+    await page.waitForFunction(()=>document.querySelector('.pres-results')?.textContent.includes('1 skipped'));
+    // 批量挂接
+    await page.locator('#presAttachAll').click();
+    await page.waitForFunction(()=>document.querySelector('.pres-results')?.textContent.includes('1 attached'));
+    assert.deepEqual(attachCalls, [['Unsorted/random.pdf'], ['KW15, 08.04.2026/'+SAMPLE]]);
+    assert.ok((await page.locator('#presSelect option').allTextContents())[1].includes('✓ attached to 2026-KW15'));
+    assert.equal(await page.locator('#presAttachAll').isDisabled(), true);
+    // 从本机上传进文件库：.exe 被拦，PDF 上传后提示可批量挂接
+    await page.locator('#presUploadInput').setInputFiles([
+      {name:'3. 110000035000 deck.pdf', mimeType:'application/pdf', buffer:Buffer.alloc(10,1)},
+      {name:'KW15 MM.xlsx', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer:Buffer.from('x')}]);
+    await page.waitForFunction(()=>document.getElementById('presUploadMsg')?.textContent.includes('uploaded'));
+    assert.deepEqual(uploads, ['3. 110000035000 deck.pdf']);
+    assert.equal(await page.locator('#presUploadMsg').innerText(), '1 uploaded, 1 matched to a case — press "Attach all matched", 1 failed.');
+    assert.ok((await page.locator('.pres-results').innerText()).includes('only PDF or PowerPoint'));  // 周会 Excel 不进演示文件库
+    assert.equal(await page.locator('#presAttachAll').innerText(), 'Attach all matched, not yet attached (1)');
+    await context.close();
+  });
+
   console.log(`${passed} frontend regression checks passed.`);
 }finally{
   await browser.close();

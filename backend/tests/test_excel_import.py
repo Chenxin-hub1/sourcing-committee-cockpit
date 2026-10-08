@@ -179,7 +179,8 @@ def test_sample_workbook_becomes_cases_with_bundle_rows(sample):
     assert one["toolingPayment"] == ""  # 商务区块按"字段存在"显示，导入的案例要带上（空）
     assert (one["meetingDecision"], one["decisionText"], one["caseStatus"]) == ("CONDITIONAL APPROVAL", "Approved with conditions", "Approved")
     assert one["committeeDiscussion"] == "1. To check cleanliness --BUP Rafal" and one["submitterComments"] == "1. CN volume not yet nominated"
-    assert one["cluster"] == "CH01" and one["parentPF"] == "CH01016 Medium Precision" and one["presenter"] == "Sandra Novegil"
+    assert (one["cluster"], one["commodity"], one["commodityRaw"]) == ("Chemical", "CH01 Functional Plastics", "CH01")
+    assert one["parentPF"] == "CH01016 Medium Precision" and one["presenter"] == "Sandra Novegil"
     assert one["source"] == {"kind": "excel", "file": "KW39 23.09.2026_SBS Sourcing Alignment Committee_MM.xlsx", "row": 2,
                              "importedAt": "now", "importedBy": "admin@zf.com"}
     assert one["meetingDateISO"] == "2026-09-23" and one["meetingYear"] == 2026 and one["weekNum"] == 39

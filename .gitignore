@@ -23,3 +23,6 @@ nohup.out
 
 # Claude Code 本机权限设置
 .claude/settings.local.json
+
+# 领导 / 同事的反馈文件（放在仓库根目录只为方便阅读，不入库）
+Feedback Sourcing cockpit_*.xlsx

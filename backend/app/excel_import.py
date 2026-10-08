@@ -28,7 +28,7 @@ from typing import Any
 
 from openpyxl import load_workbook
 
-from . import logic
+from . import commodities, logic
 
 SOURCE_KIND = "excel"
 MAX_FILE_BYTES = 20 * 1024 * 1024
@@ -451,12 +451,18 @@ def parse_workbook(data: bytes, filename: str, fx_settings: dict | None = None, 
         case_number = num if num is not None else index
         summary = logic.bundle_summary(part_rows)
         notes = _clean(head["notes"])
+        # v3 Phase-18：Commodity 原文归一到固定 Cluster + 规范 Commodity 名；认不出的保留原文并提示
+        commodity_raw = _line(head["commodity"])
+        terms = commodities.classify(commodity_raw)
+        if commodity_raw and not terms["known"]:
+            warnings.append(f"Row {first}: commodity '{commodity_raw}' is not in the vocabulary yet — kept as written.")
         case = logic.mk_case({
             "weekNum": kw, "caseNumber": case_number, "swatId": case_id or f"ROW-{year}-KW{kw:02d}-{case_number}",
             "partNumber": part_rows[0]["partNumber"], "partDescription": part_rows[0]["partDescription"],
             "partNumbers": part_rows if len(part_rows) > 1 else None,
             "region": merge_regions(regions), "project": summary["project"],
-            "family": "", "cluster": _line(head["commodity"]),
+            "family": "", "cluster": terms["cluster"], "commodity": terms["commodity"],
+            "commodityRaw": commodities.normalize_text(commodity_raw),
             "parentPF": _line(head["parentPF"]), "partFamilyCode": "",
             "sourcingType": summary["sourcingType"], "recommendedSupplier": summary["recommendedSupplier"],
             "presenter": _line(head["presenter"]), "decisionLevel": normalize_level(head["decisionLevel"]),
