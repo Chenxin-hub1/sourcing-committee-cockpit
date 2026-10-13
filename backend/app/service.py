@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import math
 import time
 from copy import deepcopy
@@ -22,6 +23,8 @@ from . import accounts, commodities, logic
 from .config import get_settings
 from .models import Base, CaseRow, KvRow, ReminderLogRow, SubmissionRow, UserRow
 
+log = logging.getLogger("cockpit.service")
+
 SEED_PATH = Path(__file__).parent / "seed.json"
 LOG_CAP = 200
 SETTINGS_KEY = "reminder_settings"
@@ -32,6 +35,7 @@ INITIALIZED_KEY = "database_initialized"
 CASE_SEQUENCE_KEY = "case_row_sequence"
 COMMODITY_KEY = "commodity_vocabulary"  # {"version": N}：已按 commodities.VERSION 归一过术语（v3 Phase-18）
 WEEK_NUMBERING_KEY = "week_numbering"  # {"scheme": "iso"}：已换成 ISO 周（v3 Phase-13）
+CASE_NUMBERING_KEY = "case_numbering"  # {"scheme": "per-year-week"}：已按年份 + 周整理过案例号（v3 Phase-21）
 SESSION_TTL_SECONDS = 7 * 24 * 3600  # 登录 7 天过期：泄露窗口有界，列表不无限增长
 
 
@@ -374,6 +378,7 @@ async def init_db(session) -> None:
         await _set_kv(session, INITIALIZED_KEY, {"seeded": seeded})
     await _migrate_iso_weeks(session)
     await _migrate_commodities(session)
+    await _migrate_case_numbers(session)
     await _ensure_bootstrap_admin(session)
     await session.commit()
 
@@ -392,6 +397,25 @@ async def _migrate_iso_weeks(session) -> None:
         if logic.ISO_DATE_RE.match(row.doc.get("meetingDateISO") or ""):
             row.doc = {**row.doc, "meetingWeekNum": logic.iso_week_of_record({"meetingDateISO": row.doc["meetingDateISO"]})}
     await _set_kv(session, WEEK_NUMBERING_KEY, {"scheme": "iso"})
+
+
+async def _migrate_case_numbers(session) -> None:
+    """v3 Phase-21：一次性把每个"年份 + 周"的案例号整理成从 1 开始的连续号。
+
+    之前确认登记只看周号，2026-KW42 接着 2025-KW42 的历史从 4 号排起；之后删除 / 改周时各自补号，不再需要重跑。
+    只整理含有系统内登记案例的周：全部从 Excel 导入的周保持原件编号（周会 Excel 本身可能跳号，如 2026-KW39 没有 6 号）。"""
+    if (await _kv_doc(session, CASE_NUMBERING_KEY) or {}).get("scheme") == "per-year-week":
+        return
+    rows = {row.id: row for row in (await session.execute(select(CaseRow))).scalars()}
+    cases = [deepcopy(row.doc) for row in rows.values()]
+    before = {c["id"]: c.get("caseNumber") for c in cases}
+    registered = {logic.year_week(c) for c in cases if (c.get("source") or {}).get("kind") != "excel"}
+    for c in logic.renumber_weeks(cases, registered):
+        row = rows[c["id"]]
+        row.doc, row.case_number = c, int(c["caseNumber"])
+        # warning 级：uvicorn 只输出 warning 及以上，一次性改数据要在 docker logs 里留痕
+        log.warning("case number %s %s: #%s -> #%s", logic.week_label(c), c.get("swatId"), before[c["id"]], c["caseNumber"])
+    await _set_kv(session, CASE_NUMBERING_KEY, {"scheme": "per-year-week"})
 
 
 def normalize_commodities(cases: list[dict]) -> list[dict]:

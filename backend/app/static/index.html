@@ -286,8 +286,15 @@
   .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;}
   .info-item .k{font-size:11px;color:var(--ink-faint);margin-bottom:2px;}
   .info-item .v{font-size:13px;font-weight:500;}
-  .discussion-box{background:#FAFAFB;border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--ink);line-height:1.6;}
+  .discussion-box{background:#FAFAFB;border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--ink);line-height:1.6;white-space:pre-wrap;}
   .followup-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;}
+  /* v3 Phase-23：从纪要识别出的待办草稿 */
+  .action-drafts{background:#FAFAFB;border:1px dashed var(--border);border-radius:8px;padding:12px 14px;margin-top:12px;}
+  .action-drafts-head{font-size:12.5px;color:var(--ink);margin-bottom:6px;}
+  .action-draft{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;padding:7px 0;border-top:1px solid var(--border);cursor:pointer;}
+  .action-draft input{margin-top:3px;}
+  .action-draft .meta{display:block;color:var(--ink-faint);font-size:11.5px;margin-top:2px;}
+  .action-drafts-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
   .link-row{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12.5px;}
   .status-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
   .status-tile{flex:1;min-width:150px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;}
@@ -512,6 +519,25 @@ const PRESENTERS = ["W. Chen","M. Okafor","L. Novak","R. Fischer","S. Iyer","J. 
 // Contact directory (prototype). In production this comes from the corporate directory / Entra ID.
 const CONTACTS = {"W. Chen":"w.chen@zf.com","M. Okafor":"m.okafor@zf.com","L. Novak":"l.novak@zf.com","R. Fischer":"r.fischer@zf.com",
   "S. Iyer":"s.iyer@zf.com","J. Park":"j.park@zf.com","A. Baptiste":"a.baptiste@zf.com","H. Meyer":"h.meyer@zf.com","K. Reyes":"k.reyes@zf.com"};
+// v3 Phase-23：纪要 → 待办草稿（服务端解析）。草稿挂在当前 editBuffer 上：取消 / 保存 / 换案例后自然失效
+function actionDraftsHtml(){
+  const d = state.actionDrafts;
+  if(!d || d.buffer!==state.editBuffer) return '';
+  if(!d.items.length) return `<div class="action-drafts"><div class="action-drafts-head">No numbered action items found in the Committee Discussion. Write them as "1. Task -- Owner by dd.mm.yyyy", one per line.</div>
+    <div class="action-drafts-actions"><button class="btn-secondary" id="discardDraftsBtn">Close</button></div></div>`;
+  const picked = d.items.filter(i=>i.checked).length;
+  return `<div class="action-drafts">
+    <div class="action-drafts-head">Found ${d.items.length} action item${d.items.length===1?'':'s'} in the Committee Discussion. Tick the ones to add, then fill in each reminder email and check the due dates before saving.</div>
+    ${d.items.map((i,k)=>`<label class="action-draft"><input type="checkbox" data-draft="${k}" ${i.checked?'checked':''}/>
+      <span>${esc(i.task)}${i.duplicate?' <em style="color:var(--ink-faint);">(already in the list)</em>':''}
+        <span class="meta">Owner: ${esc(i.responsible||'—')} · Due: ${i.dueDate ? esc(i.dueDate)+(i.dueEstimated?` (estimated from "${esc(i.dueText)}")`:'') : '—'}</span></span></label>`).join('')}
+    <div class="action-drafts-actions">
+      <button class="btn-primary" id="addDraftsBtn" ${picked?'':'disabled'}>${draftsButtonLabel(picked)}</button>
+      <button class="btn-secondary" id="discardDraftsBtn">Discard</button>
+    </div>
+  </div>`;
+}
+function draftsButtonLabel(n){ return `Add ${n} selected as follow-up task${n===1?'':'s'}`; }
 function emailFor(name){
   if(!name) return '';
   if(CONTACTS[name]) return CONTACTS[name];
@@ -941,6 +967,7 @@ const state = {
   // isAdmin = NPI 经理或 Sourcing 管理员（审批 / 编辑 / 删除 / 提醒 / 案例文件），isSysAdmin = 只有 Sourcing 管理员（系统设置、账号）
   user:null,
   isAdmin:false,
+  actionDrafts:null, // v3 Phase-23：{buffer, items} 从纪要识别出的待办草稿
   isSysAdmin:false,
   accounts:null,         // Accounts 页的账号列表（进入页面时向服务器取）
   accountsNotice:null,   // 刚重置的临时密码，只在这一屏显示一次
@@ -2580,8 +2607,8 @@ function renderSubmit(){
         <label>Requested Committee Meeting Date *</label>
         <select id="fMeetingDate">${meetingOptionsHtml(false)}</select>
         <div style="font-size:11px;color:var(--ink-faint);margin-top:4px;">The committee meets every Wednesday. Registrations close ${esc(cutoffRuleLabel())} — after that, the earliest available date is automatically the following Wednesday.</div>
-        ${blockedWednesday() ? `
-        <label class="region-check" style="margin-top:8px;display:inline-flex;"><input type="checkbox" id="fLateException"/> Request an exception for this week's meeting (${esc(formatDateLong(blockedWednesday()))}) — the deadline has passed</label>
+        ${(state.isSysAdmin && blockedWednesday()) ? `
+        <label class="region-check" style="margin-top:8px;display:inline-flex;"><input type="checkbox" id="fLateException"/> Request an exception for this week's meeting (${esc(formatDateLong(blockedWednesday()))}) — the deadline has passed (only the Sourcing admin sees this option)</label>
         <div id="lateReasonField" style="display:none;margin-top:8px;">
           <label style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">Reason for the late registration *</label>
           <textarea id="fLateReason" placeholder="e.g. customer escalation, SOP at risk — the Sourcing admin approves the exception when confirming the registration"></textarea>
@@ -3042,7 +3069,11 @@ function renderDetail(){
             </div>
           `).join('')}
           ${functionDatalist()}
-          <button class="btn-secondary" id="addTaskBtn">+ Add Follow-up Task</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-secondary" id="addTaskBtn">+ Add Follow-up Task</button>
+            <button class="btn-secondary" id="extractTasksBtn">Extract action items from discussion</button>
+          </div>
+          ${actionDraftsHtml()}
           ${state.editError ? `<div class="block-warning" style="display:block;margin-top:14px;">${problemListHtml(state.editError.split('\n'), 'before saving')}</div>` : ''}
           <div class="form-actions">
             <button class="btn-primary" id="saveCaseBtn">Save Changes</button>
@@ -3621,6 +3652,46 @@ function wireEvents(){
     const hist = historyFor(state.selectedSwatId), cur = hist[Math.min(state.selectedEntryIndex, hist.length-1)];
     const out = document.getElementById('editMeetingWeek'); if(out) out.textContent = meetingWeekPreview(editMeetingDate.value, cur);
   };
+  const extractTasksBtn = document.getElementById('extractTasksBtn');
+  if(extractTasksBtn) extractTasksBtn.onclick = async ()=>{
+    if(extractTasksBtn.disabled) return;
+    syncEditBufferFromDom();
+    const b = state.editBuffer;
+    const hist = historyFor(state.selectedSwatId), cur = hist[Math.min(state.selectedEntryIndex, hist.length-1)] || {};
+    const meetingDateISO = /^\d{4}-\d{2}-\d{2}$/.test(cur.meetingDateISO||'') ? cur.meetingDateISO : '';
+    extractTasksBtn.disabled = true;
+    try{
+      const resp = await API.post('/api/action-items/extract', {text: b.committeeDiscussion||'', meetingDateISO});
+      const existing = new Set(b.followUps.map(t=>(t.task||'').trim()));
+      // 任务文字带上纪要里的编号（"6a. …"），和会议纪要对得上；已在列表里的默认不勾
+      state.actionDrafts = {buffer:b, items: resp.items.map(i=>{
+        const task = `${i.ref}. ${i.task}`, duplicate = existing.has(task);
+        return {...i, task, duplicate, checked:!duplicate};
+      })};
+    }catch(err){ state.editError = 'Could not read the action items: '+(err.detail||err.message); }
+    render();
+  };
+  document.querySelectorAll('[data-draft]').forEach(el=>{
+    // 只改勾选状态和按钮文字，不重绘：重绘会丢掉还没同步的输入
+    el.onchange = ()=>{
+      const d = state.actionDrafts; if(!d) return;
+      d.items[Number(el.dataset.draft)].checked = el.checked;
+      const n = d.items.filter(i=>i.checked).length, btn = document.getElementById('addDraftsBtn');
+      if(btn){ btn.disabled = !n; btn.textContent = draftsButtonLabel(n); }
+    };
+  });
+  const addDraftsBtn = document.getElementById('addDraftsBtn');
+  if(addDraftsBtn) addDraftsBtn.onclick = ()=>{
+    syncEditBufferFromDom();
+    const stamp = Date.now();
+    state.actionDrafts.items.filter(i=>i.checked).forEach((i,k)=>state.editBuffer.followUps.push({
+      id:`FU-NEW-${stamp}-${k}`, task:i.task, tags:[], ownerFunction:'', responsible:i.responsible, dueDate:i.dueDate, notes:i.notes,
+      status:'Open', notify:'', notifyEmail:'', cc:'', channel:'Email + Teams'}));
+    state.actionDrafts = null;
+    render();
+  };
+  const discardDraftsBtn = document.getElementById('discardDraftsBtn');
+  if(discardDraftsBtn) discardDraftsBtn.onclick = ()=>{ syncEditBufferFromDom(); state.actionDrafts = null; render(); };
   const addTaskBtn = document.getElementById('addTaskBtn');
   if(addTaskBtn) addTaskBtn.onclick = ()=>{
     syncEditBufferFromDom();

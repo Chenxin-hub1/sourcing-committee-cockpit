@@ -307,6 +307,18 @@ def test_imported_case_can_be_edited_without_a_presentation_link(api_client, adm
     assert r.json()["case"]["committeeDiscussion"] == "Confirmed in the Cockpit." and r.json()["case"]["source"]["kind"] == "excel"
 
 
+def test_imported_bundle_case_with_slashes_in_its_swat_id_can_be_deleted(api_client, admin, sample):
+    # Bundle ID 形如 "B/2025/00361"：前端 encodeURIComponent 成 %2F，服务端解码后路径里又是斜杠，
+    # 曾经匹配不上删除路由、落到静态文件挂载上，返回 405 Method Not Allowed
+    r = _post(api_client, sample, "KW39 23.09.2026_SBS Sourcing Alignment Committee_MM.xlsx", admin, commit="true")
+    bundle = next(c for c in r.json()["snapshot"]["cases"] if c.get("source", {}).get("kind") == "excel" and c["caseNumber"] == 1)
+    assert bundle["swatId"] == "B/2025/00361"
+    r = api_client.delete("/api/cases/B%2F2025%2F00361", headers=admin)
+    assert r.status_code == 200, r.text
+    assert not any(c["swatId"] == "B/2025/00361" for c in r.json()["snapshot"]["cases"])
+    assert api_client.delete("/api/cases/B%2F2025%2F00361", headers=admin).status_code == 404
+
+
 # ---------- 随程序发布的历史文件库：下拉框选文件导入 ----------
 
 @pytest.fixture

@@ -20,6 +20,8 @@
 - 问题 4（2026-09-24 答复）：Excel 导出与驾驶舱在线查看同时保留——议程 / 纪要按 MM 模板导出（Phase-4），大家也可直接打开驾驶舱链接看登记与议程。
 - 问题 7（2026-09-24 答复）：登记截止用默认值——会前周一 23:59、服务器时区；管理员仍可在 Dashboard 调整（Phase-8）。
 
+- 领导反馈（2026-10-12）：新案例按"年份 + 周"从 1 号编起，删除或改走案例后该周补成连续号；截止后只有 Sourcing admin 能补登记进本周（普通用户与 Manager 看不到例外选项、服务端拒绝且不提例外）；编辑页一键从 Committee Discussion 列出编号任务（负责人、日期能识别的先填好），勾选后加入待办，邮箱由人填；详情页纪要保留换行。
+
 - 领导反馈（2026-09-29）：提交页 Peak Year Spend / Lifetime Spend 只在案例级各填一个 bundle 金额（必填、须大于 0），零件行不再填；Project / Sourcing Type / Recommended Supplier 按零件行填写，案例级显示去重汇总；议程 / 纪要 Excel 的 Type / Project / Supplier 列按零件行、Peak Year Spend / LT Spend 列按案例合并；上传的演示文件在系统里改名为 `YYYY.MM.DD 项目 零件描述 零件号, 供应商.ext`，原文件名保留可见；角色 "NPI manager" 页面上显示为 "Manager"。
 
 ## Phase-1: 表单简化（反馈第一批）
@@ -179,5 +181,29 @@ Spec: non-spec
 Status: `closed`
 
 Description: 领导 2026-10-08 要求上传数据时用两个类别的下拉框区分会议文件与演示文件；用户同日给出 SharePoint 周文件夹截图说明：周文件夹（如 "KW15, 08.04.2026"）里 `…MM.xlsx` 是 meeting minutes，`1. 110000034978 SPR8 Tube_34235239A_ NA_CO_L2_Iron Force Huzhou_Tube_Haojie.pdf` 这类是 presentation（开头是该周案例序号、SWAT 号、零件号）。实现：新模块 `app/presentation_match.py`，按 SWAT 数字号 / bundle 号（文件名里 `B_2025_00234`、`B-2025-234` 都认，bundle 零件行上的 SWAT 号也算）/ 案例号原样出现 → 零件号 → 周文件夹 + 文件名开头的案例序号依次匹配，知道周时先在那一周里找，同号多次上会取最近一次；`GET /api/presentation-library` 每份文件带 `match {rowId, swatId, label, by, attached}`；`POST /api/presentation-library/files`（Sourcing admin，从本机上传进库：缺省放进匹配案例所在周文件夹 `KWnn, dd.mm.yyyy`，对不上放 `Unsorted`，同名加 (2)，文件夹名清洗不能跳出库目录）；`POST /api/presentation-library/attach {paths}`（Manager 及以上，批量按匹配挂接，已挂过 / 对不上 / 案例文件已满 / 路径不在库里的跳过并说明原因）。前端：首页卡片改名 "Upload weekly committee data"，分 "1 · Meeting minutes"（原周会 Excel 拖放与 Stored weekly files 下拉框）与 "2 · Presentations"（按周文件夹分组的下拉框，每项显示 "→ 匹配案例" / "✓ attached to …" / "no matching case"；Attach to matched case、Attach all matched not yet attached (n)、Upload presentations…、结果清单）。顺带修了 Phase-18 漏掉的一处年份问题：首页 Recent Committee Activity 只按周号排序，2025-KW51 排在 2026 前面，改为按年 + 周。验证（2026-10-08）：pytest 461（新增 tests/test_phase20.py 13 项：7 种命名的匹配依据、3 种对不上、标签与周文件夹、上传进库的权限 / 按周归档 / Unsorted / 同名不覆盖 / 批量挂接与跳过原因 / 已挂提示 / 文件夹名清洗 / 类型白名单 / 不留临时文件）、前端回归 43（新增 1 条：两类分区、下拉框分组与匹配文字、单个与批量挂接、上传拦 .exe 与提示）、滚动回归 16、ruff；本机 8062 真实历史库：截图里那份 PDF 放进 `data/presentations/KW15, 08.04.2026/` 后自动对到 2026-KW15 Case #1 并批量挂接成功，截图 `~/backups/sourcing-cockpit/e2e-screenshots-2026-10-08-phase20/`。用户 2026-10-08 决定：挂接后的系统文件名日期沿用 Phase-15 规则取上传当天（不改成会议日期）；历史演示 PDF 暂不批量补，之后手动上传；演示文件库只收 PDF / PowerPoint（`files.LIBRARY_EXTENSIONS`，上传进库与下拉框都按它，SharePoint 周文件夹整个复制进来时 MM Excel 与 .msg 不会混进 Presentations），pytest 462、前端回归 43。用户 2026-10-08 验收通过 Phase-15~20。已知边界：文件名里既没有号码也不在周文件夹里的只能在案例页手工挂。
+
+Spec: non-spec
+
+## Phase-21: 案例编号按年份、删除后补号
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-10-12 反馈：按 KW42 导出的议程 case 号是 4、5 而不是 1、2，别人会以为漏了案例。原因是确认登记时编号只看周号不看年份（2025-KW42 历史已有 1~3 号，`logic.confirm_submission`）。实现：确认登记按"年份 + 周"编号；`logic.renumber_weeks` 把指定周按原顺序重排成连续号（同号的几行仍同号），删除案例与 Sourcing admin 改周后对原周调用；服务启动一次性迁移 `service._migrate_case_numbers`（kv `case_numbering`），只整理含系统内登记案例的周——全部从 Excel 导入的周保持原件编号（2026-KW39 的周会 Excel 本身没有 6 号），改动逐条以 warning 写进 docker logs。同日修复带斜杠的 SWAT / Bundle ID（如 "B/2026/00198"）删除报 405 Method Not Allowed：前端编码的 %2F 被服务端解码回斜杠，路由匹配不上落到静态文件挂载；删除路由改用 `{swat_id:path}` 并注册在删除附件路由之后。验证（2026-10-13）：pytest 490（新增 tests/test_phase21.py 6 项：按年编号、补号与同号、删除补号并落库、改周补号、启动迁移只跑一次且不动纯导入周；test_excel_import 新增斜杠 ID 删除）、前端回归 44、滚动回归 16、ruff；本机真实库快照起临时实例 8063：admin 补登记 2026-KW42 得 1 号，删除 B/2025/00361 后 KW39 补成 1~5。
+
+Spec: non-spec
+
+## Phase-22: 截止后只有 Sourcing admin 能补登记
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-10-12 要求：对外说周一晚上截止，但个别急项目可由 admin 周二补进本周会议；用户同日选定"只有 admin 能补登记"。截止后的 "Request an exception" 选项只对 Sourcing admin 显示（文案注明只有 admin 看得到），普通用户与 Manager 看不到、最早只能选下周三；服务端 `_late_registration` 按角色判断，非 admin 带了例外标记也 422，文案只说已截止、不提例外；admin 补登记仍进审批队列并带 Late registration 标记，presenter 先记成 admin、之后在编辑页改。验证（2026-10-13）：tests/test_registration_cutoff.py 改写 2 项（普通用户 / Manager 带例外被拒且文案不提例外、admin 不勾提示可勾 / 无理由拦截 / 有理由接受）、前端回归新增断言（截止后普通用户与 Manager 无例外入口）；临时实例 8063 实测。
+
+Spec: non-spec
+
+## Phase-23: 从会议纪要自动列出 Action Item
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-10-12 要求：Committee Discussion（Excel Notes/Task/Resp./Due Date 列）里的编号任务自动列出来，负责人与日期能识别的先填好，她只补邮箱和具体日期。实现：新模块 `app/action_items.py`（主编号 "1." 按行或挤在一行里都认，只认按顺序出现的编号；子任务行首 a. b. 或行内 1) 2)，至少两条才算，编号记成 6a / 2.1；不带编号的行进上一条备注；负责人取最后一个 "--"，没有就取最后一个 " - "，末尾括号里的说明进备注；截止日期先在负责人段找、再在任务文字里找：dd.mm.yyyy / dd/mm/yy / ISO 照填，KW / CW 取那周周五、月份取月底并在备注提示核对，没写年份的 KW 按案例会议年份推算、跨年往后推）；接口 `POST /api/action-items/extract {text, meetingDateISO}`（Manager 及以上，只出草稿不写库）。前端：详情页纪要 `white-space: pre-wrap` 保留换行（之前挤成一段）；编辑页 Follow-up Tasks 区 "Extract action items from discussion" 用编辑框里的纪要识别 → 勾选面板（已在列表里的默认不勾）→ "Add N selected as follow-up tasks" 加进待办（任务文字带纪要编号，邮箱留空，保存时照常校验）。不按姓名猜邮箱、不猜负责人职能。验证（2026-10-13）：pytest 新增 tests/test_phase23.py 19 项（领导截图两段真实纪要逐条比对、历史纪要的 " - " 写法、无编号、句中数字不拆、8 种日期写法、接口权限与非法日期），前端回归新增 1 条（纪要换行、无编号提示、识别请求带编辑中的文字与会议日期、去重默认不勾、勾选计数、加入后未保存的输入不丢）；36 份历史周会 Excel 的 142 个案例中 71 个识别出 177 条任务，132 条带负责人、21 条带日期（其余是纪要原文没写）；临时实例 8063 截图 `.playwright-mcp/phase23-drafts*.png`。已知边界：一条编号里写了两个 "--负责人" 时只取最后一个，前面的留在任务文字里。
 
 Spec: non-spec

@@ -22,11 +22,24 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import accounts, delivery, excel_import, exports, feedback, files, graph, logic, presentation_match, service
+from . import (
+    accounts,
+    action_items,
+    delivery,
+    excel_import,
+    exports,
+    feedback,
+    files,
+    graph,
+    logic,
+    presentation_match,
+    service,
+)
 from .config import get_settings
 from .db import SessionLocal
 from .schemas import (
     COMMERCIAL_INPUT_FIELDS,
+    ActionItemsIn,
     CaseEditIn,
     ExportSelectionIn,
     FeedbackDecisionIn,
@@ -438,18 +451,23 @@ def _submission_problems(cases: list[dict], submissions: list[dict], b: Submissi
     return st, out
 
 
-def _late_registration(registration: dict, b: SubmissionIn) -> tuple[dict | None, str | None]:
-    """登记截止门禁：截止后提交该周会议日期 → 问题文案；申请例外且有理由 → 返回标记，随登记单进审批队列。"""
+def _late_registration(registration: dict, b: SubmissionIn, user: dict) -> tuple[dict | None, str | None]:
+    """登记截止门禁：截止后提交该周会议日期 → 问题文案；申请例外且有理由 → 返回标记，随登记单进审批队列。
+
+    v3 Phase-22：对外截止就是截止，例外只给 Sourcing admin（急项目由 admin 补进本周）；
+    其他人带了例外标记也照样拒绝，文案里不提例外。"""
     if not b.meetingDateISO:
         return None, None
     meeting = date.fromisoformat(b.meetingDateISO)
     if meeting.weekday() != logic.MEETING_WEEKDAY or logic.registration_open(meeting, registration):
         return None, None
     deadline = logic.cutoff_moment_label(meeting, registration)
+    closed = (f"⚠ Registration for the {b.meetingDateLabel or b.meetingDateISO} meeting closed on {deadline} "
+              f"(registrations close {logic.cutoff_label(registration)}). Choose a later meeting date")
+    if user.get("role") != "admin":
+        return None, closed + "."
     if not b.lateException:
-        return None, (f"⚠ Registration for the {b.meetingDateLabel or b.meetingDateISO} meeting closed on {deadline} "
-                      f"(registrations close {logic.cutoff_label(registration)}). Choose a later meeting date, "
-                      "or tick \"Request an exception\" and give the reason for the Sourcing admin.")
+        return None, closed + ", or tick \"Request an exception\" to register it late."
     if not b.lateReason.strip():
         return None, "⚠ Please give the reason for the late registration, so the Sourcing admin can approve the exception."
     return {"reason": b.lateReason.strip(), "deadline": deadline}, None
@@ -472,7 +490,7 @@ async def create_submission(b: SubmissionIn, request: Request, user: LoggedIn) -
         rows = logic.bundle_rows([p.model_dump() for p in b.partNumbers], b.model_dump())
         spend = logic.convert_spend(rows, fx, b.peakYearSpend, b.lifetimeSpend) if fx else None
         problems += logic.commercial_problems(b.model_dump(), spend["lifetimeSpend"] if spend else None)
-        late, late_problem = _late_registration(state["registration"], b)
+        late, late_problem = _late_registration(state["registration"], b, user)
         if late_problem:
             problems.append(late_problem)
         if problems:  # v3 Phase-19：全部问题一次返回（换行分隔），页面逐条列出
@@ -631,27 +649,23 @@ async def save_case(row_id: str, b: CaseEditIn, user: Manager) -> dict:
         problems += logic.commercial_state_problems(candidate)
         if problems:
             raise HTTPException(422, "\n".join(problems))
-        if new_day is not None:
-            logic.move_case_to_week(candidate, new_day, state["cases"])
+        left = logic.year_week(case)
+        moved = new_day is not None and logic.move_case_to_week(candidate, new_day, state["cases"])
         case.clear()
         case.update(candidate)
         await service.upsert_case(session, case)
+        if moved:  # v3 Phase-21：改走后原周补号
+            for c in logic.renumber_weeks(state["cases"], {left}):
+                await service.upsert_case(session, c)
         await session.commit()
         return {"ok": True, "case": case, "snapshot": service.snapshot(state)}
 
 
-@app.delete("/api/cases/{swat_id}", dependencies=[Depends(require_manager)])
-async def delete_case(swat_id: str) -> dict:
-    async with SessionLocal() as session, _write_lock:
-        state = await service.load_state(session)
-        if not logic.delete_case_by_swat(state["cases"], state["submissions"], swat_id):
-            raise HTTPException(404, f"No case rows for {swat_id}.")
-        await service.delete_cases_by_swat(session, swat_id)
-        for s in state["submissions"]:
-            if s.get("approvedSwatId") == swat_id:
-                await service.upsert_submission(session, s)
-        await session.commit()
-        return {"ok": True, "snapshot": service.snapshot(state)}
+@app.post("/api/action-items/extract", dependencies=[Depends(require_manager)])
+async def extract_action_items(b: ActionItemsIn) -> dict:
+    """v3 Phase-23：纪要 → 待办草稿（编辑页勾选后加进待办列表，保存时照常校验）。"""
+    meeting = date.fromisoformat(b.meetingDateISO) if b.meetingDateISO else None
+    return {"items": action_items.extract(b.text, meeting)}
 
 
 # ============================= 提醒 =============================
@@ -1210,6 +1224,26 @@ async def attach_library_file(row_id: str, b: LibraryAttachIn, user: Manager) ->
         await service.upsert_case(session, case)
         await session.commit()
         return {"ok": True, "file": record, "case": case, "snapshot": service.snapshot(state)}
+
+
+# Excel 导入的 Bundle ID 形如 "B/2025/00361"：前端编码成 %2F，服务端解码后路径里又是斜杠，所以用 path 转换器。
+# path 什么都匹配（包括 "<row_id>/files/<file_id>"），必须注册在删除附件的路由之后，否则会把那类请求抢走。
+@app.delete("/api/cases/{swat_id:path}", dependencies=[Depends(require_manager)])
+async def delete_case(swat_id: str) -> dict:
+    async with SessionLocal() as session, _write_lock:
+        state = await service.load_state(session)
+        weeks = {logic.year_week(c) for c in state["cases"] if c.get("swatId") == swat_id}
+        if not logic.delete_case_by_swat(state["cases"], state["submissions"], swat_id):
+            raise HTTPException(404, f"No case rows for {swat_id}.")
+        await service.delete_cases_by_swat(session, swat_id)
+        # v3 Phase-21：所在周剩下的案例补成连续号，导出不再出现跳号
+        for c in logic.renumber_weeks(state["cases"], weeks):
+            await service.upsert_case(session, c)
+        for s in state["submissions"]:
+            if s.get("approvedSwatId") == swat_id:
+                await service.upsert_submission(session, s)
+        await session.commit()
+        return {"ok": True, "snapshot": service.snapshot(state)}
 
 
 # ============================= 静态前端（挂载在最后，/api 优先匹配） =============================

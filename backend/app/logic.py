@@ -734,6 +734,26 @@ def validate_case_edit(b: dict, *, imported: bool = False, has_files: bool = Fal
     return "\n".join(case_edit_problems(b, imported=imported, has_files=has_files)) or None
 
 
+def year_week(case: dict) -> tuple[int | None, int]:
+    return case_year(case), int(case.get("weekNum") or 0)
+
+
+def renumber_weeks(cases: list[dict], weeks: set[tuple[int | None, int]]) -> list[dict]:
+    """v3 Phase-21：把这些"年份 + 周"里的案例号按原顺序重排成 1、2、3…（删除或改走案例后补空号）。
+
+    同号的几行（Excel 里合并的 '#'）仍然同号；返回改了号的案例，调用方负责写库。"""
+    changed: list[dict] = []
+    for key in weeks:
+        in_week = [c for c in cases if year_week(c) == key]
+        rank = {n: i for i, n in enumerate(sorted({int(c.get("caseNumber") or 0) for c in in_week}), start=1)}
+        for c in in_week:
+            new = rank[int(c.get("caseNumber") or 0)]
+            if c.get("caseNumber") != new:
+                c["caseNumber"] = new
+                changed.append(c)
+    return changed
+
+
 def move_case_to_week(case: dict, day: date, cases: list[dict]) -> bool:
     """v3 Phase-19（Sourcing admin 要求）：把案例改到 day 所在 ISO 周（存那周的周三），案例号排到那周最后。
 
@@ -829,11 +849,13 @@ def confirm_submission(sub: dict, cases: list[dict]) -> dict:
     sub["status"] = "Registration Confirmed"
     sub["approvedSwatId"] = sub.get("caseId") or sub.get("existingSwatId") or next_swat_id(cases, [sub])
     w = sub.get("meetingWeekNum") or (max(c["weekNum"] for c in cases) if cases else 1)
-    same_week = [c["caseNumber"] for c in cases if c["weekNum"] == w]
-    case_number = (max(same_week) + 1) if same_week else 1
     part_numbers = sub.get("partNumbers")
     meeting_date = sub.get("meetingDateISO") or ""
     meeting_year = int(meeting_date[:4]) if _days_until_due(today_iso(), meeting_date) is not None else None
+    # v3 Phase-21：按"年份 + 周"编号（之前只看周号，2026-KW42 接着 2025-KW42 的历史从 4 号排起）
+    same_week = [int(c.get("caseNumber") or 0) for c in cases if int(c.get("weekNum") or 0) == w
+                 and (meeting_year is None or case_year(c) == meeting_year)]
+    case_number = (max(same_week) + 1) if same_week else 1
     case = mk_case({
         "weekNum": w, "caseNumber": case_number,
         "swatId": sub["approvedSwatId"],

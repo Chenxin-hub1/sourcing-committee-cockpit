@@ -445,6 +445,18 @@ try{
     // 管理员规则：会前 5 天 18:00 柏林时间 = 周五 12/18 18:00，已过 → 最早只能选 12/30，可申请例外登记 12/23
     let submitted, savedSettings;
     const registrationSettings = {daysBefore:5, cutoffTime:'18:00', timezone:'Europe/Berlin', updatedAt:'Dec 1, 9:00 AM'};
+    // v3 Phase-22：截止已过时，普通用户与 Manager 看不到例外入口，最早只能选下周三
+    for(const role of [USER, MANAGER]){
+      const other = await fixture({user:'user', api:async(route,path)=>{
+        if(path!=='/api/bootstrap') return false;
+        await route.fulfill({json:{...empty, registrationSettings, currentUser:role}});
+        return true;
+      }});
+      await other.page.locator('[data-nav="submit"]').click();
+      assert.equal(await other.page.locator('#fMeetingDate option').first().getAttribute('value'),'2026-12-30');
+      assert.equal(await other.page.locator('#fLateException').count(),0, role.role);
+      await other.context.close();
+    }
     const {page, context} = await fixture({api:async(route,path)=>{
       if(path==='/api/bootstrap'){ await route.fulfill({json:{...empty, registrationSettings, currentUser:ADMIN}}); return true; }
       if(path==='/api/registration-settings'){ savedSettings = route.request().postDataJSON(); await route.fulfill({json:{ok:true, snapshot:{...empty, registrationSettings:{...savedSettings, updatedAt:'now'}}}}); return true; }
@@ -1599,6 +1611,63 @@ try{
     assert.equal(await page.locator('#presUploadMsg').innerText(), '1 uploaded, 1 matched to a case — press "Attach all matched", 1 failed.');
     assert.ok((await page.locator('.pres-results').innerText()).includes('only PDF or PowerPoint'));  // 周会 Excel 不进演示文件库
     assert.equal(await page.locator('#presAttachAll').innerText(), 'Attach all matched, not yet attached (1)');
+    await context.close();
+  });
+
+  await test('Committee Discussion keeps its line breaks and its numbered action items can be added as follow-up tasks', async()=>{
+    const requests = [];
+    const drafts = [
+      {ref:'1', task:'Share deck', responsible:'SP Melisa', dueDate:'2026-10-09', dueText:'by 09.10.2026', dueEstimated:false, notes:''},
+      {ref:'2', task:'Kickoff Kimball', responsible:'BUP Rafal', dueDate:'2026-10-16', dueText:'KW42', dueEstimated:true, notes:'Due date estimated from "KW42" — please confirm.'},
+      {ref:'2a', task:'Check VA', responsible:'', dueDate:'', dueText:'', dueEstimated:false, notes:'Carrie to approve.'},
+    ];
+    const {page, context} = await fixture({user:'admin', api:async(route,path)=>{
+      if(path==='/api/presentation-library'){ await route.fulfill({json:{ok:true, folder:'', files:[]}}); return true; }
+      if(path!=='/api/action-items/extract') return false;
+      const body = route.request().postDataJSON();
+      requests.push(body);
+      await route.fulfill({json:{items: body.text.startsWith('1.') ? drafts : []}});
+      return true;
+    }});
+    const notes = '1. Share deck -- SP Melisa by 09.10.2026\n2. Kickoff Kimball -- BUP Rafal KW42\na. Check VA';
+    await seed(page, {meetingYear:2026, meetingDateISO:'2026-10-07', meetingDateLabel:'Wed, Oct 7, 2026', meetingDecision:'APPROVED',
+      sourcingPresentationLink:'https://zf.sharepoint.com/deck', committeeDiscussion:notes,
+      followUps:[{id:'FU-1', task:'1. Share deck', responsible:'SP Melisa', dueDate:'2026-10-09', status:'Open', notifyEmail:'m@zf.com', tags:[], notes:''}]});
+    await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    // 查看页：纪要一条一行
+    assert.equal(await page.locator('.discussion-box').evaluate(el=>getComputedStyle(el).whiteSpace), 'pre-wrap');
+    assert.equal((await page.locator('.discussion-box').innerText()).split('\n').length, 3);
+    await page.locator('#editCaseBtn').click();
+    // 没有编号任务：提示写法
+    await page.locator('#editDiscussion').fill('Approved, no open points.');
+    await page.locator('#extractTasksBtn').click();
+    await page.waitForFunction(()=>document.querySelector('.action-drafts')?.textContent.includes('No numbered action items'));
+    await page.locator('#discardDraftsBtn').click();
+    assert.equal(await page.locator('.action-drafts').count(), 0);
+    // 用编辑框里（还没保存）的纪要和这条记录的会议日期去识别
+    await page.locator('#editDiscussion').fill(notes);
+    await page.locator('#extractTasksBtn').click();
+    await page.locator('.action-draft').first().waitFor();
+    assert.deepEqual(requests.at(-1), {text:notes, meetingDateISO:'2026-10-07'});
+    const rows = await page.locator('.action-draft').allInnerTexts();
+    assert.equal(rows.length, 3);
+    assert.ok(rows[0].includes('1. Share deck') && rows[0].includes('(already in the list)'), rows[0]);
+    assert.ok(rows[1].includes('Owner: BUP Rafal') && rows[1].includes('2026-10-16 (estimated from "KW42")'), rows[1]);
+    assert.deepEqual(await page.locator('[data-draft]').evaluateAll(els=>els.map(el=>el.checked)), [false, true, true]);
+    assert.equal(await page.locator('#addDraftsBtn').innerText(), 'Add 2 selected as follow-up tasks');
+    await page.locator('[data-draft="2"]').uncheck();
+    assert.equal(await page.locator('#addDraftsBtn').innerText(), 'Add 1 selected as follow-up task');
+    // 加进待办：已有任务里没保存的输入不丢；新任务带编号、负责人、日期、备注，邮箱留给人填
+    await page.locator('#editFuEmail_0').fill('melisa@zf.com');
+    await page.locator('#addDraftsBtn').click();
+    assert.equal(await page.locator('.action-drafts').count(), 0);
+    assert.equal(await page.locator('#editFuEmail_0').inputValue(), 'melisa@zf.com');
+    assert.equal(await page.locator('#editFuTask_1').inputValue(), '2. Kickoff Kimball');
+    assert.equal(await page.locator('#editFuResp_1').inputValue(), 'BUP Rafal');
+    assert.equal(await page.locator('#editFuDue_1').inputValue(), '2026-10-16');
+    assert.ok((await page.locator('#editFuNotes_1').inputValue()).includes('estimated from "KW42"'));
+    assert.equal(await page.locator('#editFuEmail_1').inputValue(), '');
+    assert.equal(await page.locator('#editFuTask_2').count(), 0);
     await context.close();
   });
 

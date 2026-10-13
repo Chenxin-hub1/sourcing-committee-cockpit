@@ -2,6 +2,7 @@
 
 约定：会议固定周三；截止 = 会议前 daysBefore 天的 cutoffTime（timezone 为空时用服务器时区）。
 过了截止仍提交该周会议日期 → 422；勾选 lateException 且给出理由 → 接受并带 lateRegistration 标记。
+v3 Phase-22：例外只给 Sourcing admin；其他人带了例外标记也拒绝，文案里不提例外。
 """
 
 from datetime import date, datetime
@@ -24,6 +25,14 @@ def client(api_client):
 def admin(client):
     r = client.post("/api/auth/login", json={"email": "admin@zf.com", "password": "test-admin"})
     return {"X-Session-Token": r.json()["token"]}
+
+
+@pytest.fixture
+def manager(client, admin):
+    email = "carrie.wang@zf.com"
+    client.post("/api/auth/register", json={"name": "Carrie Wang", "email": email})
+    assert client.put(f"/api/users/{email}", headers=admin, json={"role": "npi_manager"}).status_code == 200
+    return {"X-Session-Token": client.post("/api/auth/login", json={"email": email}).json()["token"]}
 
 
 @pytest.fixture(autouse=True)
@@ -65,18 +74,26 @@ def test_registration_open_compares_in_cutoff_timezone(now, open_):
 
 # ---------- 接口 ----------
 
-def test_submission_blocked_after_cutoff_unless_exception(client, monkeypatch):
+def test_submission_blocked_after_cutoff_for_everyone_but_the_sourcing_admin(client, admin, manager, monkeypatch):
     _freeze(monkeypatch, datetime(2026, 9, 29, 9, 0, tzinfo=NY))  # 周二早上，周一截止已过
     r = client.post("/api/submissions", json=dict(SUBMISSION, meetingDateISO="2026-09-30"))
     assert r.status_code == 422
     assert "closed" in r.json()["detail"] and "Monday 23:59" in r.json()["detail"]
+    assert "exception" not in r.json()["detail"].lower()  # 对外不透露例外
     # 下周三仍开放
     assert client.post("/api/submissions", json=dict(SUBMISSION, meetingDateISO="2026-10-07")).status_code == 200
-    # 例外但没写理由 → 拦
-    r = client.post("/api/submissions", json=dict(SUBMISSION, caseNo="SWAT-31020", meetingDateISO="2026-09-30", lateException=True))
+    # 普通用户 / Manager 带例外与理由也拒绝
+    late = dict(SUBMISSION, caseNo="SWAT-31020", meetingDateISO="2026-09-30", lateException=True, lateReason="Customer escalation")
+    for headers in ({}, manager):
+        r = client.post("/api/submissions", json=late, headers=headers)
+        assert r.status_code == 422 and "exception" not in r.json()["detail"].lower()
+    # Sourcing admin：不勾例外时提示可以勾；勾了没写理由 → 拦
+    r = client.post("/api/submissions", json=dict(SUBMISSION, caseNo="SWAT-31020", meetingDateISO="2026-09-30"), headers=admin)
+    assert r.status_code == 422 and "Request an exception" in r.json()["detail"]
+    r = client.post("/api/submissions", json=dict(SUBMISSION, caseNo="SWAT-31020", meetingDateISO="2026-09-30", lateException=True), headers=admin)
     assert r.status_code == 422 and "reason" in r.json()["detail"].lower()
     r = client.post("/api/submissions", json=dict(SUBMISSION, caseNo="SWAT-31020", meetingDateISO="2026-09-30",
-                                                   lateException=True, lateReason="Customer escalation, SOP at risk"))
+                                                   lateException=True, lateReason="Customer escalation, SOP at risk"), headers=admin)
     assert r.status_code == 200, r.text
     sub = next(s for s in r.json()["snapshot"]["submissions"] if s["subId"] == r.json()["subId"])
     assert sub["lateRegistration"] == {"reason": "Customer escalation, SOP at risk", "deadline": "Mon, Sep 28, 2026 23:59 (America/New_York)"}
@@ -92,7 +109,8 @@ def test_exception_flag_ignored_when_registration_is_open(client, monkeypatch):
 
 def test_late_flag_carries_into_case_on_confirm(client, admin, monkeypatch):
     _freeze(monkeypatch, datetime(2026, 9, 29, 9, 0, tzinfo=NY))
-    r = client.post("/api/submissions", json=dict(SUBMISSION, meetingDateISO="2026-09-30", lateException=True, lateReason="Escalation"))
+    r = client.post("/api/submissions", json=dict(SUBMISSION, meetingDateISO="2026-09-30", lateException=True, lateReason="Escalation"),
+                    headers=admin)
     sid = r.json()["subId"]
     case = client.post(f"/api/submissions/{sid}/confirm", headers=admin).json()["case"]
     assert case["lateRegistration"]["reason"] == "Escalation"
