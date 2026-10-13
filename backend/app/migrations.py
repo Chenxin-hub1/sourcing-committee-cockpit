@@ -6,6 +6,8 @@
     python -m app.migrations import-excel "D:\\weekly\\KW39, 23.09.2026" --apply   # v3 Phase-17：周会 Excel 批量导入
     python -m app.migrations normalize-clusters            # v3 Phase-18：预览 Commodity 原文 → Cluster / Commodity 的归一表
     python -m app.migrations normalize-clusters --apply    # 写回（服务启动时也会按词表版本自动做一次）
+    python -m app.migrations graph-check                   # SharePoint / Graph 连通检查（只读，不打印密钥）
+    python -m app.migrations graph-check --write-test      # 另在文档库传一个小文件再删掉，验证 write 权限
 
 Docker 部署：docker compose exec cockpit python -m app.migrations usd-to-eur --apply
 先备份 data/cockpit.db，并在没人操作时运行：服务进程里的写锁管不到这个独立进程。
@@ -37,6 +39,8 @@ def _parser() -> argparse.ArgumentParser:
     xl.add_argument("--apply", action="store_true", help="write the cases (default: dry run, prints the report only)")
     nc = commands.add_parser("normalize-clusters", help="Map the Commodity text of imported cases to the fixed Clusters.")
     nc.add_argument("--apply", action="store_true", help="write the changes (default: dry run, prints the mapping table)")
+    gc = commands.add_parser("graph-check", help="Check the SharePoint / Graph settings in .env (read-only by default).")
+    gc.add_argument("--write-test", action="store_true", help="also upload a small test file to the document library and delete it")
     return parser
 
 
@@ -147,6 +151,84 @@ async def _normalize_clusters(args, sessions) -> int:
     return 0
 
 
+def _mask(value: str) -> str:
+    return f"set ({len(value)} chars)" if value else "MISSING"
+
+
+async def _graph_check(args) -> int:
+    """v3 IT 开通 Graph 后的连通检查：令牌 → 站点 → 列表与文档库 → 建单列表的列 →（可选）文档库写入。
+    用的是系统自己的 app.graph 代码，服务器免安装环境也能跑；任何输出都不含密钥。"""
+    import tempfile
+
+    import httpx
+
+    from . import files, graph
+    from .config import get_settings
+
+    s = get_settings()
+    print("Settings from .env:")
+    print(f"  SC_GRAPH_TENANT_ID      {_mask(s.graph_tenant_id)}")
+    print(f"  SC_GRAPH_CLIENT_ID      {_mask(s.graph_client_id)}")
+    print(f"  SC_GRAPH_CLIENT_SECRET  {_mask(s.graph_client_secret)}")
+    print(f"  SC_SP_SITE_URL          {s.sp_site_url or 'MISSING'}")
+    print(f"  SC_SP_LIST_NAME         {s.sp_list_name or '(empty — creating SharePoint items stays off)'}")
+    print(f"  SC_SP_LIBRARY_NAME      {s.sp_library_name or '(empty — site default library)'}")
+    if not graph.credentials_ready() or not s.sp_site_url:
+        print("\nFill in the three SC_GRAPH_* values and SC_SP_SITE_URL in .env, then run this again.")
+        return 2
+    async with httpx.AsyncClient(timeout=graph.HTTP_TIMEOUT) as client:
+        try:
+            await graph._token(client)
+            print("\n[1/5] Token ............ OK (tenant / client ID / secret accepted)")
+        except Exception as exc:  # noqa: BLE001 —— 给人看原因
+            print(f"\n[1/5] Token ............ FAILED: {exc}\n      Check tenant ID, client ID and secret (and that the secret has not expired).")
+            return 1
+        try:
+            site = await graph._get_json(client, f"/sites/{graph._site_path(s.sp_site_url)}", params={"select": "id,displayName,webUrl"})
+            print(f"[2/5] Site ............. OK: {site.get('displayName')} ({site.get('webUrl')})")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[2/5] Site ............. FAILED: {exc}\n      403 = IT has not granted this app on the site yet (Sites.Selected needs a per-site grant).")
+            return 1
+        lists = (await graph._get_json(client, f"/sites/{site['id']}/lists", params={"select": "id,displayName,list"}))["value"]
+        drives = (await graph._get_json(client, f"/sites/{site['id']}/drives", params={"select": "id,name,webUrl"}))["value"]
+        print(f"[3/5] Lists on the site ({len(lists)}):")
+        for item in lists:
+            print(f"        - {item['displayName']}  [{(item.get('list') or {}).get('template', '')}]")
+        print(f"      Document libraries ({len(drives)}): " + ", ".join(d["name"] for d in drives))
+        if s.sp_list_name:
+            try:
+                _site_id, list_id = await graph._resolve_ids(client)
+                cols = (await graph._get_json(client, f"/sites/{site['id']}/lists/{list_id}/columns", params={"select": "name"}))["value"]
+                have = {c["name"] for c in cols}
+                wanted = list(graph.item_fields({}).keys())
+                missing = [w for w in wanted if w not in have]
+                print(f"[4/5] List '{s.sp_list_name}' ... OK; columns missing for item creation: {', '.join(missing) or 'none'}")
+            except Exception as exc:  # noqa: BLE001
+                print(f"[4/5] List '{s.sp_list_name}' ... FAILED: {exc}")
+        else:
+            print("[4/5] List ............. skipped (SC_SP_LIST_NAME empty)")
+        if not args.write_test:
+            print("[5/5] Write test ....... skipped (add --write-test to upload and delete one small file)")
+            return 0
+        with tempfile.NamedTemporaryFile("wb", suffix=".txt", delete=False) as fh:
+            fh.write(b"Sourcing Cockpit connection test - safe to delete.\n")
+            tmp = Path(fh.name)
+        try:
+            item = await graph.upload_file(tmp, "cockpit-connection-test.txt", tmp.stat().st_size,
+                                           [s.sp_folder, "_connection-test"], files.CHUNK_BYTES)
+            await graph.delete_file(item["driveId"], item["itemId"])
+            # 测试文件夹一起删掉，不在文档库里留空文件夹（"Sourcing Cockpit" 本身留着，系统以后就往里放文件）
+            from urllib.parse import quote
+            await graph._graph(client, "DELETE", f"/drives/{item['driveId']}/root:/{quote(s.sp_folder + '/_connection-test')}")
+            print(f"[5/5] Write test ....... OK (uploaded to {s.sp_folder}/_connection-test and deleted again)")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[5/5] Write test ....... FAILED: {exc}\n      The site grant may be 'read' instead of 'write'.")
+            return 1
+        finally:
+            tmp.unlink(missing_ok=True)
+    return 0
+
+
 async def run(argv: list[str], sessions) -> int:
     """返回进程退出码：0 成功，2 参数或汇率有误。sessions 是 async_sessionmaker（测试传隔离库）。"""
     args = _parser().parse_args(argv)
@@ -154,6 +236,8 @@ async def run(argv: list[str], sessions) -> int:
         return await _import_excel(args, sessions)
     if args.command == "normalize-clusters":
         return await _normalize_clusters(args, sessions)
+    if args.command == "graph-check":
+        return await _graph_check(args)
     async with sessions() as session:
         fx_settings = (await service.load_state(session))["fx"]
         per_eur = _per_eur(args.per_eur or fx_settings["perEur"].get("USD"))

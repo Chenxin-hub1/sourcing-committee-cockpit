@@ -173,6 +173,15 @@ SC_TEAMS_WEBHOOK_FORMAT=flow    # 工作流接收下方 to / subject / text 契�
 
 **向 IT 申请（Graph 部分）**：Entra 应用注册 + client secret；应用权限 **Sites.Selected**、**Mail.Send** 与 **ChannelMessage.Send**（均需管理员同意）；对目标站点授予 **write** 角色（Graph `POST /sites/{site-id}/permissions`）；建议用**应用访问策略**把 Mail.Send 限定到专用发件邮箱（如 sourcing-cockpit@zf.com），不给全租户发信权。
 
+**连通检查（2026-10-12 起，替代 explore 脚本）**：`.env` 填好后，在 backend 目录运行（免安装部署用 `..\windows-portable\python\python.exe -m app.migrations graph-check --write-test`）：
+
+```
+python -m app.migrations graph-check                # 令牌 → 站点 → 列表与文档库 → 建单列表的列（只读）
+python -m app.migrations graph-check --write-test   # 另在文档库 Sourcing Cockpit/_connection-test 传一个小文件再连同文件夹删掉
+```
+
+输出不含密钥。常见失败：`[1/5] Token … AADSTS90002 Tenant not found` = Tenant ID 与 Client ID 填反了（2026-10-12 本机实际遇到；zf-lifetec / passivesafety 的租户 ID 是 `87f9dc52-…`）；`AADSTS7000215` = 密钥填成了 Secret ID 或已过期；`[2/5] Site … 403` = IT 还没对该站点授权；`[5/5] … FAILED` = 站点授的是 read 不是 write；超时 = 服务器出不了外网，需要代理（httpx 认 `HTTPS_PROXY` 环境变量）。IT 授权的站点是 `https://passivesafety.sharepoint.com/sites/SCC_PROC_SOURCINGCOMMITTEE`（默认文档库 Documents，暂无自定义列表，建单 `SC_SP_LIST_NAME` 先留空）。
+
 ### 演示文件（v3 Phase-5）
 
 提交人在提交页拖拽或选择 PPT / PDF / Excel / Word（单个 ≤ 100 MB，每条登记最多 10 个），提交成功后逐个上传；管理员在案例页可再加、可删。所有能打开驾驶舱的人都能下载。
@@ -208,7 +217,7 @@ SC_TEAMS_WEBHOOK_FORMAT=flow    # 工作流接收下方 to / subject / text 契�
 | Status | 单行文本 | 提交时状态（后续不回写） |
 | Submitter / SubmitterEmail / SubmittedAt / MeetingDate | 单行文本 | 提交人与会议信息 |
 | Screening | 单行文本 | 家族案例 / ECM 筛选答案摘要 |
-| Comments | 单行文本 | 提交人备注 |
+| Comments | **多行文本**（纯文本） | 提交人备注（可能超过 255 字；单行文本上限 255，超长会让建单失败） |
 | CaseLink | 单行文本 | 案例深链（确认登记后可打开） |
 
 **边界**：v3 Phase-7/8 新增的商务字段（件价、模具费、Tooling Payment、BPG / FRA、可选项）与例外登记标记**不写入** SharePoint，只存在驾驶舱里——要同步需先在 List 加列并扩展 `graph.py` 的字段映射；每次提交只建一条，确认登记不会重复建；审批结果、案例编辑**不回写**（Status 列停留在提交时的值）；建单失败不影响提交，也无自动重试——同一案例再次提交会生成新 item。令牌与站点/List id 有进程内缓存但按配置键区分，改 `.env` 后 `docker compose up -d` 即生效。联调可先跑只读探索脚本 `backend/scripts/explore_sharepoint_graph.py` 核对站点、List 与内部列名。

@@ -121,3 +121,32 @@ async def test_upload_into_library_respects_folder_and_types(async_client, libra
     r = await async_client.post("/api/presentation-library/files", params={"name": "KW15 MM.xlsx"}, content=b"x", headers=body)
     assert r.status_code == 422 and "PDF or PowerPoint" in r.json()["detail"]  # 周会 Excel 走 Meeting minutes，不进演示文件库
     assert not list((library.parent / "uploads" / ".incoming").glob("*"))
+
+
+# ---------- IT 开通 Graph 后的连通检查命令（2026-10-12） ----------
+
+
+async def test_graph_check_reports_missing_settings_without_secrets(capsys, monkeypatch):
+    from app import migrations
+
+    monkeypatch.setattr(get_settings(), "graph_client_secret", "")
+    assert await migrations.run(["graph-check"], None) == 2
+    assert "SC_GRAPH_CLIENT_SECRET  MISSING" in capsys.readouterr().out
+
+
+async def test_graph_check_never_prints_the_secret_and_explains_token_failure(capsys, monkeypatch):
+    from app import graph, migrations
+
+    s = get_settings()
+    for key, value in {"graph_tenant_id": "tenant-123", "graph_client_id": "client-456",
+                       "graph_client_secret": "super-secret-value", "sp_site_url": "https://x.sharepoint.com/sites/y"}.items():
+        monkeypatch.setattr(s, key, value)
+
+    async def bad_token(client):
+        raise RuntimeError("token HTTP 401")
+
+    monkeypatch.setattr(graph, "_token", bad_token)
+    assert await migrations.run(["graph-check"], None) == 1
+    out = capsys.readouterr().out
+    assert "super-secret-value" not in out and "SC_GRAPH_CLIENT_SECRET  set (18 chars)" in out
+    assert "[1/5] Token ............ FAILED: token HTTP 401" in out
