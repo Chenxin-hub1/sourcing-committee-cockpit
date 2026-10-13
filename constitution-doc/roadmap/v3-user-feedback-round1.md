@@ -208,6 +208,14 @@ Description: 领导 2026-10-12 要求：Committee Discussion（Excel Notes/Task/
 
 Spec: non-spec
 
+## Phase-24: 邮件与 Teams 通知经 SharePoint 列表 + Power Automate 流发出
+
+Status: `awaiting-acceptance`
+
+Description: 2026-10-13 用户要求测试 Teams 与邮件提醒。发现 IT 给的 Entra 应用只有 Sites.Selected（令牌 roles 实测只有这一项），没有 Mail.Send、也没有发 Teams 的权限，SMTP 中继仍等 IT；用户选择用 Power Automate 流代发。公司数据策略在 passivesafety (default) 与 PP-Dev-PU-GR-Amber 都禁用 "When a Teams webhook request is received"（`restricts use of these apis: TeamsWebhookRequestReceived`），改为 SharePoint 列表中转：系统把每条通知写成站点 SCC_PROC_SOURCINGCOMMITTEE 里 `Cockpit Notifications` 列表的一行（列 channel / to / cc / subject / html，内部名与流里的 `triggerBody()?['…']` 对应），流 **Sourcing Cockpit - Notifications**（passivesafety 默认环境，SharePoint "When an item is created" 触发）按 channel 用所有者的 Office 365 Outlook "Send an email (V2)" 或 Teams "Post message in a chat or channel"（Flow bot 私聊收件人）发出。实现：`SC_NOTIFY_LIST_NAME`（docker-compose 同步透传）；`delivery.send_email` 顺序 SMTP → Graph 发信 → 通知列表，`deliver_teams` 顺序 Graph 直发 → 通知列表 → 旧 webhook，5 种邮件通知都覆盖；`graph.queue_notification` / `ensure_notify_list`；命令 `python -m app.migrations notify-list-setup`（应用 write 角色建不了列表，实测 403，列表由有 ManageLists 权限的用户账号建，命令只读核对 / 补列）；说明 `docs/notify-flow-setup.md`。验证（2026-10-13）：pytest 500（新增 tests/test_notify_list.py 10 项：邮件 / Teams 行字段与分号收件人和 HTML 转义、列表 id 缓存、SMTP / Graph 优先级不变、未配置 skipped、400 / 403 / 列表不存在的可读失败、无收件人不发请求、建列表与补列与权限不足）；本机假 SMTP + 假 Teams 端点跑通 6 种通知与接收端宕机场景；真实链路：写入列表后流两次运行均 Succeeded（<1 分钟），用户收到测试邮件与 Teams 消息。已知边界：发件人是流的连接所有者（目前 xin.chen.external），交接 xiangwei.chen 用户决定暂缓（加共同所有者会借出用户自己的 Outlook / SharePoint 连接，备选 Send a copy）；Teams 以 Flow bot 发每连接每 5 分钟 25 条；列表行不自动清理；本机 `.env` 故意不开（本机库有真实待办），服务器加 `SC_NOTIFY_LIST_NAME` 即开始以所有者邮箱真实发送。
+
+Spec: non-spec
+
 ## Phase-25: 只看单周的周筛选与 Agenda 里 L4 排最后
 
 Status: `awaiting-acceptance`

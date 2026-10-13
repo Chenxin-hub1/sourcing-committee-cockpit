@@ -8,6 +8,7 @@
     python -m app.migrations normalize-clusters --apply    # 写回（服务启动时也会按词表版本自动做一次）
     python -m app.migrations graph-check                   # SharePoint / Graph 连通检查（只读，不打印密钥）
     python -m app.migrations graph-check --write-test      # 另在文档库传一个小文件再删掉，验证 write 权限
+    python -m app.migrations notify-list-setup             # 在 SharePoint 站点建通知列表（已有则补缺的列），部署时跑一次
 
 Docker 部署：docker compose exec cockpit python -m app.migrations usd-to-eur --apply
 先备份 data/cockpit.db，并在没人操作时运行：服务进程里的写锁管不到这个独立进程。
@@ -41,6 +42,7 @@ def _parser() -> argparse.ArgumentParser:
     nc.add_argument("--apply", action="store_true", help="write the changes (default: dry run, prints the mapping table)")
     gc = commands.add_parser("graph-check", help="Check the SharePoint / Graph settings in .env (read-only by default).")
     gc.add_argument("--write-test", action="store_true", help="also upload a small test file to the document library and delete it")
+    commands.add_parser("notify-list-setup", help="Create the SharePoint notification list (SC_NOTIFY_LIST_NAME) or add missing columns.")
     return parser
 
 
@@ -229,6 +231,19 @@ async def _graph_check(args) -> int:
     return 0
 
 
+async def _notify_list_setup() -> int:
+    """通知列表（邮件 / Teams 经 Power Automate 流发出的中转表）：没有就建，已有就补缺的列。"""
+    from . import graph
+
+    try:
+        for line in await graph.ensure_notify_list():
+            print(line)
+    except RuntimeError as e:
+        print(f"FAILED: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
 async def run(argv: list[str], sessions) -> int:
     """返回进程退出码：0 成功，2 参数或汇率有误。sessions 是 async_sessionmaker（测试传隔离库）。"""
     args = _parser().parse_args(argv)
@@ -238,6 +253,8 @@ async def run(argv: list[str], sessions) -> int:
         return await _normalize_clusters(args, sessions)
     if args.command == "graph-check":
         return await _graph_check(args)
+    if args.command == "notify-list-setup":
+        return await _notify_list_setup()
     async with sessions() as session:
         fx_settings = (await service.load_state(session))["fx"]
         per_eur = _per_eur(args.per_eur or fx_settings["perEur"].get("USD"))

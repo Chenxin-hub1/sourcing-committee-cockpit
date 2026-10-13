@@ -31,6 +31,7 @@ HTTP_TIMEOUT = 15
 _token_cache: dict = {"key": "", "token": "", "expires_at": 0.0}
 _site_cache: dict = {"key": "", "site_id": "", "list_id": ""}
 _drive_cache: dict = {"key": "", "drive_id": "", "root_id": ""}
+_notify_cache: dict = {"key": "", "site_id": "", "list_id": ""}
 
 UPLOAD_TIMEOUT = 120  # 单块上传（最大 10 MiB）的超时
 
@@ -40,6 +41,7 @@ def _reset_cache() -> None:
     _token_cache.update(key="", token="", expires_at=0.0)
     _site_cache.update(key="", site_id="", list_id="")
     _drive_cache.update(key="", drive_id="", root_id="")
+    _notify_cache.update(key="", site_id="", list_id="")
 
 
 def credentials_ready() -> bool:
@@ -400,3 +402,108 @@ async def send_channel_message(text: str) -> str:
     except Exception as e:  # noqa: BLE001 — 发送失败必须被记录而不是中断提醒流程
         log.warning("graph channel message failed: %s", e)
         return f"failed: {type(e).__name__}"
+
+
+# ============================= 通知列表（2026-10-13：邮件 / Teams 经 SharePoint 列表中转） =============================
+# 应用没有 Mail.Send，公司数据策略又禁用 Teams webhook 触发器：系统把每条通知写成通知列表里的一行，
+# Power Automate 流用 SharePoint "When an item is created" 触发，再用流所有者自己的 Outlook / Teams 连接发出。
+# 写列表用的就是演示文件那份授权（Sites.Selected + 站点 write）。列的内部名与流里的表达式
+# triggerBody()?['…'] 一一对应——改列名要同步改流（docs/notify-flow-setup.md）。
+# 列定义按 Graph v1.0 columnDefinition / textColumn：多行纯文本（allowMultipleLines + textType plain），
+# 收件人与正文可能超过单行文本的 255 字上限。
+NOTIFY_COLUMNS = {
+    "channel": {"text": {}},
+    "to": {"text": {"allowMultipleLines": True, "textType": "plain"}},
+    "cc": {"text": {"allowMultipleLines": True, "textType": "plain"}},
+    "subject": {"text": {}},
+    "html": {"text": {"allowMultipleLines": True, "textType": "plain"}},
+}
+
+
+def notify_list_ready() -> bool:
+    """通知列表可用：核心凭据 + 站点地址 + 列表名（SC_NOTIFY_LIST_NAME）。"""
+    s = get_settings()
+    return credentials_ready() and bool(s.sp_site_url and s.notify_list_name)
+
+
+async def _site_id(client: httpx.AsyncClient) -> str:
+    return (await _get_json(client, f"/sites/{_site_path(get_settings().sp_site_url)}", params={"select": "id"}))["id"]
+
+
+async def _list_by_name(client: httpx.AsyncClient, site_id: str, name: str) -> dict | None:
+    lists = (await _get_json(client, f"/sites/{site_id}/lists", params={"select": "id,displayName"}))["value"]
+    wanted = name.strip()
+    return (next((l for l in lists if l["displayName"] == wanted), None)
+            or next((l for l in lists if l["displayName"].casefold() == wanted.casefold()), None))
+
+
+async def _notify_ids(client: httpx.AsyncClient) -> tuple[str, str]:
+    s = get_settings()
+    key = f"{s.sp_site_url}|{s.notify_list_name}"
+    if _notify_cache["key"] == key and _notify_cache["list_id"]:
+        return _notify_cache["site_id"], _notify_cache["list_id"]
+    site_id = await _site_id(client)
+    target = await _list_by_name(client, site_id, s.notify_list_name)
+    if target is None:
+        raise RuntimeError(f"notification list {s.notify_list_name!r} not found — run: python -m app.migrations notify-list-setup")
+    _notify_cache.update(key=key, site_id=site_id, list_id=target["id"])
+    return site_id, target["id"]
+
+
+async def queue_notification(channel: str, to: str, cc: str, subject: str, html_body: str) -> str:
+    """把一条通知写进通知列表，由流发出。返回 sent / skipped / failed: …（与 SMTP 同一套语义：
+    sent = 已交给下一站，不代表已送达；流几分钟内轮询到这一行才真正发出）。"""
+    if not notify_list_ready():
+        return "skipped"
+    fields = {"Title": subject[:255], "channel": channel, "to": to, "cc": cc, "subject": subject, "html": html_body}
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            site_id, list_id = await _notify_ids(client)
+            resp = await _graph(client, "POST", f"/sites/{site_id}/lists/{list_id}/items", json={"fields": fields})
+            if resp.status_code in (200, 201):
+                return "sent"
+            if resp.status_code == 400:
+                log.warning("graph notification item 400: %s", resp.text[:500])
+                return "failed: 400 (notification list columns missing — run notify-list-setup)"
+            if resp.status_code == 403:
+                log.warning("graph notification item 403: %s", resp.text[:300])
+                return "failed: 403 (site write permission missing?)"
+            log.warning("graph notification item HTTP %s: %s", resp.status_code, resp.text[:300])
+            return f"failed: HTTP {resp.status_code}"
+    except RuntimeError as e:  # 本模块的配置类提示（站点 403/404、列表不存在）
+        log.warning("graph notification failed: %s", e)
+        return f"failed: {e}"
+    except Exception as e:  # noqa: BLE001 — 通知失败必须被记录而不是中断提醒流程
+        log.warning("graph notification failed: %s", type(e).__name__)
+        return f"failed: {type(e).__name__}"
+
+
+async def ensure_notify_list() -> list[str]:
+    """建通知列表（没有就建，已有就补缺的列），返回做了什么。部署时运行一次（migrations notify-list-setup）。"""
+    s = get_settings()
+    if not notify_list_ready():
+        raise RuntimeError("set SC_GRAPH_* , SC_SP_SITE_URL and SC_NOTIFY_LIST_NAME first")
+    done: list[str] = []
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        site_id = await _site_id(client)
+        target = await _list_by_name(client, site_id, s.notify_list_name)
+        if target is None:
+            body = {"displayName": s.notify_list_name.strip(), "list": {"template": "genericList"},
+                    "columns": [{"name": name, **definition} for name, definition in NOTIFY_COLUMNS.items()]}
+            resp = await _graph(client, "POST", f"/sites/{site_id}/lists", json=body)
+            if resp.status_code not in (200, 201):
+                raise _fail("create notification list", resp)
+            done.append(f"created list {s.notify_list_name!r} with columns {', '.join(NOTIFY_COLUMNS)}")
+        else:
+            existing = await _get_json(client, f"/sites/{site_id}/lists/{target['id']}/columns", params={"select": "name"})
+            have = {c["name"] for c in existing["value"]}
+            for name, definition in NOTIFY_COLUMNS.items():
+                if name in have:
+                    continue
+                resp = await _graph(client, "POST", f"/sites/{site_id}/lists/{target['id']}/columns", json={"name": name, **definition})
+                if resp.status_code not in (200, 201):
+                    raise _fail(f"add column {name}", resp)
+                done.append(f"added column {name}")
+            done = done or [f"list {s.notify_list_name!r} already has every column"]
+    _notify_cache.update(key="", site_id="", list_id="")
+    return done

@@ -114,43 +114,18 @@ EUR 改造之前登记的案例（含模板演示数据）没有币种信息、�
 
 SMTP 中继可在 `.env` 中配置后通过 `docker compose up -d` 生效。Teams 新接入使用 Power Automate / Workflows，并先与 IT 确认请求契约及认证方式。
 
-微软最新公告确认旧版 Teams Office 365 Connectors 于 2026-05-18 至 2026-05-22 停用，新申请应采用 Workflows，不能再申请旧 Incoming Webhook Connector。[微软退役公告](https://devblogs.microsoft.com/microsoft365dev/retirement-of-office-365-connectors-within-microsoft-teams/)
+### 通知列表（2026-10-13 起：不等 IT 的发信 / 发 Teams 路径）
 
-当前程序的 Flow 请求只发送 JSON，尚未附带 Entra Bearer Token。若 IT 使用限制租户或指定应用身份的 HTTP 触发器，需先补充 OAuth 调用能力，单填 URL 不够；正式方案优先采用受认证的调用方式。许可及连接器是否允许由 IT 核定。[HTTP 触发器认证](https://learn.microsoft.com/en-us/power-automate/oauth-authentication)
+IT 只给应用批了 SharePoint 权限（Sites.Selected + 站点 write），没有 Mail.Send；公司数据策略又禁用了 Power Automate 的 Teams webhook 触发器（默认环境与 Dev 环境实测都报 `restricts use of these apis: TeamsWebhookRequestReceived`）。所以改用 **SharePoint 列表中转**：系统把每条通知写成站点里 `Cockpit Notifications` 列表的一行，Power Automate 流 **Sourcing Cockpit - Notifications**（passivesafety 默认环境）用 SharePoint "When an item is created" 触发，按 `channel` 分支用流所有者自己的 Outlook / Teams 连接发出。`.env` 填 `SC_NOTIFY_LIST_NAME=Cockpit Notifications`（站点沿用 `SC_SP_SITE_URL`）。建列表、加共同所有者、换连接的步骤见 [`docs/notify-flow-setup.md`](docs/notify-flow-setup.md)。
 
-```bash
-# 邮件（公司 SMTP 中继）
-SC_SMTP_HOST=<IT 提供>
-SC_SMTP_PORT=25            # 按 IT 提供修改
-SC_SMTP_STARTTLS=false     # IT 要求加密时改 true
-SC_SMTP_USER=              # 通常内网中继免认证；需要时填
-SC_SMTP_PASSWORD=
-SC_SMTP_FROM=sourcing-cockpit@zf.com   # 或 IT 分配的专用发件邮箱
+| 通道 | 选择顺序 |
+| --- | --- |
+| 邮件（5 种通知都算） | SMTP（`SC_SMTP_HOST`）→ Graph 发信（凭据 + `SC_GRAPH_SENDER`）→ 通知列表 → `skipped` |
+| Teams（提醒） | Graph 直发频道 → 通知列表 → 旧 webhook（`SC_TEAMS_WEBHOOK_URL`）→ `skipped` |
 
-# Teams
-SC_TEAMS_WEBHOOK_URL=<Webhook URL>
-SC_TEAMS_WEBHOOK_FORMAT=flow    # 工作流接收下方 to / subject / text 契约，再转发 Teams
-```
+列（内部名与流里的 `triggerBody()?['…']` 一一对应，改名要同步改流）：`Title`（= 标题）、`channel`（`email` / `teams`）、`to` / `cc`（多行纯文本，分号分隔，Outlook 连接器的写法）、`subject`、`html`（多行纯文本：正文转义后换行变 `<br>`，给 Outlook 的 HTML 正文与 Teams 消息用）。应用的 write 角色**不能建列表**（实测 403），列表由有站点 ManageLists 权限的人建；`python -m app.migrations notify-list-setup` 只读核对列是否齐全（缺列时它会尝试补列，同样可能 403）。
 
-### 向 IT 申请的内容（可直接转发）
-
-> **中文说明**：内部工具 Seat Belt Sourcing Committee Cockpit（Docker 部署于内网 Linux 服务器）需要两件能力：
-> 1. **发提醒邮件**：请提供内部 SMTP 中继的**主机名、端口**，是否要求 STARTTLS/账号密码，以及允许的**发件人地址**（建议专用邮箱如 sourcing-cockpit@zf.com）。
-> 2. **发 Teams 消息**：使用 **Power Automate / Workflows** 建流，接收下方 JSON 后向指定频道或收件人发送消息；确认触发器认证、所需许可、工作流负责人及故障通知。请提供端点与允许调用的应用身份要求；采用 Entra 认证时，开发侧将补充令牌获取与传递。
->
-> **English (for IT)**: Internal tool "Seat Belt Sourcing Committee Cockpit" (Docker, intranet Linux server) needs:
-> 1. **Outbound reminder email**: an internal SMTP relay — hostname, port, whether STARTTLS/auth is required, and an approved sender address (e.g. sourcing-cockpit@zf.com).
-> 2. **Teams messages**: provision a Power Automate / Workflows flow that accepts the JSON contract below and posts to the designated channel or recipient. Please confirm authentication, licensing, ownership, and failure notifications, and provide the endpoint and caller identity requirements. The application currently sends JSON without a bearer token; development will add Entra authentication where required.
-
-### Power Automate 流的请求契约（`SC_TEAMS_WEBHOOK_FORMAT=flow`）
-
-应用会向该 URL POST 如下 JSON；工作流需显式读取这些字段，并将 `text` 映射到 Teams 消息正文。按收件人私发时使用 `to`，发频道时由工作流固定目标频道。这里是本项目约定，并非任意 Workflows 模板都能直接接受的通用格式：
-
-```json
-{ "to": "l.novak@zf.com", "subject": "Follow-up Task for Sourcing Case SWAT-10555", "text": "<完整提醒正文>" }
-```
-
-保留的 `teams` 格式只 POST `{"text": "<完整提醒正文>"}`，用于明确接受此字段的自定义工作流兼容；不代表旧版 Teams Connector 仍可使用。当前审批结果邮件仍走 SMTP，不会自动经此 Flow 发出邮件。
+投递结果里的 `sent` 表示"已写进列表"；流按触发器的轮询间隔（定义里是每分钟，实际以许可证允许的最短间隔为准）读到后才真正发出，结果看流的运行记录。已知限制（微软连接器文档）：Outlook 每个连接每 60 秒 300 次；Teams 以 Flow bot 发消息每个连接每 5 分钟 25 条，单日过期提醒很多时 Teams 部分可能被限流；流所有者离职 / 改密码后要换连接；列表行不会自动清理。
 
 ## Graph 接入（SharePoint 建单 + 演示文件 + 邮件兜底 + Teams 认证，可选）
 

@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     smtp_starttls: bool = False
     smtp_from: str = "sourcing-cockpit@zf.com"
 
+    # ---- 通知列表（2026-10-13）：IT 没给应用发信 / 发 Teams 权限时的替代路径 ----
+    # SharePoint 站点（SC_SP_SITE_URL）里的列表名；系统把通知写成一行，Power Automate 流
+    # （SharePoint "When an item is created" 触发）用所有者自己的 Outlook / Teams 连接发出。
+    # 邮件排在 SMTP、Graph 发信之后，Teams 排在 Graph 直发之后、旧 webhook 之前；留空 = 不用
+    notify_list_name: str = ""
+
     # ---- 提醒真实外发：Teams（webhook；url 为空 = 该通道仅记日志） ----
     teams_webhook_url: str = ""
     teams_webhook_format: Literal["teams", "flow"] = "teams"

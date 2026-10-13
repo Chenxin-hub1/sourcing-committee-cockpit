@@ -1,4 +1,4 @@
-"""投递通道：Email（SMTP）+ Teams（webhook）—— 提醒与审批结果通知共用。
+"""投递通道：Email（SMTP / Graph / 通知列表）+ Teams（Graph / 通知列表 / webhook）—— 提醒与审批结果通知共用。
 
 设计约束：
 - 未配置的通道记 "skipped"，已配置但出错的通道记 "failed: …"，绝不让投递异常中断每日检查；
@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import re
 from email.message import EmailMessage
@@ -38,14 +39,28 @@ async def send_email(to: str, subject: str, body: str, cc: str = "") -> str:
     """统一发信入口（提醒邮件与审批结果邮件共用）。返回 sent / skipped / failed: …。
 
     通道选择：配置了 SMTP 中继（SC_SMTP_HOST）优先走 SMTP；未配置而 Graph 凭据与
-    发件邮箱（SC_GRAPH_SENDER）齐备时走 Graph sendMail；两者皆空记 skipped。
+    发件邮箱（SC_GRAPH_SENDER）齐备时走 Graph sendMail；再不行配了通知列表（SC_NOTIFY_LIST_NAME）
+    就写进列表，由 Power Automate 流用所有者的 Outlook 发出；都没有记 skipped。
     """
     s = get_settings()
     if s.smtp_host:
         return await _send_via_smtp(to, subject, body, cc)
     if graph.credentials_ready() and s.graph_sender:
         return await graph.send_mail(to, subject, body, cc)
+    if graph.notify_list_ready():
+        return await _queue("email", to, subject, body, cc)
     return "skipped"
+
+
+async def _queue(channel: str, to: str, subject: str, text: str, cc: str = "") -> str:
+    """交给通知列表：收件人用分号分隔（Outlook 连接器的写法），正文转义后换行变 <br>
+    （Outlook 的 Body 与 Teams 消息都是 HTML）。流按 channel 分支发邮件或 Teams。"""
+    to = clean_addresses(to).replace(", ", "; ")
+    if not to:
+        return "failed: no valid recipient address"
+    return await graph.queue_notification(channel, to, clean_addresses(cc).replace(", ", "; "),
+                                          _ADDR_UNSAFE_RE.sub(" ", subject),
+                                          html.escape(text, quote=False).replace("\n", "<br>"))
 
 
 async def _send_via_smtp(to: str, subject: str, body: str, cc: str = "") -> str:
@@ -87,10 +102,13 @@ async def deliver_email(entry: dict) -> str:
 
 async def deliver_teams(entry: dict) -> str:
     s = get_settings()
-    # 优先 Graph 直发频道消息（与邮件同一套凭据）；未配团队/频道 ID 时回落 webhook；
-    # 两者皆未配置记 skipped。
+    # 优先 Graph 直发频道消息（与邮件同一套凭据）；其次通知列表（流以 Flow bot 私聊收件人）；
+    # 再回落旧 webhook；都未配置记 skipped。
     if graph.channel_message_ready():
         return await graph.send_channel_message(entry["message"])
+    if graph.notify_list_ready():
+        return await _queue("teams", entry.get("to", ""), f"Follow-up Task for Sourcing Case {entry['swatId']}",
+                            entry["message"])
     if not s.teams_webhook_url:
         return "skipped"
     if s.teams_webhook_format == "flow":

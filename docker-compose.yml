@@ -41,6 +41,7 @@ services:
       SC_SP_FOLDER: ${SC_SP_FOLDER:-Sourcing Cockpit}
       SC_PRESENTATION_LIBRARY_DIR: ${SC_PRESENTATION_LIBRARY_DIR:-./data/presentations}
       SC_GRAPH_SENDER: ${SC_GRAPH_SENDER:-}
+      SC_NOTIFY_LIST_NAME: ${SC_NOTIFY_LIST_NAME:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

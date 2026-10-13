@@ -1,0 +1,70 @@
+# 通知流：邮件与 Teams 经 Power Automate 发出
+
+> 2026-10-13 建立。适用情况：IT 只给系统批了 SharePoint 权限，系统自己不能发邮件、不能发 Teams 消息。
+
+## 为什么这样绕一圈
+
+- 系统的 Graph 应用只有 **Sites.Selected + 站点 write** 权限，没有 Mail.Send。
+- 公司数据策略禁用了 Power Automate 的 "When a Teams webhook request is received" 触发器，所以系统不能直接调用流。默认环境和 PP-Dev-PU-GR-Amber 实测都报 `restricts use of these apis: TeamsWebhookRequestReceived`。
+- 变通办法是**用 SharePoint 列表当留言板**：系统要发通知时，在列表里写一行；流每隔一会儿检查一次，发现新行，就用流所有者自己的 Outlook 和 Teams 发出去。
+
+## 现在已经建好的东西
+
+| 东西 | 位置 |
+| --- | --- |
+| 列表 **Cockpit Notifications** | 站点 `https://passivesafety.sharepoint.com/sites/SCC_PROC_SOURCINGCOMMITTEE` |
+| 流 **Sourcing Cockpit - Notifications** | Power Automate，环境 **passivesafety (default)** |
+| 系统配置 | `.env` 里 `SC_NOTIFY_LIST_NAME=Cockpit Notifications`（站点沿用 `SC_SP_SITE_URL`） |
+
+### 列表的列
+
+列名就是流里 `triggerBody()?['…']` 读取的名字。**改列名会让流读不到值**，改了要同步改流。
+
+| 列 | 类型 | 内容 |
+| --- | --- | --- |
+| Title | 单行文本 | 标题（与 subject 相同，方便在列表里浏览） |
+| channel | 单行文本 | `email` 或 `teams` |
+| to | 多行纯文本 | 收件人，多个用分号隔开 |
+| cc | 多行纯文本 | 抄送（只用于邮件），可以为空 |
+| subject | 单行文本 | 标题 |
+| html | 多行纯文本 | 正文：特殊字符已转义，换行已变成 `<br>` |
+
+### 流的结构
+
+1. **触发器**：SharePoint "When an item is created"，站点选 SCC_PROC_SOURCINGCOMMITTEE，列表选 Cockpit Notifications。
+2. **Condition**：`triggerBody()?['channel']` 等于 `email`。
+   - **True 分支**：Office 365 Outlook "Send an email (V2)"
+     - To = `triggerBody()?['to']`（To 框要先在右侧齿轮里打开 "Use dynamic content"）
+     - Subject = `triggerBody()?['subject']`
+     - Body = `triggerBody()?['html']`
+     - CC = `if(empty(triggerBody()?['cc']), null, triggerBody()?['cc'])`（抄送为空时传 null，CC 框同样要先打开 "Use dynamic content"）
+   - **False 分支**：Microsoft Teams "Post message in a chat or channel"
+     - Post as = Flow bot
+     - Post in = Chat with Flow bot
+     - Recipient = `triggerBody()?['to']`（同样先打开 "Use dynamic content"）
+     - Message = `triggerBody()?['html']`
+
+## 把发件人换成 xiangwei.chen@zf-lifetec.com
+
+流里的每个连接都属于登录它的那个人。邮件的发件人，就是 "Send an email (V2)" 那一步所用 Outlook 连接的账号。
+
+1. **（你）加共同所有者**：打开 [Power Automate](https://make.powerautomate.com)，确认右上角环境是 passivesafety (default) → My flows → 在 "Sourcing Cockpit - Notifications" 一行点 ⋮ → **Share** → 输入 `xiangwei.chen@zf-lifetec.com`。
+2. **（xiangwei.chen）换成自己的连接**：他登录后在 **Team flows**（团队流）页签里找到这个流 → **Edit** → 点 "Send an email (V2)" → 面板底部 "Connected to …" 旁边点 **Change connection** → 选他自己的账号，或 Add new connection 后登录 → **Save**。
+3. 建议他把 "Post message in a chat or channel"（Teams）和触发器 "When an item is created"（SharePoint）也换成自己的连接。这样你的账号不再参与，以后你调岗也不影响这个流。
+   - 注意：触发器用的连接必须能读 SCC_PROC_SOURCINGCOMMITTEE 站点，xiangwei.chen 要有这个站点的访问权限。
+
+微软文档说明：共同所有者可以修改流，也可以把某一步的连接换成自己的，但不能修改别人建的连接的凭据（[Share a cloud flow](https://learn.microsoft.com/en-us/power-automate/create-team-flows)）。
+
+## 怎么确认发出去了
+
+- 系统里显示的投递结果 `sent`，表示“已写进列表”，不代表已经送达。
+- 真正发没发出，要看流的 **28-day run history**（流详情页）：每一行通知对应一次运行，失败的运行点进去能看到是哪一步出错。
+- 触发器定义的是每分钟检查一次，实际间隔以许可证允许的最短间隔为准，所以通知会晚一会儿才到。
+
+## 已知限制
+
+- Teams 以 Flow bot 身份发消息：每个连接每 5 分钟最多 25 条（微软连接器文档）。哪天过期提醒特别多，Teams 那部分可能被限流，邮件不受影响。
+- Outlook 连接：每个连接每 60 秒最多 300 次调用。
+- 流的所有者离职、改密码，或连接过期，都要重新登录或换连接。
+- 列表里的行不会自动删除，时间长了可以手动清理。
+- 以后 IT 批了 Mail.Send，或者给了 SMTP 中继，在 `.env` 里填上对应配置后，邮件会优先走那条路（顺序见 DEPLOY.md），这个流只剩 Teams 部分在用。
