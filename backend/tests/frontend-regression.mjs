@@ -1287,9 +1287,12 @@ try{
     assert.deepEqual(await col(0), ['2025-KW51']);
     assert.deepEqual(await page.locator('#fWeekFrom option').allTextContents(), ['From week','2025-KW51']);
     await page.locator('#fYear').selectOption('');
+    // v3 Phase-25：只选 From week 就只看这一周（To 自动跟上），之后的周不混进来；再选更晚的 To 才是范围
     await page.locator('#fWeekFrom').selectOption('202640');
-    await page.locator('#fWeekTo').selectOption('202640');
+    assert.equal(await page.locator('#fWeekTo').inputValue(), '202640');
     assert.deepEqual(await col(0), ['2026-KW40']);
+    await page.locator('#fWeekTo').selectOption('202651');
+    assert.deepEqual(await col(0), ['2026-KW51','2026-KW40']);
     await page.locator('#clearFilters').click();
     // 表头排序：供应商升序 → 再点降序；金额；周
     await page.locator('th[data-sort="supplier"]').click();
@@ -1316,6 +1319,22 @@ try{
     await page.locator('tr[data-swat="SWAT-B"]').click();
     const text = await page.locator('#app').innerText();
     assert.ok(text.includes('2026-KW51 · Wed, Dec 16, 2026') && text.includes('Commodity\nCA Casting (Excel: CA04)'), text);
+    await context.close();
+  });
+
+  await test('Database week sort keeps Level 4 cases (for info) last within each week in both directions', async()=>{
+    const {page, context} = await fixture();
+    await page.evaluate(()=>{
+      const base = {partNumber:'1', partDescription:'P', recommendedSupplier:'S', presenter:'O', cluster:'Metal', meetingDecision:'PENDING', meetingYear:2026};
+      const mk = (swat, weekNum, caseNumber, decisionLevel)=>mkCase({...base, id:swat, swatId:swat, weekNum, caseNumber, decisionLevel});
+      applySnapshot({cases:[mk('42-L4a',42,1,'Level 4'), mk('42-L2',42,4,'Level 2'), mk('42-L4b',42,2,'Level 4'),
+                            mk('43-L4',43,1,'Level 4'), mk('43-L3',43,2,'Level 3')]});
+      state.view='database'; render();
+    });
+    const swats = ()=>page.evaluate(()=>[...document.querySelectorAll('tbody tr')].map(r=>r.dataset.swat));
+    assert.deepEqual(await swats(), ['43-L3','43-L4','42-L2','42-L4b','42-L4a']);  // 默认周倒序
+    await page.locator('th[data-sort="week"]').click();
+    assert.deepEqual(await swats(), ['42-L2','42-L4a','42-L4b','43-L3','43-L4']);
     await context.close();
   });
 

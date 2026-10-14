@@ -194,8 +194,12 @@ def _write_formula(ws, r: int, col: int, formula: str, fmt: str | None) -> None:
     _style(cell, formula, fmt, wrap=False)
 
 
-def _sorted(cases: list[dict]) -> list[dict]:
-    return sorted(cases, key=lambda c: (int(c.get("weekNum") or 0), int(c.get("caseNumber") or 0), str(c.get("swatId") or "")))
+def _sorted(cases: list[dict], l4_last: bool = False) -> list[dict]:
+    """按 年份 + 周 → 案例号 排；l4_last 时每周内 Level 4 排到该周最后（v3 Phase-25：L4 只是 for info，不用会上 review）。"""
+    def key(c: dict) -> tuple:
+        l4 = l4_last and c.get("decisionLevel") == "Level 4"
+        return (logic.case_year(c) or 0, int(c.get("weekNum") or 0), l4, int(c.get("caseNumber") or 0), str(c.get("swatId") or ""))
+    return sorted(cases, key=key)
 
 
 def _header(ws, kind: str, title: str, note: str, headers: list[str]) -> None:
@@ -225,7 +229,8 @@ def _note(kind: str, when: datetime) -> str:
             "One row per part number; case-level cells are merged (Peak Year / LT Spend are per bundle). Amounts in the Currency column "
             "(EUR for cases registered after the EUR switch). Savings follow the SBS template: "
             "(recommended supplier − CQA) × volume, so a negative value means below CQA. "
-            "Week numbers are ISO calendar weeks (KW).")
+            "Week numbers are ISO calendar weeks (KW)."
+            + (" Level 4 cases are for information only (no review) and are listed last within each week." if kind == "agenda" else ""))
 
 
 def build(kind: str, cases: list[dict], label: str, when: datetime | None = None) -> bytes:
@@ -240,7 +245,7 @@ def build(kind: str, cases: list[dict], label: str, when: datetime | None = None
     _header(ws, kind, f"{KIND_TITLE[kind]} — {label}", _note(kind, when or logic.na_now()), headers)
     widths = {i: len(h) + 2 for i, h in enumerate(headers, start=1)}
     r = HEADER_ROW + 1
-    for c in _sorted(cases):
+    for c in _sorted(cases, l4_last=kind == "agenda"):
         rows = logic.part_number_lines(c)
         first, last = r, r + len(rows) - 1
         for line in rows:

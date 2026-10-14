@@ -207,3 +207,11 @@ Status: `awaiting-acceptance`
 Description: 领导 2026-10-12 要求：Committee Discussion（Excel Notes/Task/Resp./Due Date 列）里的编号任务自动列出来，负责人与日期能识别的先填好，她只补邮箱和具体日期。实现：新模块 `app/action_items.py`（主编号 "1." 按行或挤在一行里都认，只认按顺序出现的编号；子任务行首 a. b. 或行内 1) 2)，至少两条才算，编号记成 6a / 2.1；不带编号的行进上一条备注；负责人取最后一个 "--"，没有就取最后一个 " - "，末尾括号里的说明进备注；截止日期先在负责人段找、再在任务文字里找：dd.mm.yyyy / dd/mm/yy / ISO 照填，KW / CW 取那周周五、月份取月底并在备注提示核对，没写年份的 KW 按案例会议年份推算、跨年往后推）；接口 `POST /api/action-items/extract {text, meetingDateISO}`（Manager 及以上，只出草稿不写库）。前端：详情页纪要 `white-space: pre-wrap` 保留换行（之前挤成一段）；编辑页 Follow-up Tasks 区 "Extract action items from discussion" 用编辑框里的纪要识别 → 勾选面板（已在列表里的默认不勾）→ "Add N selected as follow-up tasks" 加进待办（任务文字带纪要编号，邮箱留空，保存时照常校验）。不按姓名猜邮箱、不猜负责人职能。验证（2026-10-13）：pytest 新增 tests/test_phase23.py 19 项（领导截图两段真实纪要逐条比对、历史纪要的 " - " 写法、无编号、句中数字不拆、8 种日期写法、接口权限与非法日期），前端回归新增 1 条（纪要换行、无编号提示、识别请求带编辑中的文字与会议日期、去重默认不勾、勾选计数、加入后未保存的输入不丢）；36 份历史周会 Excel 的 142 个案例中 71 个识别出 177 条任务，132 条带负责人、21 条带日期（其余是纪要原文没写）；临时实例 8063 截图 `.playwright-mcp/phase23-drafts*.png`。已知边界：一条编号里写了两个 "--负责人" 时只取最后一个，前面的留在任务文字里。
 
 Spec: non-spec
+
+## Phase-25: 只看单周的周筛选与 Agenda 里 L4 排最后
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-10-14 反馈：Database 页 From week 选了 2026-KW42、To week 留空时，KW43 的 5 个案例也出现，导出的 Agenda 也带上了它们（原因：To week 留空就是没有上限）；导出 Agenda 时 Level 4 案例只是 for info、不需要会上 review，要一直排在最后。用户同日确认：只改 Agenda（Meeting Minutes 不动）、多周导出时每周各自把 L4 放到该周最后、Database 列表也一样排。实现：Database 页选了 From week 而 To week 为空或更早时，To 自动设成同一周（下拉框里看得见，想看范围再选更晚的 To）；`exports._sorted` 改按"年份 + 周"排（原来只看周号，跨年导出会把 2025-KW42 与 2026-KW42 混在一起），Agenda 传 `l4_last`，每周内 Level 4 排到最后，A2 说明行注明这一点；Meeting Minutes 与 Actions 表顺序不变；Database 表按周排序（默认）时，每周内 L4 不论升降序都在该周最后，其他列排序不受影响。验证（2026-10-14）：pytest 491（test_exports 新增 1 项：多周 + 跨年 L4 排后、纪要顺序不变）、前端回归 45（周筛选只选 From 只看单周、L4 升降序都排后）、滚动回归 16、ruff check；本机库快照起临时实例 8063 实测：只选 From 2026-KW25 时 To 自动为 KW25、只列 KW25 两条；选 KW24~KW30 导出的 Agenda 按周升序、A2 带 L4 说明。本机库没有领导截图里的 2026-KW42 / KW43 数据（在服务器上），部署后请在服务器上按截图再看一遍。
+
+Spec: non-spec

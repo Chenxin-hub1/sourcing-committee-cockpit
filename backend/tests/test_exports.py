@@ -119,6 +119,19 @@ def test_agenda_for_empty_week_still_has_headers():
     assert headers[:2] == ["#", "KW"] and rows == []
 
 
+def test_agenda_lists_level_4_cases_last_within_each_week_but_minutes_keep_case_order():
+    # v3 Phase-25：L4 只是 for info；多周导出时每周各自把 L4 放到该周最后，跨年按年份 + 周排
+    def c(swat, week, num, level, year=2026):
+        return _case(swatId=swat, weekNum=week, caseNumber=num, decisionLevel=f"Level {level}", meetingYear=year)
+    cases = [c("43-L4", 43, 1, 4), c("42-L4a", 42, 1, 4), c("43-L2", 43, 2, 2), c("42-L2", 42, 4, 2),
+             c("42-L4b", 42, 2, 4), c("42-L3", 42, 5, 3), c("2025-42-L4", 42, 1, 4, year=2025)]
+    _, rows = _rows(_sheet(exports.build("agenda", cases, "Database export", WHEN), "Agenda"))
+    assert [r["SWAT ID / Bundle ID"] for r in rows] == ["2025-42-L4", "42-L2", "42-L3", "42-L4a", "42-L4b", "43-L2", "43-L4"]
+    assert "Level 4 cases are for information only" in _sheet(exports.build("agenda", cases, "x", WHEN), "Agenda")["A2"].value
+    _, rows = _rows(_sheet(exports.build("minutes", cases, "Database export", WHEN), "Minutes"))
+    assert [r["SWAT ID / Bundle ID"] for r in rows] == ["2025-42-L4", "42-L4a", "42-L4b", "42-L2", "42-L3", "43-L4", "43-L2"]
+
+
 def test_minutes_has_decision_notes_and_one_action_row_per_task():
     data = exports.build("minutes", [_case(), _case(caseNumber=3, swatId="SWAT-3", meetingDecision="PENDING", actionStatus=None, followUps=[],
                                                     committeeDiscussion="Pending for Sourcing Committee Review")], "2026-KW39", WHEN)
