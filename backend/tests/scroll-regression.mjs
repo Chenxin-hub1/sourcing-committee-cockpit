@@ -61,9 +61,22 @@ async function screenshot(page,name){
   await page.screenshot({path:join(process.env.FRONTEND_ARTIFACT_DIR,'scroll-'+name+'.png'),fullPage:true});
 }
 
+// v3 Phase-26：组内页面先点组名（Case Workflow / Data），再点侧边栏
+const NAV_GROUP_OF = {submit:'workflow', approvals:'workflow', followups:'workflow', database:'data', dashboard:'data'};
 async function navigate(page,view){
-  await page.locator(`[data-nav="${view}"]`).click();
+  const item = page.locator(`#sidenav [data-nav="${view}"]`);
+  if(NAV_GROUP_OF[view] && !(await item.isVisible())) await page.locator(`[data-nav-group="${NAV_GROUP_OF[view]}"]`).click();
+  await (NAV_GROUP_OF[view] ? item : page.locator(`[data-nav="${view}"]`)).click();
   await page.waitForFunction(view=>state.view===view,view);
+}
+
+// v3 Phase-26 后顶部只剩 Home / Case Workflow / Data（/ Accounts），手机宽度也放得下；
+// 拖动 / 滑动平移导航仍要在溢出时可用（大字号、按钮变多），这里把导航条压窄来制造溢出
+async function forceNavOverflow(page){
+  await page.addStyleTag({content:'#navtabs{flex:0 0 150px !important;width:150px !important;max-width:150px !important;}'});
+  const nav = page.locator('#navtabs');
+  assert.ok(await nav.evaluate(element=>element.scrollWidth>element.clientWidth+100),'Navigation strip must overflow for this test');
+  return nav;
 }
 
 async function tableRegion(page){
@@ -160,11 +173,11 @@ try{
   });
 
   await test('Mouse drag pans navigation without selecting a tab; next click works',{width:390,height:844},async page=>{
-    const nav = page.locator('#navtabs');
+    const nav = await forceNavOverflow(page);
     const box = await nav.boundingBox();
-    await page.mouse.move(box.x+240,box.y+box.height/2);
+    await page.mouse.move(box.x+140,box.y+box.height/2);
     await page.mouse.down();
-    await page.mouse.move(box.x+65,box.y+box.height/2,{steps:8});
+    await page.mouse.move(box.x+10,box.y+box.height/2,{steps:8});
     await page.mouse.up();
     assert.ok(await nav.evaluate(element=>element.scrollLeft)>80,'Drag must move the navigation strip');
     assert.equal(await page.evaluate(()=>state.view),'home','Dragging must not activate a tab');
@@ -172,23 +185,24 @@ try{
   });
 
   await test('Navigation drag released outside the strip does not swallow the next click',{width:390,height:844},async page=>{
-    const box = await page.locator('#navtabs').boundingBox();
-    await page.mouse.move(box.x+240,box.y+box.height/2);
+    const box = await (await forceNavOverflow(page)).boundingBox();
+    await page.mouse.move(box.x+140,box.y+box.height/2);
     await page.mouse.down();
-    await page.mouse.move(box.x+60,box.y+box.height+80,{steps:8});
+    await page.mouse.move(box.x+10,box.y+box.height+80,{steps:8});
     await page.mouse.up();
     await navigate(page,'followups');
   });
 
   await test('Cancelled pointer gesture releases navigation drag state',{width:390,height:844},async page=>{
-    const nav = page.locator('#navtabs');
+    const nav = await forceNavOverflow(page);
     const box = await nav.boundingBox();
-    await page.mouse.move(box.x+240,box.y+box.height/2);
+    await page.mouse.move(box.x+140,box.y+box.height/2);
     await page.mouse.down();
-    await page.mouse.move(box.x+140,box.y+box.height/2,{steps:4});
+    await page.mouse.move(box.x+90,box.y+box.height/2,{steps:4});
     await nav.dispatchEvent('pointercancel',{pointerId:1,pointerType:'mouse',bubbles:true});
     const cancelled = await nav.evaluate(element=>element.scrollLeft);
-    await page.mouse.move(box.x+50,box.y+box.height/2,{steps:4});
+    assert.ok(cancelled>20,'Drag must have started before the cancellation');
+    await page.mouse.move(box.x+10,box.y+box.height/2,{steps:4});
     assert.equal(await nav.evaluate(element=>element.scrollLeft),cancelled,'Pointer cancellation must stop the drag');
     await page.mouse.up();
     await navigate(page,'followups');
@@ -198,29 +212,29 @@ try{
     for(const width of [390,701,768,1024]){
       await page.setViewportSize({width,height:844});
       await page.locator('[data-nav="home"]').focus();
-      for(const view of ['home','submit','approvals','database','dashboard','followups']){
-        const visible = await page.evaluate(view=>{
-          const button=document.querySelector(`[data-nav="${view}"]`);
+      for(const selector of ['[data-nav="home"]','[data-nav-group="workflow"]','[data-nav-group="data"]']){
+        const visible = await page.evaluate(selector=>{
+          const button=document.querySelector(selector);
           const rect=button.getBoundingClientRect(),nav=document.getElementById('navtabs').getBoundingClientRect();
           return document.activeElement===button && rect.left>=nav.left-1 && rect.right<=nav.right+1;
-        },view);
-        assert.ok(visible,`Focused ${view} tab must be visible at ${width}px`);
-        if(view!=='followups') await page.keyboard.press('Tab');
+        },selector);
+        assert.ok(visible,`Focused ${selector} tab must be visible at ${width}px`);
+        if(selector!=='[data-nav-group="data"]') await page.keyboard.press('Tab');
       }
     }
     await page.keyboard.press('Enter');
-    assert.equal(await page.evaluate(()=>state.view),'followups');
+    assert.equal(await page.evaluate(()=>state.view),'database');  // Data 组默认打开 Database
   });
 
   await test('Native mobile swipes pan navigation in both directions without activation',{mobile:true,width:390,height:844},async(page,context)=>{
     const session = await context.newCDPSession(page);
-    const nav = page.locator('#navtabs');
+    const nav = await forceNavOverflow(page);
     const box = await nav.boundingBox();
     const y = box.y+box.height/2;
-    await swipe(session,{x:320,y},{x:65,y});
+    await swipe(session,{x:box.x+140,y},{x:box.x+5,y});
     await page.waitForFunction(()=>document.getElementById('navtabs').scrollLeft>80);
     assert.equal(await page.evaluate(()=>state.view),'home');
-    await swipe(session,{x:65,y},{x:320,y});
+    await swipe(session,{x:box.x+5,y},{x:box.x+140,y});
     await page.waitForFunction(()=>document.getElementById('navtabs').scrollLeft<2);
     await navigate(page,'submit');
   });

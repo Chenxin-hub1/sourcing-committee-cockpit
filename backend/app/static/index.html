@@ -70,34 +70,105 @@
   .navtabs.is-dragging,.navtabs.is-dragging button{cursor:grabbing;user-select:none;}
   .navtabs button{flex:none;}
   .navtabs button{
-    background:transparent;border:none;color:#C7CAD1;padding:8px 11px;border-radius:6px;
-    font-size:13px;cursor:pointer;font-weight:500;
+    position:relative;display:inline-flex;align-items:center;gap:7px;
+    background:transparent;border:none;color:#C7CAD1;padding:8px 12px;border-radius:7px;
+    font-size:13px;cursor:pointer;font-weight:500;transition:background .15s,color .15s;
   }
   .navtabs button:hover{background:#2F323A;color:#fff;}
-  .navtabs button.active{background:#33353D;color:#fff;}
-  .navtabs button.active::after{content:'';}
-  .topbar .gsearch{
-    margin-left:auto;display:flex;align-items:center;background:#33353D;border:1px solid #43454D;
-    border-radius:6px;padding:0 10px;height:32px;width:220px;
-  }
-  .topbar .gsearch input{
-    background:transparent;border:none;outline:none;color:#fff;font-size:13px;width:100%;padding:0 6px;
-  }
-  .topbar .gsearch input::placeholder{color:#8A8E97;}
-  .topbar .gsearch svg{flex:none;opacity:.6;}
-  .admin-toggle{flex:none;margin-left:10px;height:30px;padding:0 11px;border-radius:15px;border:1px solid #4A4D56;background:#33353D;color:#C7CAD1;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .navtabs button.active{background:#363941;color:#fff;font-weight:600;}
+  /* 当前所在：文字下方一道短橙线（v3 Phase-26） */
+  .navtabs button.active::after{content:'';position:absolute;left:50%;bottom:3px;width:16px;height:2px;margin-left:-8px;border-radius:2px;background:var(--accent);}
+  .navtabs button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+  /* 待处理数量徽章：顶部组名与侧边栏共用 */
+  .count-badge{flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;
+    font-size:10.5px;font-weight:700;line-height:1;display:inline-flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums;}
+  .admin-toggle{flex:none;margin-left:auto;height:30px;padding:0 11px;border-radius:15px;border:1px solid #4A4D56;background:#33353D;color:#C7CAD1;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;}
   .admin-toggle.on{background:var(--accent);border-color:var(--accent);color:#fff;}
   /* 账号面板顶部的 登录 / 注册 切换 */
   .auth-tabs{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden;margin-bottom:6px;}
   .auth-tabs button{flex:1;background:#fff;border:none;padding:7px 0;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:inherit;}
   .auth-tabs button+button{border-left:1px solid var(--border-strong);}
   .auth-tabs button.on{background:var(--accent);color:#fff;}
-  .btn-danger-sm{background:#fff;color:var(--red);border:1px solid #EFC2BC;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;}
-  .btn-danger-sm:hover{background:var(--red-tint);}
+  .btn-danger-sm{background:#fff;color:var(--red);border:1px solid #EFC2BC;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s;}
+  .btn-danger-sm:hover{background:var(--red-tint);border-color:#E3A59D;}
   .confirm-inline{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--red);font-weight:600;white-space:nowrap;}
 
   /* ---------- Layout ---------- */
   .page{max-width:1180px;margin:0 auto;padding:24px 20px 60px;}
+  /* v3 Phase-26：顶部导航按功能分组，组内子页放左侧侧边栏；窄屏（≤900px）侧边栏变成内容上方的横向标签 */
+  .shell{display:flex;align-items:flex-start;}
+  .shell > .page{flex:1 1 auto;min-width:0;width:100%;}  /* width：纵向排列时 margin:auto 会取消拉伸，页面会被内容撑宽 */
+  .sidenav{flex:none;width:184px;position:sticky;top:var(--topbar-height);height:calc(100vh - var(--topbar-height));overflow-y:auto;
+    background:var(--surface);border-right:1px solid var(--border);padding:22px 12px;}
+  .sidenav[hidden]{display:none;}
+  .sidenav .sn-title{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint);padding:0 10px 12px;}
+  .sidenav button{position:relative;display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;border:none;
+    border-radius:8px;padding:7px 10px 7px 8px;margin:0 0 4px;cursor:pointer;color:var(--ink-soft);font-size:13px;font-weight:600;
+    transition:background .15s,color .15s;}
+  .sidenav button:hover{background:var(--bg);color:var(--ink);}
+  .sidenav button.active{background:var(--accent-tint);color:var(--accent-dark);}
+  .sidenav button:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+  /* 节点：Case Workflow 是有先后的流程，节点写步骤号并用竖线连起来；Data 没有先后，节点放图标、不连线 */
+  .sidenav .sn-node{position:relative;z-index:1;flex:none;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--border-strong);
+    background:var(--surface);color:var(--ink-soft);display:inline-flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;transition:background .15s,border-color .15s,color .15s,box-shadow .15s;}
+  .sidenav button:hover .sn-node{border-color:var(--ink-faint);color:var(--ink);}
+  .sidenav button.active .sn-node{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 0 3px rgba(232,88,10,.16);}
+  .sidenav.is-sequence button[data-nav]:has(+ button[data-nav])::after{content:'';position:absolute;left:19.25px;top:calc(50% + 12px);width:1.5px;height:calc(100% - 20px);background:var(--border-strong);}
+  .sidenav{display:flex;flex-direction:column;}
+  .sidenav .sn-text{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .sidenav .sn-label{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;}
+  /* 每项下面的实时状态 */
+  .sidenav .sn-meta{font-size:11px;font-weight:500;color:var(--ink-faint);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sidenav button.active .sn-meta{color:#C07A52;}
+  .sidenav .sn-warn{color:var(--red);font-weight:600;}
+  /* 收起按钮：贴在侧边栏底部 */
+  .sidenav .sn-collapse{margin-top:auto;gap:8px;padding:8px 10px;font-size:12px;font-weight:600;color:var(--ink-faint);border-radius:8px;}
+  .sidenav .sn-collapse:hover{color:var(--ink);background:var(--bg);}
+  .sidenav .sn-collapse svg{flex:none;}
+  /* 收起：只留编号 / 图标，宽度让给内容；待审数量缩成节点右上角的小圆点 */
+  .sidenav.is-collapsed{width:64px;padding:22px 10px;}
+  .sidenav.is-collapsed .sn-title{visibility:hidden;}
+  .sidenav.is-collapsed .sn-text,.sidenav.is-collapsed .sn-collapse span{display:none;}
+  .sidenav.is-collapsed button{justify-content:flex-start;}
+  .sidenav.is-collapsed .sn-collapse{justify-content:center;}
+  .sidenav.is-collapsed button:has(.count-badge) .sn-node::after{content:'';position:absolute;top:-5px;right:-5px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--surface);}
+  @media(max-width:900px){
+    .shell{flex-direction:column;align-items:stretch;}
+    .shell .sidenav{position:static;width:auto;height:auto;display:flex;flex-direction:row;gap:2px;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);padding:6px 12px 0;}
+    .shell .sidenav[hidden]{display:none;}
+    .shell .sidenav .sn-title{display:none;}
+    .shell .sidenav button{flex:none;width:auto;margin:0;gap:8px;border-radius:7px 7px 0 0;border-bottom:3px solid transparent;padding:7px 12px 6px;}
+    .shell .sidenav button.active{background:transparent;border-bottom-color:var(--accent);}
+    .shell .sidenav button::after{display:none;}
+    .shell .sidenav .sn-node{width:20px;height:20px;font-size:10px;}
+    .shell .sidenav .sn-meta,.shell .sidenav .sn-collapse{display:none;}
+    .shell .sidenav.is-collapsed{width:auto;padding:6px 12px 0;}
+    .shell .sidenav.is-collapsed .sn-text{display:flex;}
+    .shell .sidenav.is-collapsed button .sn-node::after{display:none;}
+    .shell .sidenav button.active .sn-node{box-shadow:none;}
+  }
+  /* Database 表格列多（领导：一列不删、正常屏幕不出横向滚动条），窗口不到 1440px 时侧边栏让位给表格 */
+  @media(max-width:1439px){
+    body .shell.is-wide{flex-direction:column;align-items:stretch;}
+    body .shell.is-wide .sidenav{position:static;width:auto;height:auto;display:flex;flex-direction:row;gap:2px;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);padding:6px 12px 0;}
+    body .shell.is-wide .sidenav[hidden]{display:none;}
+    body .shell.is-wide .sidenav .sn-title{display:none;}
+    body .shell.is-wide .sidenav button{flex:none;width:auto;margin:0;gap:8px;border-radius:7px 7px 0 0;border-bottom:3px solid transparent;padding:7px 12px 6px;}
+    body .shell.is-wide .sidenav button.active{background:transparent;border-bottom-color:var(--accent);}
+    body .shell.is-wide .sidenav button::after{display:none;}
+    body .shell.is-wide .sidenav .sn-node{width:20px;height:20px;font-size:10px;}
+    body .shell.is-wide .sidenav .sn-meta,body .shell.is-wide .sidenav .sn-collapse{display:none;}
+    body .shell.is-wide .sidenav.is-collapsed{width:auto;padding:6px 12px 0;}
+    body .shell.is-wide .sidenav.is-collapsed .sn-text{display:flex;}
+    body .shell.is-wide .sidenav.is-collapsed button .sn-node::after{display:none;}
+    body .shell.is-wide .sidenav button.active .sn-node{box-shadow:none;}
+  }
+  /* 手机：横向标签再收紧，三个步骤放得下（:is 让优先级与上面 Database 的规则持平，靠先后顺序生效） */
+  @media(max-width:480px){
+    body .shell:is(.is-wide,:not(.is-wide)) .sidenav{padding:6px 6px 0;}
+    body .shell:is(.is-wide,:not(.is-wide)) .sidenav button{padding:7px 8px 6px;gap:6px;font-size:12.5px;}
+  }
   /* Database 页：列一个不删（领导 2026-09-30），改为用满窗口宽度 + 紧凑单元格，正常屏幕不出横向滚动条 */
   .page.wide{max-width:none;}
   .page.wide .data-table{font-size:12px;}
@@ -110,6 +181,25 @@
   .pagehead{margin-bottom:18px;}
   .pagehead h1{font-size:19px;margin:0 0 4px;font-weight:600;}
   .pagehead p{margin:0;color:var(--ink-soft);font-size:13px;}
+  /* v3 Phase-26（用户）：板块说明默认收起，鼠标悬停或键盘聚焦 ⓘ 时弹出 */
+  .pagehead:has(> .info-tip){display:flex;align-items:center;gap:8px;}
+  .pagehead:has(> .info-tip) h1{margin:0;}
+  .info-tip{position:relative;display:inline-flex;vertical-align:middle;margin-left:4px;cursor:help;outline:none;text-transform:none;letter-spacing:normal;}
+  .info-i{width:17px;height:17px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface);color:var(--ink-soft);
+    font:italic 700 11px/1 Georgia,'Times New Roman',serif;display:inline-flex;align-items:center;justify-content:center;}
+  .info-tip:hover .info-i,.info-tip:focus-visible .info-i{border-color:var(--accent);color:var(--accent);}
+  .info-tip:focus-visible .info-i{box-shadow:0 0 0 3px var(--accent-tint);}
+  .info-pop{position:absolute;left:-10px;top:calc(100% + 8px);z-index:60;width:max-content;max-width:min(440px,calc(100vw - 40px));padding:10px 12px;
+    background:var(--header);color:#E4E6EA;border-radius:8px;box-shadow:0 8px 24px rgba(20,20,22,.18);font-size:12.5px;font-weight:400;font-style:normal;
+    line-height:1.5;text-transform:none;letter-spacing:normal;white-space:normal;text-align:left;display:none;pointer-events:none;}
+  .info-pop b{color:#fff;}
+  .info-pop .mono{color:#fff;}
+  /* 字段名旁的小号 ⓘ */
+  .info-tip.sm{margin-left:3px;}
+  .info-tip.sm .info-i{width:14px;height:14px;font-size:9.5px;}
+  .info-tip.sm .info-pop{max-width:min(340px,calc(100vw - 40px));font-size:12px;}
+  .export-group{display:inline-flex;align-items:center;gap:8px;flex-wrap:nowrap;}
+  .info-tip:hover .info-pop,.info-tip:focus .info-pop{display:block;}  /* 隐藏时用 display:none：不可见的弹框也会撑宽页面 */
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
 
   /* ---------- Home / Upload ---------- */
@@ -206,7 +296,8 @@
   .filters-bar .searchbox{flex:1;min-width:180px;position:relative;}
   .filters-bar .searchbox input{border:none;outline:none;width:100%;font-size:12.5px;}
   .filters-bar .resultcount{color:var(--ink-soft);font-size:12px;margin-left:auto;white-space:nowrap;}
-  .filters-bar .clearbtn{background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:6px 4px;}
+  .filters-bar .clearbtn{background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;padding:6px 4px;border-radius:4px;}
+  .filters-bar .clearbtn:hover{text-decoration:underline;}
 
   table.data-table{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;}
   .data-table thead th{
@@ -232,9 +323,10 @@
   .badge.resub{background:var(--amber-tint);color:var(--amber);}
   .no-action-txt{color:var(--ink-faint);font-size:12px;}
 
-  .period-toggle{display:inline-flex;background:var(--gray-tint);border-radius:6px;padding:2px;gap:2px;}
-  .period-toggle button{border:none;background:transparent;font-size:11px;font-weight:600;color:var(--ink-soft);padding:5px 10px;border-radius:5px;cursor:pointer;}
-  .period-toggle button.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08);}
+  .period-toggle{display:inline-flex;background:var(--gray-tint);border-radius:8px;padding:3px;gap:2px;}
+  .period-toggle button{border:none;background:transparent;font-size:11.5px;font-weight:600;color:var(--ink-soft);padding:5px 12px;border-radius:6px;cursor:pointer;transition:background .15s,color .15s;}
+  .period-toggle button:hover{color:var(--ink);}
+  .period-toggle button.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(20,20,22,.1),0 0 0 1px rgba(20,20,22,.04);}
   .period-week-select{border:1px solid var(--border-strong);border-radius:6px;padding:4px 7px;font-size:11.5px;background:#fff;margin-left:6px;}
   .breakdown-row-title{font-size:12px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.3px;margin:22px 0 10px;}
   .tile-row{display:grid;gap:10px;}
@@ -346,13 +438,29 @@
   .form-field input:focus, .form-field select:focus, .form-field textarea:focus{outline:none;border-color:var(--accent);}
   .form-field textarea{resize:vertical;min-height:64px;}
   .form-actions{margin-top:18px;display:flex;align-items:center;gap:12px;}
-  .btn-primary{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:10px 20px;font-size:13.5px;font-weight:600;cursor:pointer;}
+  /* 按钮（v3 Phase-26）：同一套圆角、阴影、悬停 / 按下 / 禁用 / 键盘焦点 */
+  .btn-primary,.btn-secondary,.btn-danger,.btn-tool{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:7px;
+    font-weight:600;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s,color .15s,box-shadow .15s,transform .06s;}
+  /* 主 / 次 / 危险按钮内边距与行高一致，并排时同高（小号按钮仍可用内联样式缩小） */
+  .btn-primary,.btn-secondary,.btn-danger{line-height:18px;}
+  .btn-primary{background:var(--accent);color:#fff;border:1px solid var(--accent-dark);padding:8px 18px;font-size:13px;
+    box-shadow:0 1px 2px rgba(194,74,8,.28),inset 0 1px 0 rgba(255,255,255,.16);}
   .btn-primary:hover{background:var(--accent-dark);}
-  .btn-secondary{background:#fff;color:var(--ink);border:1px solid var(--border-strong);border-radius:6px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer;}
-  .btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
-  .btn-danger{background:#fff;color:var(--red);border:1px solid #EFC2BC;border-radius:6px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer;}
-  .btn-danger:hover{background:var(--red-tint);}
-  .route-note{background:#FAFAFB;border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:12px;color:var(--ink-soft);margin-top:16px;}
+  .btn-secondary{background:var(--surface);color:var(--ink);border:1px solid var(--border-strong);padding:8px 15px;font-size:12.5px;box-shadow:0 1px 1px rgba(20,20,22,.05);}
+  .btn-secondary:hover{border-color:#AEB3BC;background:#FAFAFB;}
+  .btn-primary:active,.btn-secondary:active,.btn-danger:active,.btn-tool:active{transform:translateY(1px);box-shadow:none;}
+  .btn-primary:disabled,.btn-secondary:disabled,.btn-danger:disabled,.btn-tool:disabled{opacity:.55;cursor:not-allowed;transform:none;}
+  .btn-primary:focus-visible,.btn-secondary:focus-visible,.btn-danger:focus-visible,.btn-tool:focus-visible,
+  .btn-danger-sm:focus-visible,.remind-btn:focus-visible,.period-toggle button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  /* 工具栏按钮：导出等，图标 + 文字，高度与筛选框对齐 */
+  .btn-tool{height:32px;padding:0 11px;background:var(--surface);color:var(--ink);border:1px solid var(--border-strong);font-size:12px;box-shadow:0 1px 1px rgba(20,20,22,.05);}
+  .btn-tool svg{flex:none;color:var(--ink-soft);transition:color .15s;}
+  .btn-tool:hover{border-color:#AEB3BC;background:#FAFAFB;}
+  .btn-tool:hover svg{color:var(--accent);}
+  .btn-tool:disabled{cursor:progress;}
+  .btn-danger{background:var(--surface);color:var(--red);border:1px solid #EFC2BC;padding:8px 15px;font-size:12.5px;}
+  .btn-danger:hover{background:var(--red-tint);border-color:#E3A59D;}
+  .action-note{font-size:12px;color:var(--ink-faint);}
   .form-field input[readonly]{background:#F4F4F6;color:var(--ink-soft);cursor:default;}
   .submit-banner{display:none;margin-top:14px;background:var(--green-tint);border:1px solid #BEE3D0;color:var(--green);padding:10px 12px;border-radius:6px;font-size:12.5px;font-weight:600;}
   .submit-banner.show{display:block;}
@@ -427,17 +535,17 @@
   .sortable-th .arrow{font-size:9px;margin-left:3px;}
   .cat-tag{display:inline-block;background:var(--gray-tint);color:var(--ink-soft);font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:4px;white-space:nowrap;}
   .cat-tag.none{background:transparent;color:var(--ink-faint);font-weight:400;}
-  .remind-btn{background:#fff;border:1px solid var(--border-strong);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--ink);cursor:pointer;white-space:nowrap;}
-  .remind-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .remind-btn{background:#fff;border:1px solid var(--border-strong);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--ink);cursor:pointer;white-space:nowrap;
+    box-shadow:0 1px 1px rgba(20,20,22,.05);transition:border-color .15s,color .15s,background .15s;}
+  .remind-btn:hover{border-color:var(--accent);color:var(--accent);background:#FFFBF8;}
   .remind-btn.sent{background:var(--green-tint);border-color:#BEE3D0;color:var(--green);cursor:default;}
   .due-overdue{color:var(--red);font-weight:700;}
 
-  /* 窄窗口与缩放：导航独占一行，搜索和管理员按钮保留可用宽度。 */
-  @media(max-width:1100px){
+  /* 窄窗口与缩放：导航独占一行，账号按钮跟在标题后面。去掉顶部搜索后一行放得下的宽度更小，门槛从 1100 降到 980 */
+  @media(max-width:980px){
     .topbar{flex-wrap:wrap;height:auto;padding:8px 12px;gap:6px 10px;}
     .brand{flex:1 1 auto;}
     .brand .sub{display:none;}
-    .topbar .gsearch{order:2;margin-left:0;width:auto;flex:1 1 160px;min-width:0;height:30px;}
     .admin-toggle{order:2;margin-left:0;}
     .navtabs{order:3;flex:1 0 100%;width:100%;margin-left:0;}
   }
@@ -497,14 +605,13 @@ body.admin-login-open #adminLoginPanel{z-index:310 !important;}
 <div class="topbar">
   <div class="brand"><span class="mark">SBS</span>Seat Belt Sourcing Committee Cockpit</div>
   <div class="navtabs" id="navtabs"></div>
-  <div class="gsearch">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-    <input id="globalSearch" placeholder="Quick search PN, SWAT ID, supplier..." />
-  </div>
   <button class="admin-toggle" id="adminToggle" title="Log in or register with your company account"></button>
 </div>
 
-<div class="page" id="app"></div>
+<div class="shell">
+  <nav class="sidenav" id="sidenav" hidden></nav>
+  <div class="page" id="app"></div>
+</div>
 
 <script>
 /* ============================= DATA MODEL ============================= */
@@ -1307,7 +1414,6 @@ function presentationSectionHtml(){
       <input type="file" id="presUploadInput" multiple accept="${PRESENTATION_EXTENSIONS.join(',')}" style="display:none;"/>
       <span id="presUploadMsg" style="font-size:12px;color:var(--ink-soft);"></span>
     </div>
-    <div class="fx-hint">PDF or PowerPoint only. Files go to the server library${lib.folder ? ` <span class="mono">${esc(lib.folder)}</span>` : ''}, in the week folder of the case they match (e.g. "KW15, 08.04.2026"), or "Unsorted". A name like <span class="mono">1. 110000034978 SPR8 Tube_34235239A_…pdf</span> is matched by its SWAT / bundle number, then part number, then week folder + leading case number.</div>
     ${r ? `<div class="pres-results">${r.attached.length ? `<div style="color:var(--green);font-weight:600;">✓ ${r.attached.length} attached</div><ul>${r.attached.map(a=>`<li>${esc(a.path.split('/').pop())} → ${esc(a.label)}</li>`).join('')}</ul>` : ''}${r.skipped.length ? `<div style="color:var(--amber);font-weight:600;">${r.skipped.length} skipped</div><ul>${r.skipped.map(x=>`<li>${esc(x.path.split('/').pop())}: ${esc(x.reason)}</li>`).join('')}</ul>` : ''}</div>` : ''}`;
 }
 function refreshPresentationSection(){
@@ -1486,7 +1592,7 @@ function feedbackSectionHtml(c, t){
     const fid = escapeAttr(f.id), lastOpen = isLastOpenTask(c, t);
     return `<div class="fb-panel" id="fbDecision_${fid}">
       <div class="form-field"><label>Remark (required when rejecting)</label><textarea class="edit-input" id="fbRemark_${fid}" placeholder="e.g. Further action: negotiate another 0.02 EUR/pc"></textarea></div>
-      ${lastOpen ? `<div class="form-field" style="margin-top:8px;"><label>Final PPT / Supporting Document Link ${c.finalDocLink?'':'*'}</label><input class="edit-input" id="fbFinal_${fid}" value="${escapeAttr(c.finalDocLink||'')}" placeholder="https://…"/><div class="fx-hint">Approving closes the last open follow-up, which closes the case — the final document link is required.</div></div>` : ''}
+      ${lastOpen ? `<div class="form-field" style="margin-top:8px;"><label>Final PPT / Supporting Document Link ${c.finalDocLink?'':'*'}${fieldTip('Approving closes the last open follow-up, which closes the case — the final document link is required.')}</label><input class="edit-input" id="fbFinal_${fid}" value="${escapeAttr(c.finalDocLink||'')}" placeholder="https://…"/></div>` : ''}
       <div class="fb-actions">
         <button class="btn-primary" data-decision-send="${fid}" data-task="${tid}" data-decision="approved">Approve — close follow-up</button>
         <button class="btn-danger" data-decision-send="${fid}" data-task="${tid}" data-decision="rejected">Reject</button>
@@ -1508,14 +1614,13 @@ function feedbackSectionHtml(c, t){
     </div>`;
   }).join('');
   const form = `<div class="fb-panel" id="fbForm_${tid}">
-      <div class="form-field"><label>What was done? *</label><textarea class="edit-input" id="fbText_${tid}" placeholder="e.g. BP 50K negotiated, committed for 2026"></textarea></div>
-      <div class="form-field" style="margin-top:8px;"><label>Evidence (optional — PowerPoint, PDF, Excel, Word or Outlook email .msg / .eml, 100 MB each)</label><input type="file" id="fbFiles_${tid}" multiple accept="${FEEDBACK_EXTENSIONS.join(',')}"/></div>
+      <div class="form-field"><label>What was done? *${fieldTip('Managers and Sourcing admins are notified by email; they approve (the follow-up is closed) or reject with a remark.')}</label><textarea class="edit-input" id="fbText_${tid}" placeholder="e.g. BP 50K negotiated, committed for 2026"></textarea></div>
+      <div class="form-field" style="margin-top:8px;"><label>Evidence (optional)${fieldTip('PowerPoint, PDF, Excel, Word or Outlook email (.msg / .eml), 100 MB each.')}</label><input type="file" id="fbFiles_${tid}" multiple accept="${FEEDBACK_EXTENSIONS.join(',')}"/></div>
       <div class="fb-actions">
         <button class="btn-primary" data-feedback-send="${tid}">Submit for approval</button>
         <button class="btn-secondary" data-feedback-cancel="${tid}">Cancel</button>
         <span class="fb-err" id="fbErr_${tid}"></span>
       </div>
-      <div class="fx-hint">Managers and Sourcing admins are notified by email; they approve (the follow-up is closed) or reject with a remark.</div>
     </div>`;
   const cta = closed ? '' : loggedIn
     ? (state.feedbackOpenId===t.id ? form : `<div class="fb-actions" style="margin-top:6px;"><button class="remind-btn" data-feedback-open="${tid}">Report progress / closure</button></div>`)
@@ -1835,24 +1940,121 @@ const headerSizeObserver = new ResizeObserver(()=>{
 headerSizeObserver.observe(document.querySelector('.topbar'));
 
 /* ============================= RENDER: NAV ============================= */
+// v3 Phase-26（用户）：顶部导航按功能分组，点组名进入组内页面，组内各页列在左侧侧边栏。
+// 案例详情页不显示侧边栏，顶部高亮 Data（案例记录属于 Database）。
+const NAV_GROUPS = {
+  workflow:{label:'Case Workflow', items:[
+    ['submit','Submit Case','Register a case for the weekly committee'],
+    ['approvals','Approval','Confirm or return registrations'],
+    ['followups','Follow-ups','Track the actions decided in the meeting']]},
+  data:{label:'Data', items:[
+    ['database','Database','Every case, with filters and exports'],
+    ['dashboard','Dashboard','Status and statistics by year or week']]},
+};
+// 线条图标：14px，颜色跟随文字（currentColor）
+const svgIcon = d=>`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICONS = {
+  table: svgIcon('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 10v10"/>'),
+  chart: svgIcon('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
+  download: svgIcon('<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>'),
+  sheet: svgIcon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'),
+};
+const NAV_ICONS = {database:ICONS.table, dashboard:ICONS.chart};
+const navLastView = {workflow:'submit', data:'database'};
+// 侧边栏收起为窄条：每台电脑自己的偏好，存浏览器本地（读不到就默认展开）
+let navCollapsed = false;
+try{ navCollapsed = localStorage.getItem('sc_nav_collapsed')==='1'; }catch(e){}
+// 侧边栏每项下面的一行实时状态（数据，不是说明）：哪里有事要处理一眼可见
+function navMeta(view, pendingCount){
+  if(view==='submit'){
+    const next = getEarliestSelectableWednesday(), cut = registrationCutoffFor(next);
+    const day = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][cut.getDay()];
+    return `KW${String(dateToWeekNum(next)).padStart(2,'0')} · by ${day} ${REGISTRATION_SETTINGS.cutoffTime||'23:59'}`;  // 最近能登记的会议与截止时间
+  }
+  if(view==='approvals') return pendingCount>0 ? `${pendingCount} waiting` : 'Nothing waiting';
+  if(view==='followups'){
+    const tasks = latestByCase().flatMap(c=>c.followUps||[]);
+    const open = tasks.filter(t=>t.status==='Open').length, overdue = tasks.filter(t=>t.status==='Overdue').length;
+    if(!open && !overdue) return 'No open tasks';
+    return [open ? `${open} open` : '', overdue ? `<span class="sn-warn">${overdue} overdue</span>` : ''].filter(Boolean).join(' · ');
+  }
+  if(view==='database') return `${ALL_CASES.length} case${ALL_CASES.length===1?'':'s'}`;
+  if(view==='dashboard'){ const years = yearsPresent(); return `${state.dashYear || years[years.length-1] || weekYear()} overview`; }  // 还没打开过 Dashboard 时按它的默认年份
+  return '';
+}  // 回到某组时打开上次看的那页
+// 字段说明用小号：fieldTip('…') 放在 <label> 里字段名后面
+const fieldTip = html=>infoTip(html, 'sm');
+// 板块说明收进 ⓘ：悬停或 Tab 聚焦时弹出（手机上点一下即聚焦）；读屏软件从 aria-label 读到同样的文字
+function infoTip(html, size=''){
+  const text = html.replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();
+  return `<span class="info-tip ${size}" tabindex="0" role="note" aria-label="${escapeAttr(text)}"><span class="info-i" aria-hidden="true">i</span><span class="info-pop" aria-hidden="true">${html}</span></span>`;
+}
+// 弹框默认从 ⓘ 左侧展开；靠近窗口边缘时（如 Dashboard 导出按钮旁、手机窄屏）左右平移，整个弹框留在窗口内
+function placeInfoPop(tip){
+  const pop = tip?.querySelector('.info-pop');
+  if(!pop) return;
+  const tipLeft = tip.getBoundingClientRect().left;
+  const left = Math.max(8, Math.min(tipLeft - 10, window.innerWidth - 8 - pop.offsetWidth));
+  pop.style.left = (left - tipLeft) + 'px';
+}
+document.addEventListener('mouseover', e=>placeInfoPop(e.target.closest?.('.info-tip')));
+document.addEventListener('focusin', e=>placeInfoPop(e.target.closest?.('.info-tip')));
+function navGroupOf(view){
+  if(view==='detail') return 'data';
+  return Object.keys(NAV_GROUPS).find(g=>NAV_GROUPS[g].items.some(([k])=>k===view)) || null;
+}
+function groupLanding(group, pendingCount){
+  // 有待审登记时，能审批的人点 Case Workflow 直接到 Approval
+  if(group==='workflow' && state.isAdmin && pendingCount>0) return 'approvals';
+  return navLastView[group];
+}
+function goToView(view){
+  const changed = state.view!==view;
+  state.view=view; state.dashFilter=null; state.pendingDeleteId=null; state.feedbackOpenId=null; state.decisionOpenId=null;
+  try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+  render();
+  if(changed) window.scrollTo(0,0);
+}
 function renderNav(){
   const pendingCount = SUBMISSIONS.filter(s=>s.status==='Waiting for Registration Confirmation').length;
-  const tabs = [['home','Home'],['submit','Submit Case'],
-    ['approvals','Approval'+(pendingCount>0?` (${pendingCount})`:'')],
-    ['database','Database'],['dashboard','Dashboard'],['followups','Follow-ups'],
-    ...(state.isSysAdmin ? [['accounts','Accounts']] : [])];
-  document.getElementById('navtabs').innerHTML = tabs.map(([k,l])=>
-    `<button data-nav="${k}" class="${state.view===k?'active':''}">${l}</button>`).join('');
+  const group = navGroupOf(state.view);
+  if(group && state.view!=='detail') navLastView[group] = state.view;
+  const badge = g=>g==='workflow'&&pendingCount>0 ? `<span class="count-badge" title="${pendingCount} waiting for confirmation">${pendingCount}</span>` : '';
+  const groupBtn = g=>`<button data-nav-group="${g}" class="${group===g?'active':''}">${NAV_GROUPS[g].label}${badge(g)}</button>`;
+  document.getElementById('navtabs').innerHTML =
+    `<button data-nav="home" class="${state.view==='home'?'active':''}">Home</button>${groupBtn('workflow')}${groupBtn('data')}`
+    + (state.isSysAdmin ? `<button data-nav="accounts" class="${state.view==='accounts'?'active':''}">Accounts</button>` : '');
+  const side = document.getElementById('sidenav');
+  side.hidden = !group || state.view==='detail';
+  if(!side.hidden){
+    side.setAttribute('aria-label', NAV_GROUPS[group].label);
+    side.classList.toggle('is-sequence', group==='workflow');  // 只有流程组画步骤连线
+    side.classList.toggle('is-collapsed', navCollapsed);
+    side.innerHTML = `<div class="sn-title">${NAV_GROUPS[group].label}</div>` + NAV_GROUPS[group].items.map(([k,l,hint],i)=>{
+      const count = k==='approvals' && pendingCount>0 ? `<span class="count-badge" title="${pendingCount} waiting for confirmation">${pendingCount}</span>` : '';
+      const node = group==='workflow' ? i+1 : NAV_ICONS[k];
+      const meta = navMeta(k, pendingCount);
+      // 说明不常驻（用户：板块描述要精简），悬停时以提示框显示；收起时提示框带上名称与状态
+      const tip = navCollapsed ? `${l} — ${meta.replace(/<[^>]*>/g,'')}` : hint;
+      return `<button data-nav="${k}" class="${state.view===k?'active':''}" title="${escapeAttr(tip)}" ${state.view===k?'aria-current="page"':''}><span class="sn-node" aria-hidden="true">${node}</span><span class="sn-text"><span class="sn-label">${l}${count}</span><span class="sn-meta">${meta}</span></span></button>`;
+    }).join('') + `<button type="button" class="sn-collapse" id="navCollapse" aria-expanded="${!navCollapsed}" title="${navCollapsed?'Expand the sidebar':'Collapse the sidebar'}">${svgIcon(navCollapsed?'<path d="M9 6l6 6-6 6"/>':'<path d="M15 6l-6 6 6 6"/>')}<span>Collapse</span></button>`;
+    document.getElementById('navCollapse').onclick = ()=>{
+      navCollapsed = !navCollapsed;
+      try{ localStorage.setItem('sc_nav_collapsed', navCollapsed ? '1' : ''); }catch(e){}
+      renderNav();
+      document.getElementById('navCollapse')?.focus({preventScroll:true});
+    };
+  } else side.innerHTML = '';
   const nt = document.getElementById('navtabs');
   wireNavPan(nt);
   requestAnimationFrame(()=>revealNavButton(nt.querySelector('.active')));
   document.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>{
-    const changed = state.view!==b.dataset.nav;
-    state.view=b.dataset.nav; state.dashFilter=null; state.pendingDeleteId=null; state.feedbackOpenId=null; state.decisionOpenId=null;
-    try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
-    render();
+    goToView(b.dataset.nav);
     document.querySelector('[data-nav="'+state.view+'"]')?.focus({preventScroll:true});
-    if(changed) window.scrollTo(0,0);
+  });
+  nt.querySelectorAll('[data-nav-group]').forEach(b=>b.onclick=()=>{
+    goToView(groupLanding(b.dataset.navGroup, pendingCount));
+    document.querySelector(`[data-nav-group="${b.dataset.navGroup}"]`)?.focus({preventScroll:true});
   });
   const at = document.getElementById('adminToggle');
   if(at){
@@ -1877,13 +2079,12 @@ function importLibraryHtml(){
   const label = f => `${f.meetingYear||'?'}-KW${String(f.weekNum||0).padStart(2,'0')} · ${f.name}${f.imported?' (imported)':''}`;
   return `
     <div class="form-grid" style="margin-top:12px;align-items:end;">
-      <div class="form-field span2"><label>Stored weekly files (${lib.length}, shipped with the Cockpit) — pick one to add it to the list</label>
+      <div class="form-field span2"><label>Stored weekly files (${lib.length})${fieldTip(`Shipped with the Cockpit — pick one to add it to the list. The meeting date comes from the folder name (e.g. "KW46, 12.11.2025"), so nothing to type. "(imported)" = that week already has cases imported from Excel; adding it again replaces them.`)}</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <select id="importLibrarySelect" class="edit-input" style="flex:1;min-width:260px;"><option value="">Choose a stored weekly file…</option>${lib.map(f=>`<option value="${escapeAttr(f.path)}" ${queued.has(f.path)?'disabled':''}>${esc(label(f))}</option>`).join('')}</select>
           <button type="button" class="btn-secondary" id="importLibraryAdd">Add</button>
           <button type="button" class="btn-secondary" id="importLibraryAddAll" ${pending.length?'':'disabled'}>Add all not yet imported (${pending.length})</button>
         </div>
-        <div class="fx-hint">The meeting date of a stored file comes from its folder name (e.g. "KW46, 12.11.2025"), so nothing to type. "(imported)" = that week already has cases imported from Excel; adding it again replaces them.</div>
       </div>
     </div>`;
 }
@@ -1946,20 +2147,17 @@ function renderHome(){
     <div>
       <div class="card quicksearch-card" style="margin-top:0;">
         <h2>Search Sourcing Cases</h2>
-        <p class="hint">Find any historical case in seconds — by part number, SWAT ID, supplier, project, cluster, region or week.</p>
         <div class="qs-input-wrap">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          <input class="qs-input" id="homeSearchInput" placeholder="e.g. PN: 12345678, SWAT-10482, Orion Gas Systems..." />
+          <input class="qs-input" id="homeSearchInput" placeholder="e.g. R004A930, 110000035042 or a supplier name" />
         </div>
         <div class="qs-fields">Search fields: Part Number · SWAT ID / Sourcing ID · Supplier · Project · Cluster · Region · Week</div>
       </div>
 
       ${state.isSysAdmin ? `
       <div class="card upload-card" style="margin-top:18px;">
-        <h2>Upload weekly committee data</h2>
-        <p class="hint">Two kinds of files, kept apart: <b>Meeting minutes</b> (the week's Agenda / MM Excel) become that week's cases; <b>Presentations</b> (the PDF / PowerPoint of each case) are attached to the matching case. Sourcing admin only.</p>
-        <h3 class="upload-kind">1 · Meeting minutes <span>weekly Agenda / MM Excel (.xlsx)</span></h3>
-        <p class="hint" style="margin-top:0;">Several weeks at once is fine. Importing the same week again replaces what was imported from Excel before.</p>
+        <h2>Upload weekly committee data${infoTip(`Two kinds of files, kept apart: <b>Meeting minutes</b> (the week's Agenda / MM Excel) become that week's cases; <b>Presentations</b> (the PDF / PowerPoint of each case) are attached to the matching case. Sourcing admin only.`)}</h2>
+        <h3 class="upload-kind">1 · Meeting minutes <span>weekly Agenda / MM Excel (.xlsx)</span>${infoTip(`The meeting date is read from the file name (KWnn dd.mm.yyyy); files without a date ask for it below. Tick the files to import, then press Import. Several weeks at once is fine — importing the same week again replaces what was imported from Excel before.`)}</h3>
         <div class="dropzone" id="dropzone">
           <div class="icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
@@ -1967,12 +2165,11 @@ function renderHome(){
           <div class="title" id="dzTitle">Drag &amp; drop weekly Excel files here</div>
           <div style="color:var(--ink-faint);font-size:12px;">or click to choose one or more files</div>
           <div class="example">KW39 23.09.2026_SBS Sourcing Alignment Committee_MM.xlsx</div>
-          <div class="small">The meeting date is read from the file name (KWnn dd.mm.yyyy). Files without a date ask for it below. Tick the files to import, then press Import.</div>
           <input type="file" id="importFiles" multiple accept=".xlsx" style="display:none;"/>
         </div>
         <div id="importLibrary">${importLibraryHtml()}</div>
         <div id="importQueue">${importQueueHtml()}</div>
-        <h3 class="upload-kind" style="margin-top:22px;">2 · Presentations <span>PDF / PowerPoint per case</span></h3>
+        <h3 class="upload-kind" style="margin-top:22px;">2 · Presentations <span>PDF / PowerPoint per case</span>${infoTip(`PDF or PowerPoint only. Files go to the server library, in the week folder of the case they match (e.g. "KW15, 08.04.2026"), or "Unsorted". A name like <span class="mono">1. 110000034978 SPR8 Tube_34235239A_…pdf</span> is matched by its SWAT / bundle number, then part number, then week folder + leading case number.`)}</h3>
         <div id="presLibrary">${presentationSectionHtml()}</div>
       </div>` : ''}
     </div>
@@ -2047,8 +2244,7 @@ function renderDatabase(){
 
   return `
   <div class="pagehead">
-    <h1>Consolidated Case Database</h1>
-    <p>All sourcing committee cases, consolidated automatically from every weekly Excel upload.</p>
+    <h1>Consolidated Case Database</h1>${infoTip(`All sourcing committee cases, consolidated automatically from every weekly Excel upload.`)}
   </div>
 
   <div class="filters-bar">
@@ -2063,9 +2259,9 @@ function renderDatabase(){
     <select id="fDecision"><option value="">Decision: All</option>${['APPROVED','REJECTED','CONDITIONAL APPROVAL','PENDING'].map(r=>`<option ${f.decision===r?'selected':''}>${r}</option>`).join('')}</select>
     <select id="fStatus"><option value="">Action Status: All</option>${['Open','Overdue','Closed'].map(r=>`<option ${f.status===r?'selected':''}>${r}</option>`).join('')}</select>
     <button class="clearbtn" id="clearFilters">Clear filters</button>
-    <button class="clearbtn" id="exportCsvBtn" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">⬇ Export CSV</button>
-    <button class="clearbtn" id="dbAgendaBtn" title="Pre-meeting file: the cases below, one row per part number, no decisions" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">📋 Export Agenda (.xlsx)</button>
-    <button class="clearbtn" id="dbMinutesBtn" title="Post-meeting file: the cases below with Sourcing Decision, notes and actions" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">📝 Export Meeting Minutes (.xlsx)</button>
+    <button class="btn-tool" id="exportCsvBtn">${ICONS.download}Export CSV</button>
+    <button class="btn-tool" id="dbAgendaBtn" title="Pre-meeting file: the cases below, one row per part number, no decisions">${ICONS.sheet}Export Agenda (.xlsx)</button>
+    <button class="btn-tool" id="dbMinutesBtn" title="Post-meeting file: the cases below with Sourcing Decision, notes and actions">${ICONS.sheet}Export Meeting Minutes (.xlsx)</button>
     <div class="resultcount">${rows.length} case${rows.length!==1?'s':''}</div>
   </div>
 
@@ -2248,8 +2444,7 @@ function renderDashboard(){
 
   return `
   <div class="pagehead">
-    <h1>Management Cockpit</h1>
-    <p>Status across all sourcing cases. Pick a year, then switch between the whole year and a single week's committee agenda. Click any number to see the underlying cases or actions.</p>
+    <h1>Management Cockpit</h1>${infoTip(`Status across all sourcing cases. Pick a year, then switch between the whole year and a single week's committee agenda. Click any number to see the underlying cases or actions.`)}
   </div>
 
   <div class="card" style="padding:16px 18px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -2261,10 +2456,9 @@ function renderDashboard(){
       <button data-period="week" class="${state.dashPeriod==='week'?'active':''}">By Week</button>
     </div>
     ${state.dashPeriod==='week' ? `<select class="period-week-select" id="dashWeekSelect">${allWeeks.map(w=>`<option value="${w}" ${w===state.dashWeek?'selected':''}>${wk(w, state.dashYear)} — ${weekDateOf(w, state.dashYear)}</option>`).join('')}</select>` : ''}
-    <button class="clearbtn" id="dashExportBtn" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">⬇ Export CSV (this scope)</button>
-    ${state.dashPeriod==='week' ? `<button class="clearbtn" id="dashAgendaBtn" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">📋 Export Agenda (.xlsx)</button><button class="clearbtn" id="dashMinutesBtn" style="border:1px solid var(--border-strong);border-radius:6px;color:var(--ink);">📝 Export Meeting Minutes (.xlsx)</button>` : ''}
+    <button class="btn-tool" id="dashExportBtn">${ICONS.download}Export CSV (this scope)</button>
+    ${state.dashPeriod==='week' ? `<span class="export-group"><button class="btn-tool" id="dashAgendaBtn">${ICONS.sheet}Export Agenda (.xlsx)</button><button class="btn-tool" id="dashMinutesBtn">${ICONS.sheet}Export Meeting Minutes (.xlsx)</button>${infoTip(`"Agenda" is the pre-meeting file: one row per case of ${esc(label)} with the commercial data, no decisions. "Meeting Minutes" is the post-meeting file: the same cases with Sourcing Decision, discussion and action status, plus an "Actions" sheet listing every follow-up task (owner, category, due date). Both open as real Excel workbooks.`)}</span>` : ''}
   </div>
-  ${state.dashPeriod==='week' ? `<div style="font-size:11px;color:var(--ink-faint);margin:-10px 0 16px;">"Agenda" is the pre-meeting file: one row per case of ${esc(label)} with the commercial data, no decisions. "Meeting Minutes" is the post-meeting file: the same cases with Sourcing Decision, discussion and action status, plus an "Actions" sheet listing every follow-up task (owner, category, due date). Both open as real Excel workbooks.</div>` : ''}
   <div class="breakdown-row-title">Approval Status · ${esc(label)} — 4 states</div>
   <div class="tile-row four">
     ${tile('Approved', approved, 'g', 'approved')}
@@ -2273,13 +2467,12 @@ function renderDashboard(){
     ${tile('Pending', pending, 'y', 'pending')}
   </div>
 
-  <div class="breakdown-row-title">Action Status · ${esc(label)} — follow-up actions of the decided cases (${tasks.length} in total; Pending cases have no actions yet)</div>
+  <div class="breakdown-row-title">Action Status · ${esc(label)} — ${tasks.length} follow-up action${tasks.length===1?'':'s'}${infoTip('Follow-up actions of the decided cases; Pending cases have no actions yet. Each action is counted once by its own status: an action past its due date is Overdue, not Open, so the three numbers add up to the total.')}</div>
   <div class="tile-row three">
     ${tile('Open', openA, 'y', 'open')}
     ${tile('Overdue', overdueA, overdueA>0?'r':'g', 'overdue')}
     ${tile('Closed', closedA, 'g', 'closedaction')}
   </div>
-  <div class="breakdown-note" style="margin:6px 0 0;">Each action is counted once by its own status: an action past its due date is Overdue, not Open, so the three numbers add up to the total.</div>
 
   <div class="breakdown-grid" style="margin-top:18px;">
     ${chart('Open actions by function', openTasks, functionKey, 'No open actions in this scope.')}
@@ -2294,9 +2487,8 @@ function renderDashboard(){
       ${Object.entries(byCluster).sort((a,b)=>b[1]-a[1]).map(([k,v])=>barRow(k,v,maxC)).join('')}
     </div>
     <div class="card breakdown-card">
-      <h4>Cases by Region · ${esc(String(state.dashYear))}</h4>
+      <h4>Cases by Region · ${esc(String(state.dashYear))}${multiRegion ? infoTip('A case covering several regions is counted once in each, so the bars can add up to more than the total.') : ''}</h4>
       ${Object.entries(byRegion).sort((a,b)=>b[1]-a[1]).map(([k,v])=>barRow(k,v,maxR)).join('')}
-      ${multiRegion ? '<div class="breakdown-note">A case covering several regions is counted once in each, so the bars can add up to more than the total.</div>' : ''}
     </div>
     <div class="card breakdown-card" style="grid-column:1 / -1;">
       <h4>Cases by Commodity · ${esc(String(state.dashYear))}</h4>
@@ -2312,8 +2504,7 @@ function renderRegistrationCard(readonly){
   const dayName = n => ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][(3 - n + 7) % 7];
   return `
   <div class="card section-card" style="margin-top:18px;">
-    <h3>Registration Deadline</h3>
-    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;">The committee meets every Wednesday. Registrations for a meeting close <b>${esc(cutoffRuleLabel())}</b>. After that, the Submit page only offers the following Wednesdays.</div>
+    <h3>Registration Deadline${infoTip(`The committee meets every Wednesday. Registrations for a meeting close <b>${esc(cutoffRuleLabel())}</b>. After that, the Submit page only offers the following Wednesdays.`)}</h3>
     <div class="form-grid fx-grid">
       <div class="form-field"><label>Closes</label>${admin?`<select class="edit-input" id="regDaysBefore">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${Number(R.daysBefore)===n?'selected':''}>${n} day${n>1?'s':''} before (${dayName(n)})</option>`).join('')}</select>`:`<div class="v">${esc(dayName(Number(R.daysBefore)||2))}</div>`}</div>
       <div class="form-field"><label>At (24h)</label>${admin?`<input class="edit-input" id="regCutoffTime" type="time" value="${escapeAttr(R.cutoffTime||'23:59')}"/>`:`<div class="v">${esc(R.cutoffTime||'23:59')}</div>`}</div>
@@ -2330,10 +2521,9 @@ function renderFxCard(readonly){
     : `<div class="v">${rates[cur] ? esc(rates[cur]) : '—'}</div>`;
   return `
   <div class="card section-card" style="margin-top:18px;">
-    <h3>Exchange Rates to EUR</h3>
-    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;">${readonly
+    <h3>Exchange Rates to EUR${infoTip(readonly
       ? 'Finance OP rates (1 EUR = X foreign currency). You can enter spend in EUR, USD or CNY; it is converted to EUR with these rates when you submit, and the rate is kept with the case.'
-      : 'Enter the rates as in the finance OP table (1 EUR = X foreign currency). Buyers can enter spend in EUR, USD or CNY; the Cockpit converts it to EUR with these rates when the case is submitted, and keeps that rate with the case — changing a rate here only affects new submissions. Cases registered before the EUR switch show USD until they are converted to EUR.'}</div>
+      : 'Enter the rates as in the finance OP table (1 EUR = X foreign currency). Buyers can enter spend in EUR, USD or CNY; the Cockpit converts it to EUR with these rates when the case is submitted, and keeps that rate with the case — changing a rate here only affects new submissions. Cases registered before the EUR switch show USD until they are converted to EUR.')}</h3>
     <div class="form-grid fx-grid">
       <div class="form-field"><label>Rate basis</label>${admin?`<input class="edit-input" id="fxBasis" maxlength="60" value="${escapeAttr(F.basis||'')}" placeholder="e.g. OP 2025 plan rates 2026"/>`:`<div class="v">${esc(F.basis||'—')}</div>`}</div>
       <div class="form-field"><label>1 EUR = ? USD</label>${rateField('USD')}</div>
@@ -2377,8 +2567,7 @@ function renderAutoReminderCard(){
   const S = REMINDER_SETTINGS; const admin = state.isSysAdmin;
   return `
   <div class="card section-card" style="margin-top:18px;">
-    <h3>Automatic Reminders ${S.enabled?'<span class="badge approved">ON</span>':'<span class="badge noaction">OFF</span>'}</h3>
-    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;">Every task is reminded automatically on its due date, and then every ${Number(S.overdueEveryDays)===1?'day':S.overdueEveryDays+' days'} while it stays Overdue — nothing to click. Each reminder appears in the table above ("Auto-reminded" under the due date) and in the log below. If you want to nudge someone in between, use "Send reminder" on that row.</div>
+    <h3>Automatic Reminders ${S.enabled?'<span class="badge approved">ON</span>':'<span class="badge noaction">OFF</span>'}${infoTip(`Every task is reminded automatically on its due date, and then every ${Number(S.overdueEveryDays)===1?'day':S.overdueEveryDays+' days'} while it stays Overdue — nothing to click. Each reminder appears in the table above ("Auto-reminded" under the due date) and in the log below. If you want to nudge someone in between, use "Send reminder" on that row.`)}</h3>
     <div class="form-grid reminder-settings-grid">
       <div class="form-field"><label>Automatic reminders</label>${admin?`<select class="edit-input" id="rsEnabled"><option value="1" ${S.enabled?'selected':''}>ON</option><option value="0" ${!S.enabled?'selected':''}>OFF</option></select>`:`<div class="v">${S.enabled?'ON':'OFF'}</div>`}</div>
       <div class="form-field"><label>While overdue, remind every N days</label>${admin?`<input class="edit-input" id="rsOverdueEvery" type="number" min="1" max="60" value="${escapeAttr(S.overdueEveryDays)}"/>`:`<div class="v">${S.overdueEveryDays}</div>`}</div>
@@ -2386,14 +2575,13 @@ function renderAutoReminderCard(){
       <div class="form-field"><label>Always CC</label>${admin?`<input class="edit-input" id="rsAlwaysCc" value="${escapeAttr(S.alwaysCc||'')}" placeholder="e.g. your own address"/>`:`<div class="v">${esc(S.alwaysCc||'—')}</div>`}</div>
     </div>
     ${admin?`<div class="form-actions"><button class="btn-primary" id="rsSave">Save</button><span id="rsMsg" style="font-size:12px;color:var(--green);font-weight:600;"></span></div>`:''}
-    <div style="margin-top:16px;"><div class="k" style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;">Reminders sent automatically (${AUTO_LOG.length})</div>
+    <div style="margin-top:16px;"><div class="k" style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;">Reminders sent automatically (${AUTO_LOG.length})${infoTip('The server runs this check around the clock — no page needs to be open — and sends email and Teams through its configured channels. The Delivery column shows the result per channel; "skipped" means that channel is not configured on the server yet.')}</div>
     ${AUTO_LOG.length===0 ? `<div style="font-size:12.5px;color:var(--ink-faint);">None yet — no task was due or overdue today.</div>` : `
       <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
       <table class="data-table reminder-log-table" style="font-size:12px;"><thead><tr><th>When</th><th>Why</th><th>SWAT Case</th><th>Task</th><th>To / CC</th><th>Channel</th><th>Delivery</th></tr></thead>
       <tbody>${AUTO_LOG.slice(0,25).map(e=>`<tr><td style="white-space:nowrap;">${esc(e.when)}</td><td>${esc(e.trigger)}</td><td class="mono swat" style="cursor:pointer;" data-swat-link="${escapeAttr(e.swatId)}">${esc(e.swatId)}</td><td>${esc(e.task)}</td><td class="mono" style="font-size:11px;">${esc(e.to)}${e.cc?'<br/>cc: '+esc(e.cc):''}</td><td>${esc(e.channel)}</td><td style="font-size:11px;white-space:nowrap;">${deliveryCell(e.delivery)}</td></tr>`).join('')}</tbody></table>
       </div>`}
     </div>
-    <div class="footer-note" style="text-align:left;margin-top:12px;">Reminders are sent automatically by the server (it runs this check around the clock, no page needs to be open): email via the corporate SMTP relay, Teams via webhook. The Delivery column shows the result per channel — "skipped" means that channel is not configured on the server yet.</div>
   </div>`;
 }
 function renderFollowups(){
@@ -2430,8 +2618,7 @@ function renderFollowups(){
 
   return `
   <div class="pagehead">
-    <h1>Follow-ups to Track</h1>
-    <p>Every follow-up task across all cases — a case can carry more than one — with owner, function, due date and category, so nothing gets missed before the next meeting. Categories are derived automatically from the task text and tags: ${ACTION_CATEGORIES.join(' · ')}.</p>
+    <h1>Follow-ups to Track</h1>${infoTip(`Every follow-up task across all cases — a case can carry more than one — with owner, function, due date and category, so nothing gets missed before the next meeting. Categories are derived automatically from the task text and tags: ${ACTION_CATEGORIES.join(' · ')}.`)}
   </div>
 
   <div class="filters-bar">
@@ -2478,7 +2665,7 @@ function renderFollowups(){
           ${fbOpen ? `<tr class="remind-row"><td colspan="8" style="background:#FAFAFB;">${feedbackSectionHtml(c,t)}</td></tr>` : ''}
           ${open ? `<tr class="remind-row"><td colspan="8" style="background:#FAFAFB;">
             <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;padding:6px 4px;">
-              <div class="form-field"><label>Send reminder to (email) *</label><input class="edit-input" id="rmEmail_${escapeAttr(t.id)}" value="${escapeAttr(rc.email)}" placeholder="firstname.lastname@company.com"/></div>
+              <div class="form-field"><label>Send reminder to (email) *</label><input class="edit-input" id="rmEmail_${escapeAttr(t.id)}" value="${escapeAttr(rc.email)}" placeholder="firstname.lastname@${escapeAttr(ALLOWED_EMAIL_DOMAINS[0]||'zf.com')}"/></div>
               <div class="form-field"><label>CC (optional, comma-separated emails)</label><input class="edit-input" id="rmCc_${escapeAttr(t.id)}" value="${escapeAttr(rc.cc)}"/></div>
               <div class="form-field"><label>Channel</label><select class="edit-input" id="rmChannel_${escapeAttr(t.id)}">${REMINDER_CHANNELS.map(ch=>`<option ${rc.channel===ch?'selected':''}>${ch}</option>`).join('')}</select></div>
             </div>
@@ -2487,9 +2674,8 @@ function renderFollowups(){
               <span id="rmErr_${escapeAttr(t.id)}" style="font-size:11.5px;color:var(--red);font-weight:600;"></span>
             </div>
             <div style="padding:0 4px 10px;">
-              <div style="font-size:10.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;">Message preview (same content for Email and Teams)</div>
+              <div style="font-size:10.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;">Message preview${infoTip('Same content for Email and Teams. Sent for real through the server\'s channels; a channel that is not configured on the server is logged as skipped.')}</div>
               <pre style="margin:0;white-space:pre-wrap;font-family:'Consolas','SFMono-Regular',Menlo,monospace;font-size:11.5px;line-height:1.5;background:#fff;border:1px solid var(--border);border-radius:6px;padding:10px 12px;">${esc(reminderMessage(c,t))}</pre>
-              <div style="font-size:11px;color:var(--ink-faint);margin-top:4px;">Sent for real through the server's email / Teams channels; a channel that is not configured on the server is logged as skipped.</div>
             </div>
           </td></tr>` : ''}`;
         }).join('')}
@@ -2513,11 +2699,11 @@ function partNumberRowHtml(i){
   <div class="pn-row pn-editor" data-pn-row="${i}" style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;position:relative;">
     ${i>0?`<button type="button" data-remove-pn="${i}" class="btn-danger" style="position:absolute;top:10px;right:10px;padding:4px 9px;font-size:11px;">Remove</button>`:''}
     <div class="form-grid" style="${i>0?'margin-right:80px;':''}">
-      <div class="form-field"><label>Part Number *</label><input class="pn-input" data-pn-field="partNumber" id="pnPartNumber_${i}" placeholder="e.g. 12345678"/></div>
-      <div class="form-field"><label>Part Description *</label><input class="pn-input" data-pn-field="partDescription" id="pnPartDescription_${i}" placeholder="e.g. Front Airbag Inflator Assembly"/></div>
+      <div class="form-field"><label>Part Number *</label><input class="pn-input" data-pn-field="partNumber" id="pnPartNumber_${i}" placeholder="e.g. R004A930"/></div>
+      <div class="form-field"><label>Part Description *</label><input class="pn-input" data-pn-field="partDescription" id="pnPartDescription_${i}" placeholder="e.g. Anchor Bracket"/></div>
       <div class="form-field"><label>Project *</label><input class="pn-input" data-pn-field="project" id="pnProject_${i}" list="projectOptions" autocomplete="off" placeholder="e.g. MBEAL — type a new name or pick one you used before"/></div>
       <div class="form-field"><label>Sourcing Type *</label><select class="pn-input" data-pn-field="sourcingType" id="pnSourcingType_${i}">${SOURCING_TYPES.map(r=>`<option>${r}</option>`).join('')}</select></div>
-      <div class="form-field span2"><label>Recommended Supplier *</label><input class="pn-input" data-pn-field="recommendedSupplier" id="pnSupplier_${i}" placeholder="e.g. Orion Gas Systems — if regions go to different suppliers, write e.g. Supplier A (AP) / Supplier B (EU)"/></div>
+      <div class="form-field span2"><label>Recommended Supplier *</label><input class="pn-input" data-pn-field="recommendedSupplier" id="pnSupplier_${i}" placeholder="Supplier name — if regions go to different suppliers, name each supplier with its region"/></div>
       <div class="form-field"><label>Pc Price CQA (<span class="cur-label">${submitCurrency()}</span>) *</label><input class="pn-input" data-pn-field="pcPriceCQA" id="pnPcPriceCQA_${i}" type="number" min="0" step="0.0001" placeholder="e.g. 1.25"/></div>
       <div class="form-field"><label>Supplier Price, landed (<span class="cur-label">${submitCurrency()}</span>) *</label><input class="pn-input" data-pn-field="supplierPriceLanded" id="pnSupplierPriceLanded_${i}" type="number" min="0" step="0.0001" placeholder="e.g. 1.18"/></div>
       <div class="form-field"><label>Tooling CQA (<span class="cur-label">${submitCurrency()}</span>) *</label><input class="pn-input" data-pn-field="toolingCQA" id="pnToolingCQA_${i}" type="number" min="0" step="0.01" placeholder="e.g. 120000 (0 if none)"/></div>
@@ -2549,8 +2735,7 @@ function renderSubmit(){
   </div>`;
   if(!me) return `
   <div class="pagehead">
-    <h1>Submit a Sourcing Case</h1>
-    <p>Fill in the case directly — no Excel needed. It's routed to the SBS Procurement approver, who confirms or returns it for correction.</p>
+    <h1>Submit a Sourcing Case</h1>${infoTip(`Fill in the case directly — no Excel needed. It's routed to the SBS Procurement approver, who confirms or returns it for correction.`)}
   </div>
 
   <div class="card form-card" id="submitLoginGate">
@@ -2565,35 +2750,32 @@ function renderSubmit(){
   `;
   return `
   <div class="pagehead">
-    <h1>Submit a Sourcing Case</h1>
-    <p>Fill in the case directly — no Excel needed. It's routed to the SBS Procurement approver, who confirms or returns it for correction.</p>
+    <h1>Submit a Sourcing Case</h1>${infoTip(`Fill in the case directly — no Excel needed. It's routed to the SBS Procurement approver, who confirms or returns it for correction.`)}
   </div>
   <div class="submit-info">${renderFxCard(true)}${renderRegistrationCard(true)}</div>
 
   <div class="card form-card">
-    <h2>New Case Registration</h2>
-    <p class="hint">Fields match what used to live in the weekly Excel. Once submitted, you'll be notified by email once it's reviewed.</p>
+    <h2>New Case Registration${infoTip(`Fields match what used to live in the weekly Excel. Once submitted, you'll be notified by email once it's reviewed.`)}</h2>
     <div class="form-grid">
       <div class="form-field"><label>Your Name</label><input id="fSubmitter" value="${escapeAttr(me.name)}" readonly/></div>
-      <div class="form-field"><label>Your Email</label><input id="fSubmitterEmail" value="${escapeAttr(me.email)}" readonly/><div style="font-size:11px;color:var(--ink-faint);margin-top:4px;">Taken from your account — the approver's reply goes to this address.</div></div>
-      <div class="form-field span2"><label>SWAT Case # or Supplyon Case # *</label><input id="fExistingSwat" placeholder="e.g. SWAT-10482 or the Supplyon case number"/><div id="caseNoHint" style="font-size:11px;color:var(--ink-faint);margin-top:4px;">Required for every case. If this number is already in the Database, this registration is automatically linked to that case's history (it came back). Otherwise it is registered as a new case under this number.</div></div>
+      <div class="form-field"><label>Your Email${fieldTip(`Taken from your account — the approver's reply goes to this address.`)}</label><input id="fSubmitterEmail" value="${escapeAttr(me.email)}" readonly/></div>
+      <div class="form-field span2"><label>SWAT Case # or Supplyon Case # *${fieldTip(`Required for every case. If this number is already in the Database, this registration is automatically linked to that case's history (it came back). Otherwise it is registered as a new case under this number.`)}</label><input id="fExistingSwat" placeholder="e.g. 110000035042, or a bundle ID such as B/2026/00132"/><div id="caseNoHint" style="font-size:11px;color:var(--ink-faint);margin-top:4px;"></div></div>
     </div>
 
     <div class="screening-section" style="margin-top:16px;padding-top:16px;">
-      <h3>Part Numbers</h3>
+      <h3>Part Numbers${infoTip(`Project, Sourcing Type and Recommended Supplier are entered per part number — a bundle can mix projects, GCS / New and suppliers.`)}</h3>
       <div class="form-grid" style="margin-bottom:12px;">
         <div class="form-field"><label>Spend Currency *</label><select id="fCurrency">${CURRENCIES.map(cur=>`<option>${cur}</option>`).join('')}</select>
           <div id="fxHint" class="fx-hint">${esc(fxHintText('EUR').text)}</div></div>
       </div>
-      <div class="fx-hint" style="margin-bottom:10px;">Project, Sourcing Type and Recommended Supplier are entered per part number — a bundle can mix projects, GCS / New and suppliers.</div>
       ${projectDatalist('projectOptions')}
       <div id="partNumbersContainer">${partNumberRowHtml(0)}</div>
       <button type="button" class="btn-secondary" id="addPartNumberBtn">+ Add Another Part Number</button>
       <div class="form-grid" style="margin-top:14px;">
-        <div class="form-field"><label>Bundle Peak Year Spend (<span class="cur-label">${submitCurrency()}</span>) *</label><input id="fBundlePeak" type="number" min="0" step="1" placeholder="e.g. 1500000"/></div>
-        <div class="form-field"><label>Bundle Lifetime Spend (<span class="cur-label">${submitCurrency()}</span>) *</label><input id="fBundleLife" type="number" min="0" step="1" placeholder="e.g. 6000000"/></div>
-        <div class="form-field span2"><div class="fx-hint" style="margin-top:0;">One total for all part numbers in this registration — no need to split the spend per part number.</div>
-          <div style="margin-top:6px;font-size:12.5px;font-weight:600;">Bundle Peak Year Spend: <span id="totalPeakDisplay">${fmtMoney(0,'EUR')}</span>&nbsp;&nbsp;|&nbsp;&nbsp;Bundle Lifetime Spend: <span id="totalLifetimeDisplay">${fmtMoney(0,'EUR')}</span></div>
+        <div class="form-field"><label>Bundle Peak Year Spend (<span class="cur-label">${submitCurrency()}</span>) *${fieldTip(`One total for all part numbers in this registration — no need to split the spend per part number.`)}</label><input id="fBundlePeak" type="number" min="0" step="1" placeholder="e.g. 1500000"/></div>
+        <div class="form-field"><label>Bundle Lifetime Spend (<span class="cur-label">${submitCurrency()}</span>) *${fieldTip(`One total for all part numbers in this registration — no need to split the spend per part number.`)}</label><input id="fBundleLife" type="number" min="0" step="1" placeholder="e.g. 6000000"/></div>
+        <div class="form-field span2">
+          <div style="font-size:12.5px;font-weight:600;">Bundle Peak Year Spend: <span id="totalPeakDisplay">${fmtMoney(0,'EUR')}</span>&nbsp;&nbsp;|&nbsp;&nbsp;Bundle Lifetime Spend: <span id="totalLifetimeDisplay">${fmtMoney(0,'EUR')}</span></div>
           <div id="bundleEurLine" style="margin-top:4px;font-size:12.5px;font-weight:600;color:var(--ink-soft);">In EUR: <span id="totalPeakEur">${fmtMoney(0,'EUR')}</span>&nbsp;&nbsp;|&nbsp;&nbsp;<span id="totalLifetimeEur">${fmtMoney(0,'EUR')}</span> <span id="bundleEurRate" style="font-weight:400;"></span></div></div>
       </div>
     </div>
@@ -2605,13 +2787,12 @@ function renderSubmit(){
       <div class="form-field"><label>Product Family *</label><select id="fFamily">${FAMILY_OPTIONS.map(r=>`<option>${r}</option>`).join('')}</select></div>
       <div class="form-field"><label>Cluster *</label><select id="fClusterIn">${CLUSTERS.map(r=>`<option>${r}</option>`).join('')}</select></div>
 
-      <div class="form-field"><label>Parent PF (optional — definition to be clarified)</label><input id="fParentPF" placeholder="e.g. PF-1182"/></div>
-      <div class="form-field"><label>Part Family Code (optional — definition to be clarified)</label><input id="fPartFamilyCode" placeholder="e.g. PF-1182"/></div>
+      <div class="form-field"><label>Parent PF (optional)${fieldTip('Definition still to be clarified.')}</label><input id="fParentPF" placeholder="e.g. CH01016"/></div>
+      <div class="form-field"><label>Part Family Code (optional)${fieldTip('Definition still to be clarified.')}</label><input id="fPartFamilyCode"/></div>
 
       <div class="form-field span2">
-        <label>Requested Committee Meeting Date *</label>
+        <label>Requested Committee Meeting Date *${fieldTip(`The committee meets every Wednesday. Registrations close ${esc(cutoffRuleLabel())} — after that, the earliest available date is automatically the following Wednesday.`)}</label>
         <select id="fMeetingDate">${meetingOptionsHtml(false)}</select>
-        <div style="font-size:11px;color:var(--ink-faint);margin-top:4px;">The committee meets every Wednesday. Registrations close ${esc(cutoffRuleLabel())} — after that, the earliest available date is automatically the following Wednesday.</div>
         ${(state.isSysAdmin && blockedWednesday()) ? `
         <label class="region-check" style="margin-top:8px;display:inline-flex;"><input type="checkbox" id="fLateException"/> Request an exception for this week's meeting (${esc(formatDateLong(blockedWednesday()))}) — the deadline has passed (only the Sourcing admin sees this option)</label>
         <div id="lateReasonField" style="display:none;margin-top:8px;">
@@ -2624,14 +2805,13 @@ function renderSubmit(){
     </div>
 
     <div class="screening-section">
-      <h3>Commercial Information</h3>
-      <div class="fx-hint" style="margin-bottom:10px;">Pc Price CQA, Supplier Price (landed), Tooling CQA, Supplier Tooling Cost and volumes are entered per part number in the Part Numbers section above, as in the committee's Excel.</div>
+      <h3>Commercial Information${infoTip(`Pc Price CQA, Supplier Price (landed), Tooling CQA, Supplier Tooling Cost and volumes are entered per part number in the Part Numbers section above, as in the committee's Excel.`)}</h3>
       <div class="form-grid">
         <div class="form-field"><label>Tooling Payment *</label><select id="fToolingPayment"><option value="">Select...</option>${TOOLING_PAYMENTS.map(o=>`<option>${o}</option>`).join('')}</select></div>
-        <div class="form-field"><label>FRA available? (required for Level 2)</label>${yesNoSelect('qFRA')}
+        <div class="form-field"><label>FRA available?${fieldTip('Required for Level 2 cases.')}</label>${yesNoSelect('qFRA')}
           <div class="block-warning" id="fraWarning">⚠ This case cannot be registered: a Level 2 case requires an available FRA.</div></div>
-        <div class="form-field span2"><label>BPG available? (required when Lifetime Spend is above 3 Mio EUR)</label>${yesNoSelect('qBPG')}
-          <div class="fx-hint" id="bpgHint">Only needed when the total Lifetime Spend converts to more than €3,000,000.</div>
+        <div class="form-field span2"><label>BPG available?${fieldTip('Only needed when the total Lifetime Spend converts to more than €3,000,000.')}</label>${yesNoSelect('qBPG')}
+          <div class="fx-hint" id="bpgHint"></div>
           <div class="block-warning" id="bpgWarning">⚠ This case cannot be registered: Lifetime Spend above 3 Mio EUR requires an available BPG.</div></div>
       </div>
     </div>
@@ -2646,7 +2826,7 @@ function renderSubmit(){
         <div class="form-field"><label>FOT lead time (weeks from KO)</label><input id="fFotWeeks" type="number" min="0" step="1" placeholder="e.g. 12"/></div>
         <div class="form-field"><label>PPAP lead time (weeks from KO)</label><input id="fPpapWeeks" type="number" min="0" step="1" placeholder="e.g. 20"/></div>
         <div class="form-field"><label>Amortization total (<span class="cur-label">${submitCurrency()}</span>)</label><input id="fAmoTotal" type="number" min="0" step="0.01" placeholder="e.g. 30000"/></div>
-        <div class="form-field"><label>Amortization pieces</label><input id="fAmoPcs" type="number" min="1" step="1" placeholder="e.g. 120000"/><div class="fx-hint">Amortization per piece = total ÷ pieces, calculated when you submit.</div></div>
+        <div class="form-field"><label>Amortization pieces${fieldTip('Amortization per piece = total ÷ pieces, calculated when you submit.')}</label><input id="fAmoPcs" type="number" min="1" step="1" placeholder="e.g. 120000"/></div>
         <div class="form-field"><label>USMCA eligible?</label>${yesNoSelect('qUSMCA')}</div>
         <div class="form-field"><label>Annual capacity (pcs)</label><input id="fAnnualCapa" type="number" min="1" step="1" placeholder="e.g. 500000"/></div>
         <div class="form-field"><label>Lifetime capacity (pcs)</label><input id="fLifetimeCapa" type="number" min="1" step="1" placeholder="e.g. 2500000"/></div>
@@ -2654,10 +2834,10 @@ function renderSubmit(){
     </div>
 
     <div class="screening-section">
-      <h3>Sourcing Presentation Files (optional)</h3>
+      <h3>Sourcing Presentation Files (optional)${infoTip(`Files are uploaded after you submit and attached to this registration; everyone with Cockpit access can download them.`)}</h3>
       <div class="file-drop" id="fileDrop">
         <div>Drag PowerPoint, PDF, Excel or Word files here, or <button type="button" class="link-btn" id="fileBrowse">browse</button>.</div>
-        <div class="fx-hint">Up to ${FILE_MAX_COUNT} files, 100 MB each. They are uploaded after you submit and attached to this registration; everyone with Cockpit access can download them.</div>
+        <div class="fx-hint">Up to ${FILE_MAX_COUNT} files, 100 MB each</div>
         <input type="file" id="fFiles" multiple accept="${FILE_EXTENSIONS.join(',')}" style="display:none;"/>
       </div>
       <div id="fileQueue">${fileQueueHtml()}</div>
@@ -2693,9 +2873,9 @@ function renderSubmit(){
         <div class="block-warning" id="ecmBlockWarning">⚠ This case cannot be registered until it has passed CCB2 (Change Control Board 2).</div>
       </div>
     </div>
-    <div class="route-note">📧 This request will be routed to the <b>SBS Procurement approver</b> for review. You'll be notified by email once it's approved or returned.</div>
     <div class="form-actions">
       <button class="btn-primary" id="submitCaseBtn">Submit for Registration</button>
+      <span class="action-note">Goes to the SBS Procurement approver — you'll get an email with the result.</span>
     </div>
     <div class="submit-banner" id="submitBanner"></div>
   </div>
@@ -2743,8 +2923,7 @@ function renderAccounts(){
     </tr>`).join('');
   return `
   <div class="pagehead">
-    <h1>Accounts</h1>
-    <p>Everyone registers with their company email (${esc(domains)}) — name and email only, no password — and starts as a <b>User</b>: submit and view cases. <b>Manager</b> (purchasing / NPI manager): also confirm or return registrations, edit and delete cases, record decisions and follow-ups, send reminders. <b>Sourcing admin</b>: also exchange rates, registration deadline, reminder settings and this page; admins are the only accounts with a password (issued here when you promote someone).</p>
+    <h1>Accounts</h1>${infoTip(`Everyone registers with their company email (${esc(domains)}) — name and email only, no password — and starts as a <b>User</b>: submit and view cases. <b>Manager</b> (purchasing / NPI manager): also confirm or return registrations, edit and delete cases, record decisions and follow-ups, send reminders. <b>Sourcing admin</b>: also exchange rates, registration deadline, reminder settings and this page; admins are the only accounts with a password (issued here when you promote someone).`)}
   </div>
   ${notice}
   <div class="card" style="overflow-x:auto;">
@@ -2766,8 +2945,7 @@ function renderApprovals(){
   const decided = SUBMISSIONS.filter(s=>s.status!=='Waiting for Registration Confirmation').sort((a,b)=> b.subId.localeCompare(a.subId));
   return `
   <div class="pagehead">
-    <h1>Registration Confirmation</h1>
-    <p>Confirm that a submitted case is accepted into the system, or reject it with a reason. This is <b>not</b> the Sourcing Committee decision — a confirmed case enters the Database with Sourcing Decision = Pending, and the committee decides later.</p>
+    <h1>Registration Confirmation</h1>${infoTip(`Confirm that a submitted case is accepted into the system, or reject it with a reason. This is <b>not</b> the Sourcing Committee decision — a confirmed case enters the Database with Sourcing Decision = Pending, and the committee decides later.`)}
   </div>
 
   ${pending.length===0 ? `<div class="card"><div class="empty-state">No submissions waiting for review.</div></div>` :
@@ -2896,8 +3074,8 @@ function renderDetail(){
   <div class="status-row">
     ${editing ? `
     <div class="status-tile"><div class="k">Sourcing Decision</div><select class="edit-input" id="editDecision">${DECISION_OPTIONS.map(o=>`<option value="${o.v}" ${b.meetingDecision===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
-    <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation Link ${(b.meetingDecision!=='PENDING' && !(c.files&&c.files.length))?'*':''}</div>${ef('editPresentationLink', b.sourcingPresentationLink||'')}<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">${(c.files&&c.files.length) ? `Optional — ${c.files.length} presentation file${c.files.length===1?' is':'s are'} attached below.` : 'A decision other than Pending needs this link, or a presentation file added under Sourcing Presentation Files below.'}</div></div>
-    <div class="status-tile"><div class="k">Action Status</div>${b.meetingDecision==='PENDING' ? '<span class="no-action-txt">—</span>' : actionCell(rolledUpStatus)}<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">${b.meetingDecision==='PENDING' ? 'Blank until a Sourcing Decision is recorded' : 'Computed from task statuses below'}</div></div>
+    <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation Link ${(b.meetingDecision!=='PENDING' && !(c.files&&c.files.length))?'*':''}${fieldTip('A decision other than Pending needs this link, or a presentation file added under Sourcing Presentation Files below.')}</div>${ef('editPresentationLink', b.sourcingPresentationLink||'')}${(c.files&&c.files.length) ? `<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">Optional — ${c.files.length} file${c.files.length===1?'':'s'} attached below</div>` : ''}</div>
+    <div class="status-tile"><div class="k">Action Status${fieldTip(b.meetingDecision==='PENDING' ? 'Blank until a Sourcing Decision is recorded.' : 'Computed from the task statuses below.')}</div>${b.meetingDecision==='PENDING' ? '<span class="no-action-txt">—</span>' : actionCell(rolledUpStatus)}</div>
     ` : `
     <div class="status-tile"><div class="k">Sourcing Decision</div><span class="badge ${decisionBadgeClass(c.meetingDecision)}">${esc(c.meetingDecision)}</span>${c.decisionText ? `<div style="font-size:11px;color:var(--ink-soft);margin-top:5px;white-space:pre-line;">Excel: ${esc(c.decisionText)}</div>` : ''}</div>
     <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation</div><div style="font-size:12px;word-break:break-all;">${c.sourcingPresentationLink ? documentLink(c.sourcingPresentationLink) : (c.files&&c.files.length) ? `<span>📎 ${c.files.length} file${c.files.length===1?'':'s'} under Sourcing Presentation Files</span>` : `<span style="color:var(--ink-faint);">Not yet provided — required when a decision is recorded</span>`}</div></div>
@@ -2931,10 +3109,9 @@ function renderDetail(){
           ${projectDatalist('editProjectOptions')}
           <button class="btn-secondary" id="addPnLineBtn">+ Add Another Part Number</button>
           <div class="form-grid" style="margin-top:12px;">
-            <div class="form-field"><label>Bundle Peak Year Spend (${editCur})</label>${ef('editBundlePeak', b.peakYearSpend)}</div>
-            <div class="form-field"><label>Bundle Lifetime Spend (${editCur})</label>${ef('editBundleLife', b.lifetimeSpend)}</div>
+            <div class="form-field"><label>Bundle Peak Year Spend (${editCur})${fieldTip('One total for all part numbers of this case.')}</label>${ef('editBundlePeak', b.peakYearSpend)}</div>
+            <div class="form-field"><label>Bundle Lifetime Spend (${editCur})${fieldTip('One total for all part numbers of this case.')}</label>${ef('editBundleLife', b.lifetimeSpend)}</div>
           </div>
-          <div class="fx-hint">One total for all part numbers of this case.</div>
           ${isConverted(c) ? `<div class="fx-hint">Enter amounts in ${esc(editCur)}. They are saved in EUR at ${esc(fxLabel(c.fx))} — ${esc(fxOrigin(c.fx))}.</div>` : ''}
         ` : `
           ${partNumberLines(c).length>1 ? `
@@ -2959,11 +3136,10 @@ function renderDetail(){
       </div>
 
       <div class="card section-card">
-        <h3>Case Information</h3>
+        <h3>Case Information${editing ? infoTip('Project, Sourcing Type and Recommended Supplier are edited per part number above.') : ''}</h3>
         ${editing ? `
         <div class="form-grid">
           <div class="form-field"><label>Region (select all that apply)</label>${regionChecks('editRegion', b.region)}</div>
-          <div class="form-field"><div class="fx-hint" style="margin-top:0;">Project, Sourcing Type and Recommended Supplier are edited per part number above.</div></div>
           <div class="form-field"><label>Product Family</label>${esel('editFamily', b.family, uniq([...FAMILY_OPTIONS, b.family].filter(Boolean)))}</div>
           <div class="form-field"><label>Cluster</label>${esel('editCluster', b.cluster, uniq([...CLUSTERS, b.cluster]))}</div>
           <div class="form-field"><label>Parent PF</label>${ef('editParentPF', b.parentPF)}</div>
@@ -2971,9 +3147,8 @@ function renderDetail(){
           <div class="form-field"><label>Presenter</label>${ef('editPresenter', b.presenter)}</div>
           <div class="form-field"><label>Decision Level</label>${esel('editDecisionLevel', b.decisionLevel, DECISION_LEVELS)}</div>
           <div class="form-field span2">
-            <label>Final PPT / Supporting Document Link ${rollupActionStatus(b.followUps)==='Closed'?'*':''}</label>
+            <label>Final PPT / Supporting Document Link ${rollupActionStatus(b.followUps)==='Closed'?'*':''}${fieldTip('Required once every follow-up action is Closed (that closes the case). Paste the SharePoint / OneDrive link — the file itself stays there.')}</label>
             ${ef('editFinalDocLink', b.finalDocLink||'')}
-            <div style="font-size:11px;color:var(--ink-faint);margin-top:4px;">Required once every follow-up action is Closed (that closes the case). Paste the SharePoint / OneDrive link — the file itself stays there.</div>
           </div>
         </div>
         ` : `
@@ -3001,10 +3176,9 @@ function renderDetail(){
       </div>
 
       <div class="card section-card">
-        <h3>Commercial Information</h3>
+        <h3>Commercial Information${editing ? infoTip('Pc Price CQA, Supplier Price (landed), tooling and volumes are edited per part number in the Part Numbers section above.') : ''}</h3>
         ${editing ? `
         <div class="form-grid">
-          <div class="form-field span2"><div class="fx-hint">Pc Price CQA, Supplier Price (landed), tooling and volumes are edited per part number in the Part Numbers section above.</div></div>
           <div class="form-field"><label>Tooling Payment</label>${esel('editToolingPayment', b.toolingPayment||'', ['', ...TOOLING_PAYMENTS])}</div>
           <div class="form-field"><label>FRA available?</label>${esel('editFraAvailable', b.fraAvailable||'', ['','Yes','No'])}</div>
           <div class="form-field"><label>BPG available?</label>${esel('editBpgAvailable', b.bpgAvailable||'', ['','Yes','No'])}</div>
@@ -3030,9 +3204,8 @@ function renderDetail(){
       </div>
 
       <div class="card section-card">
-        <h3>Sourcing Presentation Files</h3>
+        <h3>Sourcing Presentation Files${editing ? infoTip('Files are saved as soon as you add or remove them — your other changes stay in the form until you press Save Changes. A file here counts as the Sourcing Presentation.') : ''}</h3>
         ${(c.files&&c.files.length) ? filesListHtml(c.files, state.isAdmin) : `<div style="color:var(--ink-faint);font-size:12.5px;">No files uploaded for this registration.</div>`}
-        ${editing ? `<div class="fb-hint" style="margin-top:6px;">Files are saved as soon as you add or remove them — your other changes stay in the form until you press Save Changes. A file here counts as the Sourcing Presentation.</div>` : ''}
         ${state.isAdmin ? `<div class="form-actions" style="margin-top:10px;">
           <button type="button" class="btn-secondary" id="caseFileAdd">Add files</button>
           <input type="file" id="caseFileInput" multiple accept="${FILE_EXTENSIONS.join(',')}" style="display:none;"/>
@@ -3153,6 +3326,7 @@ function render(){
   renderNav();
   const app = document.getElementById('app');
   app.classList.toggle('wide', state.view==='database');
+  app.parentElement.classList.toggle('is-wide', state.view==='database');
   if(state.view==='home') app.innerHTML = renderHome();
   else if(state.view==='database') app.innerHTML = renderDatabase();
   else if(state.view==='dashboard') app.innerHTML = renderDashboard();
@@ -3763,13 +3937,6 @@ function wireEvents(){
     window.scrollTo(0,0);
   };
 
-  // Global header search
-  const gs = document.getElementById('globalSearch');
-  if(gs){
-    gs.value = '';
-    gs.onkeydown = (e)=>{ if(e.key==='Enter'){ state.searchQuery = gs.value; state.view='database'; render(); window.scrollTo(0,0); } };
-  }
-
   // Submit Case
   const submitBtn = document.getElementById('submitCaseBtn');
 
@@ -3803,7 +3970,7 @@ function wireEvents(){
       const bpgHint = document.getElementById('bpgHint');
       if(bpgHint){
         const over = (rate ? eurLife : totalLife) > BPG_THRESHOLD_EUR;
-        bpgHint.textContent = over ? 'Lifetime Spend is above 3 Mio EUR — a BPG must be available to register this case.' : 'Only needed when the total Lifetime Spend converts to more than €3,000,000.';
+        bpgHint.textContent = over ? 'Lifetime Spend is above 3 Mio EUR — a BPG must be available to register this case.' : '';
         bpgHint.classList.toggle('missing', over);
       }
     }
@@ -3828,7 +3995,7 @@ function wireEvents(){
   if(caseNoEl) caseNoEl.oninput = ()=>{
     const h = document.getElementById('caseNoHint'); if(!h) return;
     const st = caseNoStatus(caseNoEl.value);
-    if(!st){ h.style.color='var(--ink-faint)'; h.textContent='Required for every case. If this number is already in the Database, this registration is automatically linked to that case\'s history (it came back). Otherwise it is registered as a new case under this number.'; return; }
+    if(!st){ h.style.color='var(--ink-faint)'; h.textContent=''; return; }
     if(st.existing){ h.style.color='var(--accent)'; h.textContent=`↩ ${st.id} is already in the Database (${st.priorEntries} previous entr${st.priorEntries===1?'y':'ies'}) — this registration will be linked to its history as a comeback.`; }
     else { h.style.color='var(--green)'; h.textContent=`✓ ${st.id} is not in the Database yet — it will be registered as a new case under this number.`; }
   };

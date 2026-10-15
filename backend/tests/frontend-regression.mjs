@@ -23,6 +23,14 @@ const USERS = {user:USER, manager:MANAGER, admin:ADMIN};
 const errors = [];
 let passed = 0;
 
+// v3 Phase-26：Submit / Approval / Follow-ups 在 Case Workflow 组，Database / Dashboard 在 Data 组 —— 侧边栏没显示就先点组名
+const NAV_GROUP_OF = {submit:'workflow', approvals:'workflow', followups:'workflow', database:'data', dashboard:'data'};
+async function goTo(page, view){
+  const item = page.locator(`#sidenav [data-nav="${view}"]`);
+  if(!(await item.isVisible())) await page.locator(`[data-nav-group="${NAV_GROUP_OF[view]}"]`).click();
+  await item.click();
+}
+
 async function fixture({timezoneId='Asia/Taipei', hash='', before, api, user}={}){
   const context = await browser.newContext({timezoneId});
   const page = await context.newPage();
@@ -73,7 +81,7 @@ try{
   for(const timezoneId of ['Asia/Taipei','America/New_York','Europe/Berlin']){
     await test('Wednesday calendar values and next-year labels in '+timezoneId, async()=>{
       const {page, context} = await fixture({timezoneId, user:'user'});
-      await page.locator('[data-nav="submit"]').click();
+      await goTo(page, 'submit');
       const dates = await page.locator('#fMeetingDate option').evaluateAll(options=>options.map(o=>({
         value:o.value, text:o.textContent, day:new Date(o.value+'T00:00:00').getDay()
       })));
@@ -100,7 +108,7 @@ try{
       await route.fulfill({json:{subId:'SUB-TEST',snapshot:empty}});
       return true;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     for(const [id,value] of Object.entries({fExistingSwat:'SWAT-1000',pnSupplier_0:'Test supplier',pnProject_0:'Test project',pnPartNumber_0:'1234',pnPartDescription_0:'Test part',fBundlePeak:'10',fBundleLife:'20'})){
       await page.locator('#'+id).fill(value);
     }
@@ -124,7 +132,7 @@ try{
       await route.fulfill({json:{subId:'SUB-TEST',snapshot:empty}});
       return true;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     assert.equal(await page.locator('#pnProject_0').evaluate(el=>el.tagName),'INPUT');
     for(const [id,value] of Object.entries({fExistingSwat:'SWAT-1001',pnSupplier_0:'Test supplier',pnPartNumber_0:'1234',pnPartDescription_0:'Test part',fBundlePeak:'10',fBundleLife:'20'})){
       await page.locator('#'+id).fill(value);
@@ -166,7 +174,7 @@ try{
       await route.fulfill({json:{subId:'SUB-TEST',snapshot:{...empty, fxSettings}}});
       return true;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     assert.equal(await page.locator('#fCurrency').inputValue(),'EUR');
     await page.locator('#fCurrency').selectOption('USD');
     const curLabels = await page.locator('.cur-label').allTextContents();
@@ -239,7 +247,7 @@ try{
       await route.fulfill({json:{ok:true, snapshot:{...empty, fxSettings:{basis:saved.basis, perEur:{USD:saved.perEur.USD}, updatedAt:'Sep 24, 6:30 PM'}}}});
       return true;
     }});
-    await page.locator('[data-nav="dashboard"]').click();
+    await goTo(page, 'dashboard');
     const card = await page.locator('#app').innerText();
     assert.ok(card.includes('1 EUR = ? USD') && card.includes('1 EUR = ? CNY'), card);
     await page.locator('#fxBasis').fill('OP 2025 plan rates 2026');
@@ -249,7 +257,7 @@ try{
     assert.deepEqual(saved,{basis:'OP 2025 plan rates 2026', perEur:{USD:'1.17', CNY:null}});
     assert.equal(await page.locator('#fxRateUSD').inputValue(),'1.17');
     // 提交页提示与预览按除法：117 USD ≈ €100
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     await page.locator('#fCurrency').selectOption('USD');
     assert.match(await page.locator('#fxHint').textContent(),/1 EUR = 1\.17 USD \(OP 2025 plan rates 2026\)/);
     await page.locator('#fBundlePeak').fill('117');
@@ -270,7 +278,7 @@ try{
       }
       return false;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     await page.locator('#fFiles').setInputFiles([
       {name:'KW41 deck.pptx', mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation', buffer:Buffer.alloc(2048, 1)},
       {name:'tool.exe', mimeType:'application/octet-stream', buffer:Buffer.from('x')},
@@ -328,7 +336,7 @@ try{
       await route.fulfill({json:{subId:'SUB-TEST',snapshot:{...empty, fxSettings}}});
       return true;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     for(const [id,value] of Object.entries({fExistingSwat:'SWAT-1003',pnSupplier_0:'Test supplier',pnProject_0:'MBEAL',pnPartNumber_0:'1234',pnPartDescription_0:'Test part',
       fBundlePeak:'1000000',fBundleLife:'4000000'})){
       await page.locator('#'+id).fill(value);
@@ -436,10 +444,11 @@ try{
   await test('Registration deadline follows admin settings and late registrations need an exception with a reason', async()=>{
     // 固定时间 2026-12-20（周日）12:00Z。默认规则：周一 23:59 —— 本周三 12/23 仍开放，没有例外入口
     const plain = await fixture({user:'user'});
-    await plain.page.locator('[data-nav="submit"]').click();
+    await goTo(plain.page, 'submit');
     assert.equal(await plain.page.locator('#fMeetingDate option').first().getAttribute('value'),'2026-12-23');
     assert.equal(await plain.page.locator('#fLateException').count(),0);
-    assert.ok((await plain.page.locator('#app').innerText()).includes('Registrations close Monday 23:59 (America/New_York)'));
+    // v3 Phase-26：截止规则收进会议日期旁的 ⓘ（悬停显示，读屏从 aria-label 读到）
+    assert.ok((await plain.page.locator('label:has(~ #fMeetingDate) .info-tip').getAttribute('aria-label')).includes('Registrations close Monday 23:59 (America/New_York)'));
     await plain.context.close();
 
     // 管理员规则：会前 5 天 18:00 柏林时间 = 周五 12/18 18:00，已过 → 最早只能选 12/30，可申请例外登记 12/23
@@ -452,7 +461,7 @@ try{
         await route.fulfill({json:{...empty, registrationSettings, currentUser:role}});
         return true;
       }});
-      await other.page.locator('[data-nav="submit"]').click();
+      await goTo(other.page, 'submit');
       assert.equal(await other.page.locator('#fMeetingDate option').first().getAttribute('value'),'2026-12-30');
       assert.equal(await other.page.locator('#fLateException').count(),0, role.role);
       await other.context.close();
@@ -465,9 +474,9 @@ try{
       await route.fulfill({json:{subId:'SUB-LATE',snapshot:empty}});
       return true;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     assert.equal(await page.locator('#fMeetingDate option').first().getAttribute('value'),'2026-12-30');
-    assert.ok((await page.locator('#app').innerText()).includes('Registrations close Friday 18:00 (Europe/Berlin)'));
+    assert.ok((await page.locator('label:has(~ #fMeetingDate) .info-tip').getAttribute('aria-label')).includes('Registrations close Friday 18:00 (Europe/Berlin)'));
     for(const [id,value] of Object.entries({fExistingSwat:'SWAT-1004',pnSupplier_0:'Test supplier',pnProject_0:'MBEAL',pnPartNumber_0:'1234',pnPartDescription_0:'Test part',fBundlePeak:'10',fBundleLife:'20'})){
       await page.locator('#'+id).fill(value);
     }
@@ -494,19 +503,19 @@ try{
     await page.evaluate(()=>{ applySnapshot({submissions:[{subId:'SUB-LATE', status:'Waiting for Registration Confirmation', submitterName:'Test owner', submitterEmail:'t@example.com',
       submittedAt:'Dec 20, 2026 7:00 AM', partNumber:'1234', partDescription:'Test part', caseId:'SWAT-1004', region:'EU', meetingDateLabel:'Wed, Dec 23, 2026',
       lateRegistration:{reason:'Customer escalation', deadline:'Fri, Dec 18, 2026 18:00 (Europe/Berlin)'}}]}); });
-    await page.locator('[data-nav="approvals"]').click();
+    await goTo(page, 'approvals');
     const approvals = await page.locator('#app').innerText();
     assert.ok(approvals.includes('Late registration — exception requested'), approvals);
     assert.ok(approvals.includes('Customer escalation'));
-    await page.locator('[data-nav="dashboard"]').click();
-    assert.ok((await page.locator('#app').innerText()).includes('Friday 18:00 (Europe/Berlin)'));
+    await goTo(page, 'dashboard');
+    assert.ok((await page.locator('h3:has-text("Registration Deadline") .info-tip').getAttribute('aria-label')).includes('Friday 18:00 (Europe/Berlin)'));
     await page.locator('#regDaysBefore').selectOption('1');
     await page.locator('#regCutoffTime').fill('17:30');
     await page.locator('#regTimezone').fill('');
     await page.locator('#regSave').click();
     await page.waitForFunction(()=>document.getElementById('regMsg')?.textContent.includes('Saved'));
     assert.deepEqual(savedSettings,{daysBefore:1, cutoffTime:'17:30', timezone:''});
-    assert.ok((await page.locator('#app').innerText()).includes('Tuesday 17:30 (America/New_York)'));
+    assert.ok((await page.locator('h3:has-text("Registration Deadline") .info-tip').getAttribute('aria-label')).includes('Tuesday 17:30 (America/New_York)'));
     await context.close();
   });
 
@@ -542,7 +551,7 @@ try{
     await seed(page,{meetingDecision:'APPROVED', actionStatus:'Open',
       followUps:[{id:'FU-T1', task:'Negotiate consignment', responsible:'SP ABC', ownerFunction:'Purchasing', dueDate:'2027-02-18', status:'Open', tags:['Cost'], notifyEmail:'sp@example.com'},
                  {id:'FU-T2', task:'Follow up', responsible:'Q Lee', dueDate:'2027-02-18', status:'Closed', tags:[], notifyEmail:'q@example.com'}]});
-    await page.locator('[data-nav="followups"]').click();
+    await goTo(page, 'followups');
     const options = await page.locator('#fFollowupTag option').allTextContents();
     assert.deepEqual(options, ['Category: All','CQA','Volume','Technical','Timing','Supplier strategy','BPG','Saving','Further VAVE','Uncategorized']);
     text = await page.locator('#app').innerText();
@@ -583,11 +592,11 @@ try{
     assert.equal(await shown('EU'),'2 cases');
     assert.equal(await shown('NA'),'1 case');
     assert.equal(await shown('AP'),'1 case');
-    await page.locator('[data-nav="dashboard"]').click();
+    await goTo(page, 'dashboard');
     const bars = await page.evaluate(()=>{
       const card=[...document.querySelectorAll('.breakdown-card')].find(el=>el.textContent.includes('by Region'));
       return {rows:[...card.querySelectorAll('.bar-row')].map(r=>r.querySelector('.blabel').textContent+'='+r.querySelector('.bar-num').textContent),
-        note:!!card.querySelector('.breakdown-note')};
+        note:(card.querySelector('h4 .info-tip')?.getAttribute('aria-label')||'').includes('counted once in each')};  // v3 Phase-26：说明收进 ⓘ
     });
     assert.deepEqual(bars.rows.sort(),['AP=1','EU=2','NA=1']);
     assert.ok(bars.note);
@@ -613,7 +622,7 @@ try{
   await test('Malformed case hash remains usable', async()=>{
     const {page,context} = await fixture({hash:'#case/%E0%A4%A'});
     assert.match(await page.locator('#scToast').textContent(),/invalid/);
-    await page.locator('[data-nav="database"]').click();
+    await goTo(page, 'database');
     assert.equal(new URL(page.url()).hash,'');
     await context.close();
   });
@@ -704,7 +713,7 @@ try{
       if(path==='/api/auth/password'){ await route.fulfill({json:{ok:true, user:me}}); return true; }
       return false;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     await page.locator('#submitLoginBtn').click();  // 提交页的登录门槛打开登录面板
     await page.locator('#adminEmailInput').fill('test.user@zf.com');
     await page.locator('#adminLoginBtn').click();  // 邮箱直接登录
@@ -747,7 +756,7 @@ try{
       await route.fulfill({json:{ok:true, token:'new-token', user:newUser}});
       return true;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     assert.equal(await page.locator('#submitCaseBtn').count(),0);
     assert.ok((await page.locator('#app').innerText()).includes('Log in to submit a case'));
     assert.equal(await page.locator('[data-nav="accounts"]').count(),0);
@@ -777,7 +786,7 @@ try{
     await page.route('**/api/auth/logout', route=>route.fulfill({json:{ok:true}}));
     await page.locator('#adminLogoutBtn').click();
     await loggedOut;
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     assert.equal(await page.locator('#submitLoginGate').count(),1);
     await context.close();
   });
@@ -849,7 +858,7 @@ try{
     assert.equal(await page.locator('[data-nav="accounts"]').count(),0);
     await page.mouse.click(5,5);  // 点外面不能关掉
     assert.equal(await page.locator('#adminLoginPanel').count(),1);
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     assert.equal(await page.locator('#submitLoginGate').count(),1);
     await context.close();
   });
@@ -954,7 +963,7 @@ try{
       formulaGuard('=SUM(A1)'),formulaGuard('  =SUM(A1)'),formulaGuard('\n=SUM(A1)'),
       formulaGuard('\t12'),formulaGuard(-123),formulaGuard('normal')
     ]),["'=SUM(A1)","'  =SUM(A1)","'\n=SUM(A1)","'\t12",'-123','normal']);
-    await page.locator('[data-nav="dashboard"]').click();
+    await goTo(page, 'dashboard');
     await page.locator('[data-period="week"]').click();
     assert.doesNotMatch(await page.locator('#app').textContent(),/undefined|Invalid Date|NaN/);
     await context.close();
@@ -973,7 +982,7 @@ try{
     }});
     await seed(page,{weekNum:40});
     await page.evaluate(()=>{ window.__saved = []; saveBlobFile = async (blob, filename)=>{ window.__saved.push({filename, type:blob.type, size:blob.size}); }; });
-    await page.locator('[data-nav="dashboard"]').click();
+    await goTo(page, 'dashboard');
     await page.locator('[data-period="week"]').click();
     await page.locator('#dashAgendaBtn').click();
     await page.waitForFunction(()=>window.__saved.length===1);
@@ -1002,7 +1011,7 @@ try{
                            mkCase({id:'C-B', swatId:'SWAT-B', partNumber:'2', partDescription:'B', weekNum:40, caseNumber:2, region:'NA', meetingDecision:'APPROVED'})]});
       window.__saved = []; saveBlobFile = async (blob, filename)=>{ window.__saved.push({filename}); };
     });
-    await page.locator('[data-nav="database"]').click();
+    await goTo(page, 'database');
     await page.locator('#fRegion').selectOption('NA');
     await page.locator('#dbMinutesBtn').click();
     await page.waitForFunction(()=>window.__saved.length===1);
@@ -1035,7 +1044,7 @@ try{
       return false;
     }});
     seedCase = await seed(page,{meetingDecision:'APPROVED', actionStatus:'Open', followUps:[task]});
-    await page.locator('[data-nav="followups"]').click();
+    await goTo(page, 'followups');
     await page.locator('[data-feedback-toggle="FU-R1"]').click();
     assert.ok((await page.locator('.fb-section').innerText()).includes('No feedback yet'));
     await page.locator('[data-feedback-open="FU-R1"]').click();
@@ -1063,7 +1072,7 @@ try{
     // 未登录：能看历史，不能汇报
     const viewer = await fixture();
     await seed(viewer.page,{meetingDecision:'APPROVED', actionStatus:'Open', followUps:[{...task, feedback:[fb]}]});
-    await viewer.page.locator('[data-nav="followups"]').click();
+    await goTo(viewer.page, 'followups');
     await viewer.page.locator('[data-feedback-toggle="FU-R1"]').click();
     assert.ok((await viewer.page.locator('.fb-section').innerText()).includes('Log in to report progress'));
     assert.equal(await viewer.page.locator('[data-feedback-open]').count(),0);
@@ -1122,7 +1131,7 @@ try{
       await route.fulfill({json:{subId:'SUB-B',snapshot:empty}});
       return true;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     assert.equal(await page.locator('#pnPeak_0, #pnLife_0, #fProjectIn, #fSupplierIn, #fSourcingType').count(), 0);
     await page.locator('#addPartNumberBtn').click();
     for(const [id,value] of Object.entries({fExistingSwat:'SWAT-1500', pnPartNumber_0:'PN1', pnPartDescription_0:'Spool', pnProject_0:'MBEAL', pnSupplier_0:'Supplier A',
@@ -1191,7 +1200,7 @@ try{
     const {page,context} = await fixture();
     await seed(page,{meetingDecision:'APPROVED', actionStatus:'Open',
       followUps:[{id:'FU-R1', task:'Send BP', responsible:'SP ABC', dueDate:'2027-02-18', status:'Open', tags:['BPG'], notifyEmail:'sp@example.com'}]});
-    await page.locator('[data-nav="followups"]').click();
+    await goTo(page, 'followups');
     assert.equal(await page.locator('[data-remind-open]').count(), 0);
     assert.ok((await page.locator('#app').innerText()).includes('Send reminder: Manager'));
     await page.evaluate(()=>{ applySnapshot({currentUser:{email:'npi@zf.com', name:'NPI Person', role:'npi_manager', roleLabel:'Manager'}}); render(); });
@@ -1229,12 +1238,12 @@ try{
       if(path==='/api/check'){ await route.fulfill({json:{ok:true}}); return true; }
       return false;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     await page.locator('#pnSupplier_0').fill('Keep this');
     await page.evaluate(()=>window.testRefresh());
     assert.equal(bootstrapCalls,1);
     assert.equal(await page.locator('#pnSupplier_0').inputValue(),'Keep this');
-    await page.locator('[data-nav="database"]').click();
+    await goTo(page, 'database');
     const requested=page.waitForRequest('**/api/bootstrap');
     await page.evaluate(()=>{window.refreshDone=window.testRefresh();});
     await requested;
@@ -1254,7 +1263,7 @@ try{
       await page.setViewportSize(viewport);
       await page.evaluate(()=>{applySnapshot({cases:HAND_CASES}); render();});
       for(const view of ['home','submit','approvals','database','dashboard','followups','accounts']){
-        await page.locator(`[data-nav="${view}"]`).click();
+        if(view==='home' || view==='accounts') await page.locator(`[data-nav="${view}"]`).click(); else await goTo(page, view);
         assert.equal(await page.evaluate(()=>state.view),view);
         assert.equal(await page.locator('#app h1').isVisible(),true);
         assert.doesNotMatch(await page.locator('#app').textContent(),/\[object Object\]|undefined|Invalid Date|NaN/);
@@ -1319,6 +1328,72 @@ try{
     await page.locator('tr[data-swat="SWAT-B"]').click();
     const text = await page.locator('#app').innerText();
     assert.ok(text.includes('2026-KW51 · Wed, Dec 16, 2026') && text.includes('Commodity\nCA Casting (Excel: CA04)'), text);
+    await context.close();
+  });
+
+  await test('Top navigation groups pages into Case Workflow and Data with a sidebar; section notes open on hover', async()=>{
+    const {page, context} = await fixture({user:'admin'});
+    await page.setViewportSize({width:1500, height:900});
+    const top = ()=>page.locator('#navtabs button').allTextContents();
+    const side = ()=>page.locator('#sidenav button .sn-label').allTextContents();
+    assert.deepEqual(await top(), ['Home','Case Workflow','Data','Accounts']);
+    assert.equal(await page.locator('#sidenav').isVisible(), false);  // 首页没有侧边栏
+    await page.locator('[data-nav-group="workflow"]').click();
+    assert.equal(await page.evaluate(()=>state.view), 'submit');
+    assert.deepEqual(await side(), ['Submit Case','Approval','Follow-ups']);
+    assert.equal(await page.locator('#sidenav [aria-current="page"] .sn-label').textContent(), 'Submit Case');
+    assert.deepEqual(await page.locator('#sidenav .sn-node').allTextContents(), ['1','2','3']);  // 流程组：步骤号
+    assert.equal(await page.locator('#sidenav').evaluate(el=>el.classList.contains('is-sequence')), true);
+    assert.match(await page.locator('#sidenav [data-nav="approvals"]').getAttribute('title'), /Confirm or return/);
+    // 有待审登记：数量同时出现在组名与侧边栏，管理员点组名直接到 Approval
+    await page.evaluate(()=>{ applySnapshot({cases:HAND_CASES, submissions:[{subId:'SUB-9', status:'Waiting for Registration Confirmation', submitterName:'T', submitterEmail:'t@example.com',
+      submittedAt:'Dec 20, 2026 7:00 AM', partNumber:'1', partDescription:'P', caseId:'SWAT-9', region:'EU', meetingDateLabel:'Wed, Dec 23, 2026'}]}); render(); });
+    assert.equal(await page.locator('[data-nav-group="workflow"] .count-badge').textContent(), '1');
+    assert.equal(await page.locator('#sidenav [data-nav="approvals"] .count-badge').textContent(), '1');
+    // 每项下面一行实时状态；收起成窄条只留编号，偏好记在本机浏览器
+    assert.equal(await page.locator('#sidenav [data-nav="approvals"] .sn-meta').textContent(), '1 waiting');
+    assert.match(await page.locator('#sidenav [data-nav="submit"] .sn-meta').textContent(), /^KW\d\d · by Mon 23:59$/);
+    await page.locator('#navCollapse').click();
+    assert.equal(await page.locator('#sidenav').evaluate(el=>el.classList.contains('is-collapsed')), true);
+    assert.equal(await page.locator('#sidenav [data-nav="approvals"] .sn-text').isVisible(), false);
+    assert.equal(await page.evaluate(()=>localStorage.getItem('sc_nav_collapsed')), '1');
+    assert.match(await page.locator('#sidenav [data-nav="approvals"]').getAttribute('title'), /^Approval — 1 waiting$/);
+    await page.locator('#navCollapse').click();
+    assert.equal(await page.locator('#sidenav [data-nav="approvals"] .sn-text').isVisible(), true);
+    await page.locator('[data-nav="home"]').click();
+    await page.locator('[data-nav-group="workflow"]').click();
+    assert.equal(await page.evaluate(()=>state.view), 'approvals');
+    // Data：默认 Database，再回来时打开上次看的页面
+    await page.locator('[data-nav-group="data"]').click();
+    assert.equal(await page.evaluate(()=>state.view), 'database');
+    assert.deepEqual(await side(), ['Database','Dashboard']);
+    assert.equal(await page.locator('#sidenav').evaluate(el=>el.classList.contains('is-sequence')), false);  // Data 没有先后，不连线
+    assert.equal(await page.locator('#sidenav .sn-node svg').count(), 2);
+    await page.locator('#sidenav [data-nav="dashboard"]').click();
+    await page.locator('[data-nav="home"]').click();
+    await page.locator('[data-nav-group="data"]').click();
+    assert.equal(await page.evaluate(()=>state.view), 'dashboard');
+    // 板块说明收进 ⓘ：平时不显示，悬停才出现；读屏软件能从 aria-label 读到
+    await goTo(page, 'database');
+    assert.equal(await page.locator('.pagehead p').count(), 0);
+    const tip = page.locator('.pagehead .info-tip');
+    assert.equal(await tip.locator('.info-pop').isVisible(), false);
+    assert.match(await tip.getAttribute('aria-label'), /consolidated automatically/);
+    await tip.hover();
+    assert.equal(await tip.locator('.info-pop').isVisible(), true);
+    // Database 窗口不到 1440px：侧边栏让位给表格，变成上方横向标签；其他页面仍在左侧
+    const layout = ()=>page.evaluate(()=>getComputedStyle(document.querySelector('.shell')).flexDirection);
+    assert.equal(await layout(), 'row');
+    await page.setViewportSize({width:1280, height:900});
+    assert.equal(await layout(), 'column');
+    await goTo(page, 'dashboard');
+    assert.equal(await layout(), 'row');
+    // 案例详情不显示侧边栏，顶部高亮 Data
+    await goTo(page, 'database');
+    await page.locator('#app tbody tr[data-swat]').first().click();
+    assert.equal(await page.evaluate(()=>state.view), 'detail');
+    assert.equal(await page.locator('#sidenav').isVisible(), false);
+    assert.equal(await page.locator('#navtabs button.active').textContent(), 'Data');
     await context.close();
   });
 
@@ -1458,7 +1533,7 @@ try{
       await route.fulfill({json:{subId:'SUB-TEST',snapshot:empty}});
       return true;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     assert.deepEqual(await page.locator('#fToolingPayment option').allTextContents(), ['Select...','Lumpsum','MPC','No tooling involved']);
     await page.locator('#submitCaseBtn').click();
     const items = await page.locator('#submitBanner .problem-list li').allTextContents();
@@ -1489,7 +1564,7 @@ try{
       await route.fulfill({status:422, json:{detail:'⚠ First server problem.\n⚠ Second server problem.'}});
       return true;
     }});
-    await page.locator('[data-nav="submit"]').click();
+    await goTo(page, 'submit');
     for(const [id,value] of Object.entries({fExistingSwat:'SWAT-1000',pnSupplier_0:'S',pnProject_0:'P',pnPartNumber_0:'1234',pnPartDescription_0:'Part',fBundlePeak:'10',fBundleLife:'20'}))
       await page.locator('#'+id).fill(value);
     await page.locator('#fRegionIn input[value="EU"]').check();
@@ -1546,7 +1621,7 @@ try{
     assert.equal(await page.locator('#editFuTask_0').inputValue(), 'Send samples');
     assert.equal(await page.locator('#editFuEmail_0').inputValue(), 'a@zf.com');
     assert.equal(await page.locator('#editMeetingDate').inputValue(), '2026-10-09');
-    assert.ok((await page.locator('#app').innerText()).includes('Optional — 1 presentation file is attached below.'));
+    assert.ok((await page.locator('#app').innerText()).includes('Optional — 1 file attached below'));
     // 有文件即满足演示文稿规则：不填链接也能存，一次保存待办 + 改周
     await page.locator('#saveCaseBtn').click();
     await page.waitForFunction(()=>!state.detailEditMode);
