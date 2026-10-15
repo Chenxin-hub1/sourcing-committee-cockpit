@@ -511,7 +511,7 @@ async def create_submission(b: SubmissionIn, request: Request, user: LoggedIn) -
             "region": b.region, "project": summary["project"], "family": b.family, "cluster": b.cluster,
             "parentPF": b.parentPF, "partFamilyCode": b.partFamilyCode,
             "sourcingType": summary["sourcingType"], "recommendedSupplier": summary["recommendedSupplier"],
-            "presenter": b.submitterName.strip(), "decisionLevel": b.decisionLevel,
+            "presenter": b.presenter or b.submitterName.strip(), "decisionLevel": b.decisionLevel,
             # 金额存欧元；原币合计与所用汇率一并保存，之后改汇率不影响这条记录
             "peakYearSpend": spend["peakYearSpend"], "lifetimeSpend": spend["lifetimeSpend"], "leadTime": "",
             "peakYearSpendEntered": spend["peakYearSpendEntered"],
@@ -743,12 +743,12 @@ async def export_week(kind: str, week: int = Query(ge=1, le=53), year: int = Que
     cases = [c for c in state["cases"] if int(c.get("weekNum") or 0) == week
              and (not c.get("meetingYear") or int(c["meetingYear"]) == year)]
     label = logic.wk(week, year)
-    return _xlsx_response(kind, exports.build(kind, cases, label), exports.filename(kind, label))
+    return _xlsx_response(kind, exports.build(kind, cases, label), exports.filename(kind, cases, week=(year, week)))
 
 
 @app.post("/api/exports/{kind}")
 async def export_selection(kind: str, b: ExportSelectionIn) -> Response:
-    """Database 页按当前筛选结果导出：前端传可见案例的行 id，同一版式（跨周时按周、案例号排序）。"""
+    """Database 页按当前筛选结果导出：前端传可见案例的行 id，同一版式（按周、级别、地区、案例号排序，见 exports._sorted）。"""
     if kind not in ("agenda", "minutes"):
         raise HTTPException(404, "Unknown export. Use agenda or minutes.")
     async with SessionLocal() as session, _write_lock:
@@ -757,7 +757,7 @@ async def export_selection(kind: str, b: ExportSelectionIn) -> Response:
     cases = [c for c in state["cases"] if c["id"] in wanted]
     now = logic.na_now()
     title = f"Database export, {len(cases)} case{'s' if len(cases) != 1 else ''} ({logic.fmt_when(now)})"
-    return _xlsx_response(kind, exports.build(kind, cases, title), exports.filename(kind, f"Database_{now:%Y-%m-%d}"))
+    return _xlsx_response(kind, exports.build(kind, cases, title), exports.filename(kind, cases, today=now.date()))
 
 
 def _xlsx_response(kind: str, data: bytes, name: str) -> Response:

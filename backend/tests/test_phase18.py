@@ -205,7 +205,7 @@ def test_actions_sheet_lists_category_tags_and_function():
 
 def test_week_export_label_follows_the_requested_year(client):
     r = client.get("/api/exports/agenda", params={"week": 51, "year": 2025})
-    assert r.status_code == 200 and 'filename="Sourcing_Committee_Agenda_2025-KW51.xlsx"' in r.headers["content-disposition"]
+    assert r.status_code == 200 and 'filename="KW51 17.12.2025_SBS Sourcing Alignment Committee_Agenda.xlsx"' in r.headers["content-disposition"]
 
 
 # ---------- 演示文件库：从服务器上选文件挂到案例 ----------

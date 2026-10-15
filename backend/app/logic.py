@@ -201,7 +201,7 @@ def case_year(record: dict) -> int | None:
     """案例的会议年份：meetingYear，缺的按会议日期的 ISO 年算；都没有（模板演示数据）返回 None。"""
     if record.get("meetingYear"):
         return int(record["meetingYear"])
-    meeting = _meeting_date(record)
+    meeting = meeting_date(record)
     return meeting.isocalendar().year if meeting else None
 
 
@@ -245,13 +245,13 @@ def iso_week_of_record(record: dict) -> int:
 
     有会议日期（meetingDateISO，或 "Wed, Oct 7, 2026" 这样的 meetingDateLabel）按日期算；没有日期的
     是模板演示数据（2026 年，1 月 1 日是周四），模板第 w 周的周三落在 ISO 第 w + 1 周，上限 53。"""
-    meeting = _meeting_date(record)
+    meeting = meeting_date(record)
     if meeting is not None:
         return meeting.isocalendar().week
     return min(int(record.get("weekNum") or 1) + 1, 53)
 
 
-def _meeting_date(record: dict) -> date | None:
+def meeting_date(record: dict) -> date | None:
     iso = record.get("meetingDateISO") or ""
     if ISO_DATE_RE.match(iso):
         try:

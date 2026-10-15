@@ -155,6 +155,8 @@ COMMERCIAL_INPUT_FIELDS = tuple(CommercialIn.model_fields)
 class SubmissionIn(CommercialIn):
     submitterName: Text = ""
     submitterEmail: Email = ""
+    # v3 Phase-28：上会讲的人，默认提交人本人；留空回退到提交账号的名字（main.create_submission）
+    presenter: Annotated[Text, Field(max_length=80)] = ""
     caseNo: Text = ""
     partNumbers: PartNumbers = Field(default_factory=list)
     # v3 Phase-15：金额按整个 bundle 填一个（领导要求，buyer 不用按零件号拆），必填且大于 0（main._validate_submission）

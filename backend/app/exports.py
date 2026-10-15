@@ -6,6 +6,7 @@
 沿用模板的算法 —— (推荐供应商价 − CQA 价) × 产量，正数 = 高于 CQA，负数 = 低于 CQA（节省）。
 Agenda 是会前文件（没有决议列，蓝色表头）；Minutes 是会后文件（多 Sourcing Decision、Notes、Action Status，
 绿色表头，另带 "Actions" 表一待办一行）。周号沿用系统周（与页面一致），改 KW 见 Phase-13。
+v3 Phase-28 起两种文件同一顺序（每周内按级别、地区），文件名按委员会历史文件的格式（见 filename）。
 """
 
 from __future__ import annotations
@@ -194,11 +195,25 @@ def _write_formula(ws, r: int, col: int, formula: str, fmt: str | None) -> None:
     _style(cell, formula, fmt, wrap=False)
 
 
-def _sorted(cases: list[dict], l4_last: bool = False) -> list[dict]:
-    """按 年份 + 周 → 案例号 排；l4_last 时每周内 Level 4 排到该周最后（v3 Phase-25：L4 只是 for info，不用会上 review）。"""
+# v3 Phase-28（领导 2026-10-15）：每周内 L2 → L3 → L4（L4 只是 for info，不用会上 review）→ 未填级别，
+# 同级按地区 AP → EU → NA → 未填；多区域案例按勾选里最靠前的地区归组
+LEVEL_ORDER = ("Level 2", "Level 3", "Level 4")
+REGION_ORDER = ("AP", "EU", "NA")
+
+
+def _rank(value: str, order: tuple[str, ...]) -> int:
+    return order.index(value) if value in order else len(order)
+
+
+def _region_rank(c: dict) -> int:
+    return min((_rank(part.strip(), REGION_ORDER) for part in str(c.get("region") or "").split("+")), default=len(REGION_ORDER))
+
+
+def _sorted(cases: list[dict]) -> list[dict]:
+    """按 年份 + 周 → 级别 → 地区 → 案例号 排；Agenda、MM 与 MM 的 Actions 表同一顺序。"""
     def key(c: dict) -> tuple:
-        l4 = l4_last and c.get("decisionLevel") == "Level 4"
-        return (logic.case_year(c) or 0, int(c.get("weekNum") or 0), l4, int(c.get("caseNumber") or 0), str(c.get("swatId") or ""))
+        return (logic.case_year(c) or 0, int(c.get("weekNum") or 0), _rank(str(c.get("decisionLevel") or ""), LEVEL_ORDER),
+                _region_rank(c), int(c.get("caseNumber") or 0), str(c.get("swatId") or ""))
     return sorted(cases, key=key)
 
 
@@ -229,8 +244,8 @@ def _note(kind: str, when: datetime) -> str:
             "One row per part number; case-level cells are merged (Peak Year / LT Spend are per bundle). Amounts in the Currency column "
             "(EUR for cases registered after the EUR switch). Savings follow the SBS template: "
             "(recommended supplier − CQA) × volume, so a negative value means below CQA. "
-            "Week numbers are ISO calendar weeks (KW)."
-            + (" Level 4 cases are for information only (no review) and are listed last within each week." if kind == "agenda" else ""))
+            "Week numbers are ISO calendar weeks (KW). Within each week, cases are listed by decision level (L2, L3, then L4 — "
+            "Level 4 cases are for information only, no review) and then by region (AP, EU, NA).")
 
 
 def build(kind: str, cases: list[dict], label: str, when: datetime | None = None) -> bytes:
@@ -245,7 +260,7 @@ def build(kind: str, cases: list[dict], label: str, when: datetime | None = None
     _header(ws, kind, f"{KIND_TITLE[kind]} — {label}", _note(kind, when or logic.na_now()), headers)
     widths = {i: len(h) + 2 for i, h in enumerate(headers, start=1)}
     r = HEADER_ROW + 1
-    for c in _sorted(cases, l4_last=kind == "agenda"):
+    for c in _sorted(cases):
         rows = logic.part_number_lines(c)
         first, last = r, r + len(rows) - 1
         for line in rows:
@@ -312,5 +327,31 @@ def _bytes(wb: Workbook) -> bytes:
     return buf.getvalue()
 
 
-def filename(kind: str, label: str) -> str:
-    return f"Sourcing_Committee_{'Agenda' if kind == 'agenda' else 'Minutes'}_{label}.xlsx"
+# v3 Phase-28：文件名与委员会历史文件一致（"KW42 14.10.2026_SBS Sourcing Alignment Committee_MM.xlsx"），
+# excel_import.meeting_from_name 能从这个名字认回 KW 与会议日期，导出的纪要可以直接导回系统
+SERIES_NAME = "SBS Sourcing Alignment Committee"
+FILE_SUFFIX = {"agenda": "Agenda", "minutes": "MM"}
+
+
+def _week_date(cases: list[dict], year: int, week: int) -> date:
+    """那一周的会议日期：周内案例的会议日期一致就用它，否则（没有日期或互相不一致）用那周的周三。"""
+    days = {d for c in cases if (d := logic.meeting_date(c)) and d.isocalendar()[:2] == (year, week)}
+    return days.pop() if len(days) == 1 else date.fromisocalendar(year, week, 3)
+
+
+def filename(kind: str, cases: list[dict], *, week: tuple[int, int] | None = None, today: date | None = None) -> str:
+    """单周：KW42 14.10.2026；跨多周：KW42-KW45 2026（跨年 KW52 2025-KW01 2026）。
+
+    week = (年份, 周)：按周导出时传入，周里没有案例也照样按那周命名；都没有时用 today 的日期。"""
+    weeks = sorted({(logic.case_year(c) or logic.na_now().year, int(c.get("weekNum") or 0)) for c in cases if c.get("weekNum")})
+    if not weeks and week:
+        weeks = [week]
+    if not weeks:
+        stem = f"{(today or logic.na_now().date()):%d.%m.%Y}"
+    elif len(weeks) == 1:
+        (year, kw), = weeks
+        stem = f"KW{kw:02d} {_week_date(cases, year, kw):%d.%m.%Y}"
+    else:
+        (y1, w1), (y2, w2) = weeks[0], weeks[-1]
+        stem = f"KW{w1:02d}-KW{w2:02d} {y1}" if y1 == y2 else f"KW{w1:02d} {y1}-KW{w2:02d} {y2}"
+    return f"{stem}_{SERIES_NAME}_{FILE_SUFFIX[kind]}.xlsx"

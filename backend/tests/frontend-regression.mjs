@@ -379,8 +379,12 @@ try{
     await page.locator('#fCurrency').selectOption('USD');
     assert.ok((await page.locator('.cur-label').allTextContents()).every(t=>t==='USD'));
     assert.ok(await page.locator('#bpgHint.missing').count());
+    assert.equal(await page.locator('#fPresenter').inputValue(),'Test owner');  // v3 Phase-28：默认本人，可改成上会的同事
+    await page.locator('#fPresenter').fill('  Lingqing Hu ');
     await page.locator('#submitCaseBtn').click();
     await banner('SUB-TEST');
+    assert.equal(submitted.presenter,'Lingqing Hu');
+    assert.equal(submitted.submitterName,'Test owner');
     assert.equal(submitted.partNumbers[0].pcPriceCQA,'10.50');
     assert.equal(submitted.partNumbers[0].supplierToolingCost,'99999.99');
     assert.equal(submitted.partNumbers[0].averageVolume,378979);
@@ -500,13 +504,14 @@ try{
     assert.equal(submitted.lateReason,'Customer escalation');
 
     // 审批页标出例外申请；Dashboard 管理员卡片保存规则
-    await page.evaluate(()=>{ applySnapshot({submissions:[{subId:'SUB-LATE', status:'Waiting for Registration Confirmation', submitterName:'Test owner', submitterEmail:'t@example.com',
+    await page.evaluate(()=>{ applySnapshot({submissions:[{subId:'SUB-LATE', status:'Waiting for Registration Confirmation', submitterName:'Test owner', submitterEmail:'t@example.com', presenter:'Lingqing Hu',
       submittedAt:'Dec 20, 2026 7:00 AM', partNumber:'1234', partDescription:'Test part', caseId:'SWAT-1004', region:'EU', meetingDateLabel:'Wed, Dec 23, 2026',
       lateRegistration:{reason:'Customer escalation', deadline:'Fri, Dec 18, 2026 18:00 (Europe/Berlin)'}}]}); });
     await goTo(page, 'approvals');
     const approvals = await page.locator('#app').innerText();
     assert.ok(approvals.includes('Late registration — exception requested'), approvals);
     assert.ok(approvals.includes('Customer escalation'));
+    assert.ok(approvals.includes('Presenter: Lingqing Hu'), approvals);  // v3 Phase-28：上会人不是提交人时写出来
     await goTo(page, 'dashboard');
     assert.ok((await page.locator('h3:has-text("Registration Deadline") .info-tip').getAttribute('aria-label')).includes('Friday 18:00 (Europe/Berlin)'));
     await page.locator('#regDaysBefore').selectOption('1');
@@ -776,7 +781,7 @@ try{
     assert.equal(await page.locator('#adminLoginPanel').count(),0);
     assert.equal(await page.locator('#adminToggle').textContent(),'New Buyer · User');
     assert.equal(await page.evaluate(()=>localStorage.getItem('sc_session_token')),'new-token');
-    assert.deepEqual(await page.evaluate(()=>[document.getElementById('fSubmitter').value, document.getElementById('fSubmitterEmail').value]),['New Buyer','new.buyer@zf-lifetec.com']);
+    assert.deepEqual(await page.evaluate(()=>[document.getElementById('fSubmitter').value, document.getElementById('fSubmitterEmail').value, document.getElementById('fPresenter').value]),['New Buyer','new.buyer@zf-lifetec.com','New Buyer']);
     // 普通用户没有 Accounts 页，也进不去
     assert.equal(await page.locator('[data-nav="accounts"]').count(),0);
     assert.equal(await page.evaluate(()=>{ state.view='accounts'; render(); return state.view; }),'home');
@@ -791,7 +796,7 @@ try{
     await context.close();
   });
 
-  await test('Accounts page lets the Sourcing admin change roles, disable accounts and reset a password that is shown once', async()=>{
+  await test('Accounts page lets the Sourcing admin rename and change roles, disable accounts and reset a password that is shown once', async()=>{
     const calls=[];
     let users=[ADMIN, USER];
     const {page,context} = await fixture({user:'admin', api:async(route,path)=>{
@@ -821,9 +826,22 @@ try{
     await page.waitForFunction(()=>document.getElementById('scToast')?.textContent.includes('Account updated'));
     assert.deepEqual(calls[1],{p:'/api/users/test.user@zf.com', body:{role:'npi_manager'}});
     assert.equal(await page.locator('[data-user-role="test.user@zf.com"]').inputValue(),'npi_manager');
+    // v3 Phase-28：改名（注册时填错的名字会成为 Presenter）；清空不发请求、恢复原名
+    const nameInput = page.locator('[data-user-name="test.user@zf.com"]');
+    assert.equal(await nameInput.inputValue(),'Test owner');
+    await nameInput.fill('   ');
+    await nameInput.blur();
+    await page.waitForFunction(()=>document.getElementById('scToast')?.textContent.includes('cannot be empty'));
+    assert.equal(await nameInput.inputValue(),'Test owner');
+    assert.equal(calls.length,2);
+    await nameInput.fill(' Lingqing Hu ');
+    await nameInput.blur();
+    await page.waitForFunction(()=>state.accounts.find(u=>u.email==='test.user@zf.com')?.name==='Lingqing Hu');
+    assert.equal(await page.locator('[data-user-name="test.user@zf.com"]').inputValue(),'Lingqing Hu');
+    assert.deepEqual(calls[2],{p:'/api/users/test.user@zf.com', body:{name:'Lingqing Hu'}});
     await page.locator('[data-user-disable="test.user@zf.com"]').click();
     await page.waitForFunction(()=>document.querySelector('[data-user-disable="test.user@zf.com"]')?.textContent==='Enable');
-    assert.deepEqual(calls[2],{p:'/api/users/test.user@zf.com', body:{disabled:true}});
+    assert.deepEqual(calls[3],{p:'/api/users/test.user@zf.com', body:{disabled:true}});
     assert.ok((await page.locator('#app').innerText()).includes('Disabled'));
     // 非管理员没有密码，也就没有 Reset password 按钮；提升为管理员时拿到临时密码
     assert.equal(await page.locator('[data-user-reset="test.user@zf.com"]').count(),0);
@@ -979,7 +997,7 @@ try{
       const url = new URL(route.request().url());
       requested.push(path+'?week='+url.searchParams.get('week'));
       if(path.endsWith('/minutes')){ await route.fulfill({status:422, json:{detail:'week: Input should be greater than or equal to 1'}}); return true; }
-      await route.fulfill({status:200, headers:{'content-disposition':'attachment; filename="Sourcing_Committee_Agenda_2026-KW40.xlsx"'},
+      await route.fulfill({status:200, headers:{'content-disposition':'attachment; filename="KW40 30.09.2026_SBS Sourcing Alignment Committee_Agenda.xlsx"'},
         contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body:Buffer.from('PK-fake')});
       return true;
     }});
@@ -990,7 +1008,7 @@ try{
     await page.locator('#dashAgendaBtn').click();
     await page.waitForFunction(()=>window.__saved.length===1);
     assert.deepEqual(requested,['/api/exports/agenda?week=40']);
-    assert.deepEqual(await page.evaluate(()=>window.__saved),[{filename:'Sourcing_Committee_Agenda_2026-KW40.xlsx', type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', size:7}]);
+    assert.deepEqual(await page.evaluate(()=>window.__saved),[{filename:'KW40 30.09.2026_SBS Sourcing Alignment Committee_Agenda.xlsx', type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', size:7}]);
     assert.equal(await page.locator('#dashAgendaBtn').isEnabled(), true);
     // 服务端报错 → toast，按钮可再点
     await page.locator('#dashMinutesBtn').click();
@@ -1005,7 +1023,7 @@ try{
     const {page,context} = await fixture({api:async(route,path)=>{
       if(!path.startsWith('/api/exports/')) return false;
       posted.push({path, method: route.request().method(), body: route.request().postDataJSON()});
-      await route.fulfill({status:200, headers:{'content-disposition':'attachment; filename="Sourcing_Committee_Minutes_Database_2026-12-20.xlsx"'},
+      await route.fulfill({status:200, headers:{'content-disposition':'attachment; filename="KW40 30.09.2026_SBS Sourcing Alignment Committee_MM.xlsx"'},
         contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body:Buffer.from('PK-fake')});
       return true;
     }});
@@ -1019,11 +1037,11 @@ try{
     await page.locator('#dbMinutesBtn').click();
     await page.waitForFunction(()=>window.__saved.length===1);
     assert.deepEqual(posted,[{path:'/api/exports/minutes', method:'POST', body:{ids:['C-B']}}]);
-    assert.deepEqual(await page.evaluate(()=>window.__saved),[{filename:'Sourcing_Committee_Minutes_Database_2026-12-20.xlsx'}]);
+    assert.deepEqual(await page.evaluate(()=>window.__saved),[{filename:'KW40 30.09.2026_SBS Sourcing Alignment Committee_MM.xlsx'}]);
     await page.locator('#fRegion').selectOption('');
     await page.locator('#dbAgendaBtn').click();
     await page.waitForFunction(()=>window.__saved.length===2);
-    assert.deepEqual(posted[1],{path:'/api/exports/agenda', method:'POST', body:{ids:['C-B','C-A']}});  // 表按案例号倒序
+    assert.deepEqual(posted[1],{path:'/api/exports/agenda', method:'POST', body:{ids:['C-A','C-B']}});  // 表的顺序：同周同级按地区 EU 在 NA 前（Phase-28）
     await context.close();
   });
 
@@ -1400,19 +1418,21 @@ try{
     await context.close();
   });
 
-  await test('Database week sort keeps Level 4 cases (for info) last within each week in both directions', async()=>{
+  await test('Database week sort lists each week by level (L2, L3, L4) then region (AP, EU, NA) in both directions', async()=>{
     const {page, context} = await fixture();
     await page.evaluate(()=>{
       const base = {partNumber:'1', partDescription:'P', recommendedSupplier:'S', presenter:'O', cluster:'Metal', meetingDecision:'PENDING', meetingYear:2026};
-      const mk = (swat, weekNum, caseNumber, decisionLevel)=>mkCase({...base, id:swat, swatId:swat, weekNum, caseNumber, decisionLevel});
-      applySnapshot({cases:[mk('42-L4a',42,1,'Level 4'), mk('42-L2',42,4,'Level 2'), mk('42-L4b',42,2,'Level 4'),
+      const mk = (swat, weekNum, caseNumber, decisionLevel, region='EU')=>mkCase({...base, id:swat, swatId:swat, weekNum, caseNumber, decisionLevel, region});
+      applySnapshot({cases:[mk('42-L4-EU',42,1,'Level 4'), mk('42-L2-NA',42,4,'Level 2','NA'), mk('42-L4-AP',42,2,'Level 4','AP'),
+                            mk('42-L2-AP+EU',42,5,'Level 2','AP + EU'), mk('42-L3',42,3,'Level 3'), mk('42-none',42,6,''),
                             mk('43-L4',43,1,'Level 4'), mk('43-L3',43,2,'Level 3')]});
       state.view='database'; render();
     });
     const swats = ()=>page.evaluate(()=>[...document.querySelectorAll('tbody tr')].map(r=>r.dataset.swat));
-    assert.deepEqual(await swats(), ['43-L3','43-L4','42-L2','42-L4b','42-L4a']);  // 默认周倒序
+    const week42 = ['42-L2-AP+EU','42-L2-NA','42-L3','42-L4-AP','42-L4-EU','42-none'];
+    assert.deepEqual(await swats(), ['43-L3','43-L4', ...week42]);  // 默认周倒序，周内顺序不变
     await page.locator('th[data-sort="week"]').click();
-    assert.deepEqual(await swats(), ['42-L2','42-L4a','42-L4b','43-L3','43-L4']);
+    assert.deepEqual(await swats(), [...week42, '43-L3','43-L4']);
     await context.close();
   });
 

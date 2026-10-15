@@ -2218,13 +2218,16 @@ const DB_SORT_KEYS = {
   spend: c=>Number(c.peakYearSpend||0), decision: c=>c.meetingDecision||'',
   action: c=>c.meetingDecision==='PENDING' ? '' : (c.actionStatus||'No action'),
 };
-const isL4 = c => c.decisionLevel==='Level 4';
+const levelRank = c => { const i = DECISION_LEVELS.indexOf(c.decisionLevel); return i<0 ? DECISION_LEVELS.length : i; };
+// 多区域案例（"EU + NA"）按勾选里最靠前的地区归组，与服务端 exports._region_rank 一致
+const regionRank = c => Math.min(REGIONS.length, ...String(c.region||'').split('+').map(r=>REGIONS.indexOf(r.trim())).filter(i=>i>=0));
 function sortDbRows(rows){
   const {key, dir} = state.dbSort;
   const keyFn = DB_SORT_KEYS[key] || DB_SORT_KEYS.week, sign = dir==='asc' ? 1 : -1;
-  // v3 Phase-25：按周排时，每周内 Level 4（for info）不论升降序都排在该周最后，和导出的 Agenda 一致
+  // v3 Phase-28：按周排时，每周内 L2 → L3 → L4 → 未填、同级 AP → EU → NA（不论升降序），和导出的 Agenda / MM 一致
   if(!DB_SORT_KEYS[key] || key==='week'){
-    return rows.sort((a,b)=>sign*(weekKey(a)-weekKey(b)) || (isL4(a)-isL4(b)) || sign*(Number(a.caseNumber||0)-Number(b.caseNumber||0)));
+    return rows.sort((a,b)=>sign*(weekKey(a)-weekKey(b)) || (levelRank(a)-levelRank(b)) || (regionRank(a)-regionRank(b))
+      || sign*(Number(a.caseNumber||0)-Number(b.caseNumber||0)));
   }
   return rows.sort((a,b)=>{
     const ka = keyFn(a), kb = keyFn(b);
@@ -2391,7 +2394,7 @@ async function downloadExport(kind, selection){
     throw new Error(detail);
   }
   const m = /filename="([^"]+)"/.exec(resp.headers.get('content-disposition')||'');
-  const filename = m ? m[1] : `Sourcing_Committee_${kind==='agenda'?'Agenda':'Minutes'}_${selection.ids ? 'Database' : wk(selection.week, selection.year||weekYear())}.xlsx`;
+  const filename = m ? m[1] : `${selection.ids ? '' : `KW${String(selection.week).padStart(2,'0')} ${selection.year||weekYear()}_`}SBS Sourcing Alignment Committee_${kind==='agenda'?'Agenda':'MM'}.xlsx`;
   await saveBlobFile(await resp.blob(), filename);
 }
 function downloadWeekExport(kind, week){ return downloadExport(kind, {week}); }
@@ -2767,6 +2770,7 @@ function renderSubmit(){
     <div class="form-grid">
       <div class="form-field"><label>Your Name</label><input id="fSubmitter" value="${escapeAttr(me.name)}" readonly/></div>
       <div class="form-field"><label>Your Email${fieldTip(`Taken from your account — the approver's reply goes to this address.`)}</label><input id="fSubmitterEmail" value="${escapeAttr(me.email)}" readonly/></div>
+      <div class="form-field"><label>Presenter${fieldTip(`Who presents this case in the committee meeting — shown in the Agenda and Minutes. Defaults to you; change it if a colleague presents.`)}</label><input id="fPresenter" value="${escapeAttr(me.name)}" maxlength="80"/></div>
       <div class="form-field span2"><label>SWAT Case # or Supplyon Case # *${fieldTip(`Required for every case. If this number is already in the Database, this registration is automatically linked to that case's history (it came back). Otherwise it is registered as a new case under this number.`)}</label><input id="fExistingSwat" placeholder="e.g. 110000035042, or a bundle ID such as B/2026/00132"/><div id="caseNoHint" style="font-size:11px;color:var(--ink-faint);margin-top:4px;"></div></div>
     </div>
 
@@ -2918,7 +2922,7 @@ function renderAccounts(){
     </div>` : '';
   const roleSelect = u => `<select class="edit-input" style="width:auto;min-width:130px;" data-user-role="${escapeAttr(u.email)}" ${u.email===me?'disabled title="Ask another Sourcing admin to change your own role"':''}>${ROLE_OPTIONS.map(([v,l])=>`<option value="${v}" ${u.role===v?'selected':''}>${l}</option>`).join('')}</select>`;
   const rows = users.map(u=>`<tr>
-      <td>${esc(u.name)}${u.email===me?' <span class="cat-tag">you</span>':''}</td>
+      <td style="white-space:nowrap;"><input class="edit-input" style="width:auto;min-width:150px;" data-user-name="${escapeAttr(u.email)}" value="${escapeAttr(u.name)}" maxlength="80" aria-label="Name of ${escapeAttr(u.email)}"/>${u.email===me?' <span class="cat-tag">you</span>':''}</td>
       <td class="mono">${esc(u.email)}</td>
       <td>${roleSelect(u)}</td>
       <td>${u.disabled ? '<span class="badge noaction">Disabled</span>' : '<span class="badge approved">Active</span>'}${u.mustChangePassword ? '<div style="font-size:10.5px;color:var(--amber);font-weight:600;margin-top:3px;white-space:nowrap;">Temporary password</div>' : ''}</td>
@@ -2931,7 +2935,7 @@ function renderAccounts(){
     </tr>`).join('');
   return `
   <div class="pagehead">
-    <h1>Accounts</h1>${infoTip(`Everyone registers with their company email (${esc(domains)}) — name and email only, no password — and starts as a <b>User</b>: submit and view cases. <b>Manager</b> (purchasing / NPI manager): also confirm or return registrations, edit and delete cases, record decisions and follow-ups, send reminders. <b>Sourcing admin</b>: also exchange rates, registration deadline, reminder settings and this page; admins are the only accounts with a password (issued here when you promote someone).`)}
+    <h1>Accounts</h1>${infoTip(`Everyone registers with their company email (${esc(domains)}) — name and email only, no password — and starts as a <b>User</b>: submit and view cases. Correct a name here when it is not the person's real name — new registrations use it as the presenter. <b>Manager</b> (purchasing / NPI manager): also confirm or return registrations, edit and delete cases, record decisions and follow-ups, send reminders. <b>Sourcing admin</b>: also exchange rates, registration deadline, reminder settings and this page; admins are the only accounts with a password (issued here when you promote someone).`)}
   </div>
   ${notice}
   <div class="card" style="overflow-x:auto;">
@@ -2962,7 +2966,7 @@ function renderApprovals(){
       <div class="appr-top">
         <div>
           <div class="appr-title">${esc(s.partNumber)} — ${esc(s.partDescription)}${(s.partNumbers&&s.partNumbers.length>1)?` (+${s.partNumbers.length-1} more part number${s.partNumbers.length>2?'s':''})`:''}</div>
-          <div class="who">Submitted by ${esc(s.submitterName)} (${esc(s.submitterEmail)}) · ${esc(s.submittedAt)}${s.caseId?` · <b style="color:${s.existingSwatId?'var(--accent)':'var(--green)'};">${s.existingSwatId?`Came back — existing case ${esc(s.existingSwatId)} (${s.priorEntries} previous entr${s.priorEntries===1?'y':'ies'}), will be linked to its history`:`New case ${esc(s.caseId)}`}</b>`:''}</div>
+          <div class="who">Submitted by ${esc(s.submitterName)} (${esc(s.submitterEmail)}) · ${esc(s.submittedAt)}${(s.presenter && s.presenter!==s.submitterName)?` · Presenter: ${esc(s.presenter)}`:''}${s.caseId?` · <b style="color:${s.existingSwatId?'var(--accent)':'var(--green)'};">${s.existingSwatId?`Came back — existing case ${esc(s.existingSwatId)} (${s.priorEntries} previous entr${s.priorEntries===1?'y':'ies'}), will be linked to its history`:`New case ${esc(s.caseId)}`}</b>`:''}</div>
         </div>
         <span class="badge pending">Waiting for Registration Confirmation</span>
       </div>
@@ -3545,6 +3549,8 @@ function wireEvents(){
     try{
       const resp = await API.put('/api/users/'+encodeURIComponent(email), patch);
       state.accounts = resp.users || state.accounts;
+      const mine = state.user && (resp.users||[]).find(u=>u.email===state.user.email);
+      if(mine && mine.name!==state.user.name) setCurrentUser({...state.user, name: mine.name});  // 改了自己的名字：提交页立刻用新名字
       if(resp.temporaryPassword){ state.accountsNotice = {email, temporaryPassword: resp.temporaryPassword}; window.scrollTo(0,0); }  // 提升为管理员：临时密码只显示这一次
       toast('✓ Account updated.');
     }catch(err){ toast('⚠ '+(err.detail||err.message)); }
@@ -3552,6 +3558,14 @@ function wireEvents(){
   };
   document.querySelectorAll('[data-user-role]').forEach(sel=>{
     sel.onchange = ()=> updateAccount(sel.dataset.userRole, {role: sel.value}, sel);
+  });
+  document.querySelectorAll('[data-user-name]').forEach(input=>{
+    input.onchange = ()=>{
+      const name = input.value.trim(), old = (state.accounts||[]).find(u=>u.email===input.dataset.userName);
+      if(!name){ toast('⚠ The name cannot be empty.'); input.value = old ? old.name : ''; return; }
+      if(old && name===old.name){ input.value = name; return; }
+      updateAccount(input.dataset.userName, {name}, input);
+    };
   });
   document.querySelectorAll('[data-user-disable]').forEach(btn=>{
     btn.onclick = ()=> updateAccount(btn.dataset.userDisable, {disabled: btn.dataset.disabled!=='1'}, btn);
@@ -4133,7 +4147,7 @@ function wireEvents(){
     if(problems.length){ showError(problems); return; }
     // Persist on the server; its snapshot wholesale-replaces the in-memory state.
     const payload = {
-      submitterName:name, submitterEmail:email, caseNo: caseNo.id,
+      submitterName:name, submitterEmail:email, presenter: val('fPresenter').trim() || name, caseNo: caseNo.id,
       partNumbers: pnRows,
       peakYearSpend: bundlePeak, lifetimeSpend: bundleLife,  // 原币金额，由服务端折算
       region:checkedRegions('fRegionIn'), family:val('fFamily'),

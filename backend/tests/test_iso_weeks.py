@@ -86,4 +86,4 @@ async def test_confirmed_registration_lands_in_the_iso_week(async_client):
     case = (await async_client.post(f"/api/submissions/{r.json()['subId']}/confirm", headers=admin)).json()["case"]
     assert case["weekNum"] == 40
     r = await async_client.get("/api/exports/agenda", params={"week": 40})
-    assert 'filename="Sourcing_Committee_Agenda_2026-KW40.xlsx"' in r.headers["content-disposition"]
+    assert 'filename="KW40 30.09.2026_SBS Sourcing Alignment Committee_Agenda.xlsx"' in r.headers["content-disposition"]
