@@ -866,14 +866,17 @@ try{
   await test('Delete resets detail selection after the server removes the row', async()=>{
     const {page,context} = await fixture({api:async(route,path)=>{
       if(!path.startsWith('/api/cases/')) return false;
-      await route.fulfill({json:{snapshot:empty}});
+      await route.fulfill({json:{snapshot:empty, filesRemoved:2}});
       return true;
     }});
-    await seed(page);
+    // v3 Phase-27：附件随案例删除 —— 确认文案写明会删几个文件，删完提示实际删了几个
+    await seed(page, {files:[{id:'F-1', name:'deck.pptx'}, {id:'F-2', name:'final.pdf'}]});
     await page.evaluate(()=>{state.isAdmin=true; API.setSessionToken('test'); goToDetail('SWAT-TEST');});
     await page.locator('[data-delete-ask]').click();
+    assert.match(await page.locator('.confirm-inline').innerText(), /^Delete this case and its 2 attached files\?/);
     await page.locator('[data-delete-confirm]').click();
     await page.waitForFunction(()=>state.view==='database');
+    assert.equal(await page.locator('#scToast').innerText(), 'Case SWAT-TEST deleted with 2 attached files.');
     assert.deepEqual(await page.evaluate(()=>[state.pendingDeleteId,state.selectedSwatId,state.detailEditMode]),[null,null,false]);
     assert.equal(new URL(page.url()).hash,'');
     await context.close();

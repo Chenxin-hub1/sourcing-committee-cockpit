@@ -884,8 +884,27 @@ def confirm_submission(sub: dict, cases: list[dict]) -> dict:
     return case
 
 
+def iter_attachments(cases: list[dict], submissions: list[dict]):
+    """全部附件记录：案例与登记单的 files，加待办反馈的证据（v3 Phase-14）。登记单确认后同一条记录也在案例上。"""
+    for record in (*cases, *submissions):
+        yield from record.get("files") or []
+    for case in cases:
+        for task in case.get("followUps") or []:
+            for fb in task.get("feedback") or []:
+                yield from fb.get("files") or []
+
+
+def case_attachments(cases: list[dict], submissions: list[dict], swat_id: str) -> list[dict]:
+    """v3 Phase-27：删除该 SWAT 时要一并清掉的附件（全部登场行 + 指向它的登记单），按 id 去重。"""
+    rows = [c for c in cases if c.get("swatId") == swat_id]
+    subs = [s for s in submissions if s.get("approvedSwatId") == swat_id]
+    return list({f["id"]: f for f in iter_attachments(rows, subs) if f.get("id")}.values())
+
+
 def delete_case_by_swat(cases: list[dict], submissions: list[dict], swat_id: str) -> bool:
-    """管理员删除：移除该 SWAT 全部登场行；指向它的提交级联置 Deleted，不留孤儿。"""
+    """管理员删除：移除该 SWAT 全部登场行；指向它的提交级联置 Deleted，不留孤儿。
+
+    v3 Phase-27：附件随案例删除，级联的登记单上同一批文件记录也清空，不再指向已删的文件。"""
     if not any(c.get("swatId") == swat_id for c in cases):
         return False
     cases[:] = [c for c in cases if c.get("swatId") != swat_id]
@@ -893,6 +912,7 @@ def delete_case_by_swat(cases: list[dict], submissions: list[dict], swat_id: str
         if s.get("approvedSwatId") == swat_id:
             s["status"] = "Deleted"
             s["rejectReason"] = f"Case {swat_id} was deleted by an admin."
+            s["files"] = []
     return True
 
 # ============================= 提醒引擎（每日检查 + 手动发送） =============================

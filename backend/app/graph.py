@@ -252,6 +252,25 @@ async def delete_file(drive_id: str, item_id: str) -> None:
             raise _fail("delete file", resp)
 
 
+async def delete_folder_if_empty(path: str) -> bool:
+    """v3 Phase-27：删除案例后，文档库里该案例的文件夹（path 相对库根，如 "Sourcing Cockpit/SWAT-1"）空了就删掉。
+
+    还有文件（例如同号新登记的附件）或文件夹不存在都不动，返回是否删了。删除进站点回收站，可找回。"""
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        drive_id, _root = await _drive(client)
+        listing = await _graph(client, "GET", f"/drives/{drive_id}/root:/{quote(path)}:/children", params={"$top": "1"})
+        if listing.status_code == 404:
+            return False
+        if listing.status_code != 200:
+            raise _fail("list folder", listing)
+        if listing.json().get("value"):
+            return False
+        resp = await _graph(client, "DELETE", f"/drives/{drive_id}/root:/{quote(path)}")
+        if resp.status_code not in (204, 404):
+            raise _fail("delete folder", resp)
+        return resp.status_code == 204
+
+
 def item_fields(sub: dict, base_url: str = "") -> dict:
     """提交登记 → SharePoint List 的字段映射（提交时案例尚未建立，字段以提交单为准）。
 

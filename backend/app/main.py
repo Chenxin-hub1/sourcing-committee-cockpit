@@ -807,18 +807,7 @@ def _upload_key_ok(sub: dict, key: str | None) -> bool:
 
 
 def _find_file(state: dict, file_id: str) -> dict | None:
-    for record in (*state["cases"], *state["submissions"]):
-        for f in record.get("files") or []:
-            if f.get("id") == file_id:
-                return f
-    # 待办反馈的附件（v3 Phase-14）
-    for case in state["cases"]:
-        for task in case.get("followUps") or []:
-            for fb in task.get("feedback") or []:
-                for f in fb.get("files") or []:
-                    if f.get("id") == file_id:
-                        return f
-    return None
+    return next((f for f in logic.iter_attachments(state["cases"], state["submissions"]) if f.get("id") == file_id), None)
 
 
 @app.post("/api/submissions/{sub_id}/files")
@@ -1233,8 +1222,12 @@ async def delete_case(swat_id: str) -> dict:
     async with SessionLocal() as session, _write_lock:
         state = await service.load_state(session)
         weeks = {logic.year_week(c) for c in state["cases"] if c.get("swatId") == swat_id}
+        attachments = logic.case_attachments(state["cases"], state["submissions"], swat_id)
         if not logic.delete_case_by_swat(state["cases"], state["submissions"], swat_id):
             raise HTTPException(404, f"No case rows for {swat_id}.")
+        # v3 Phase-27：附件随案例删除；仍被其他记录引用的（如同号新登记还在等审批）留着
+        in_use = {f.get("id") for f in logic.iter_attachments(state["cases"], state["submissions"])}
+        attachments = [f for f in attachments if f["id"] not in in_use]
         await service.delete_cases_by_swat(session, swat_id)
         # v3 Phase-21：所在周剩下的案例补成连续号，导出不再出现跳号
         for c in logic.renumber_weeks(state["cases"], weeks):
@@ -1243,7 +1236,9 @@ async def delete_case(swat_id: str) -> dict:
             if s.get("approvedSwatId") == swat_id:
                 await service.upsert_submission(session, s)
         await session.commit()
-        return {"ok": True, "snapshot": service.snapshot(state)}
+        snap = service.snapshot(state)
+    removed = await files.remove_case_files(attachments, swat_id)  # 网络外发在锁外，不阻塞其他写入
+    return {"ok": True, "snapshot": snap, "filesRemoved": removed}
 
 
 # ============================= 静态前端（挂载在最后，/api 优先匹配） =============================

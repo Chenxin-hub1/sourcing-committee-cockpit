@@ -197,6 +197,20 @@ async def remove(record: dict) -> None:
     (upload_root() / record["id"]).unlink(missing_ok=True)
 
 
+async def remove_case_files(records: list[dict], swat_id: str) -> int:
+    """v3 Phase-27：删除案例后清掉它的附件，返回处理的文件数。
+
+    逐个走 remove（SharePoint 删不掉只记日志）；有 SharePoint 文件时，再把该案例的文件夹在空了的情况下删掉。"""
+    for record in records:
+        await remove(record)
+    if records and graph.files_configured() and any(r.get("store") == "sharepoint" for r in records):
+        try:
+            await graph.delete_folder_if_empty(f"{get_settings().sp_folder}/{folder_name(swat_id)}")
+        except Exception as exc:  # noqa: BLE001 —— 空文件夹删不掉不影响删除结果
+            log.warning("sharepoint folder cleanup failed for %s: %s", swat_id, exc)
+    return len(records)
+
+
 # ============================= 演示文件库（v3 Phase-18） =============================
 # 领导：逐案上传历史案例的演示文件太慢，"better that Xin could allow us to select from the server"。
 # 管理员把文件放进 SC_PRESENTATION_LIBRARY_DIR（可按周建子文件夹），案例页的下拉框列出来，经理选一个即挂到案例。

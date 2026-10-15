@@ -2008,6 +2008,14 @@ function groupLanding(group, pendingCount){
   if(group==='workflow' && state.isAdmin && pendingCount>0) return 'approvals';
   return navLastView[group];
 }
+// v3 Phase-27：删除案例会一并删掉的附件数（与服务端 logic.case_attachments 同口径），用于删除确认文案
+function caseAttachmentCount(swat){
+  const ids = new Set();
+  const add = list=>(list||[]).forEach(f=>f && f.id && ids.add(f.id));
+  ALL_CASES.filter(c=>c.swatId===swat).forEach(c=>{ add(c.files); (c.followUps||[]).forEach(t=>(t.feedback||[]).forEach(fb=>add(fb.files))); });
+  SUBMISSIONS.filter(s=>s.approvedSwatId===swat).forEach(s=>add(s.files));
+  return ids.size;
+}
 function goToView(view){
   const changed = state.view!==view;
   state.view=view; state.dashFilter=null; state.pendingDeleteId=null; state.feedbackOpenId=null; state.decisionOpenId=null;
@@ -3065,7 +3073,7 @@ function renderDetail(){
         <div class="decision-pill" style="background:${decBg};color:${decColor};">${esc(c.meetingDecision)}</div>
         ${state.isAdmin ? `<button class="btn-secondary" id="editCaseBtn">✎ Edit Case</button>` : ''}
         ${state.isAdmin ? (state.pendingDeleteId===c.swatId
-            ? `<span class="confirm-inline">Delete this case? <button class="btn-danger-sm" data-delete-confirm="${escapeAttr(c.swatId)}">Yes, delete</button><button class="btn-secondary" style="padding:4px 9px;font-size:11px;" data-delete-cancel="1">No</button></span>`
+            ? `<span class="confirm-inline">${(n=>`Delete this case${n ? ` and its ${n} attached file${n===1?'':'s'}` : ''}?`)(caseAttachmentCount(c.swatId))} <button class="btn-danger-sm" data-delete-confirm="${escapeAttr(c.swatId)}">Yes, delete</button><button class="btn-secondary" style="padding:4px 9px;font-size:11px;" data-delete-cancel="1">No</button></span>`
             : `<button class="btn-danger-sm" data-delete-ask="${escapeAttr(c.swatId)}">Delete Case</button>`) : ''}
       `}
     </div>
@@ -3516,10 +3524,12 @@ function wireEvents(){
     el.onclick = async (e)=>{ e.stopPropagation(); if(!state.isAdmin || el.disabled) return;
       const swat = el.dataset.deleteConfirm;
       el.disabled = true; // 防双击：第二击会撞 404 "No case rows" 弹红色误报
-      try{ const resp = await API.del('/api/cases/'+encodeURIComponent(swat)); applySnapshot(resp.snapshot); }
+      let removed = 0;
+      try{ const resp = await API.del('/api/cases/'+encodeURIComponent(swat)); applySnapshot(resp.snapshot); removed = resp.filesRemoved||0; }
       catch(err){ el.disabled = false; toast('⚠ Delete failed: '+(err.detail||err.message)); return; }
       deleteCase(swat); // arrays are already fresh from the snapshot; this resets selection/edit state
-      render(); window.scrollTo(0,0); };
+      render(); window.scrollTo(0,0);
+      toast(`Case ${swat} deleted${removed ? ` with ${removed} attached file${removed===1?'':'s'}` : ''}.`); };
   });
 
   // Submit page login gate (stopPropagation: the document click handler would close the panel just opened)
