@@ -32,6 +32,8 @@
 ### 流的结构
 
 1. **触发器**：SharePoint "When an item is created"，站点选 SCC_PROC_SOURCINGCOMMITTEE，列表选 Cockpit Notifications。
+   - **Settings → Trigger conditions**（安全关卡，不能删）：
+     `@equals(triggerOutputs()?['body/Author/Claims'], 'i:0i.t|00000003-0000-0ff1-ce00-000000000000|app@sharepoint')`
 2. **Condition**：`triggerBody()?['channel']` 等于 `email`。
    - **True 分支**：Office 365 Outlook "Send an email (V2)"
      - To = `triggerBody()?['to']`（To 框要先在右侧齿轮里打开 "Use dynamic content"）
@@ -43,6 +45,16 @@
      - Post in = Chat with Flow bot
      - Recipient = `triggerBody()?['to']`（同样先打开 "Use dynamic content"）
      - Message = `triggerBody()?['html']`
+
+## 安全：只发系统写入的行
+
+列表默认继承站点权限，站点里任何有编辑权限的人都能往里加行。如果流对每一行都照发，任何人都能借流所有者的邮箱或 Teams，把任意内容发给任意人（越权代理，confused deputy）。
+
+所以触发器加了一个触发条件：**只有创建者是系统应用的新行才会启动流**。系统通过 Graph 应用身份写入的行，“创建者”由 SharePoint 自动填成 `SharePoint App`（`i:0i.t|00000003-0000-0ff1-ce00-000000000000|app@sharepoint`）。用户在网页或接口里写的行，创建者是他本人，没法伪造。
+
+2026-10-13 实测：用个人账号写的一行被跳过，等了两个检查周期都没有运行；系统写的一行正常发出。
+
+剩余风险：其他同样对这个站点有写权限的 Graph 应用，写出的行创建者也是 `SharePoint App`。目前只有本系统的应用被授权到这个站点，以后 IT 再给别的应用授权时要记得这一点。
 
 ## 把发件人换成 xiangwei.chen@zf-lifetec.com
 

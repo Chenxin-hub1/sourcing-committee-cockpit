@@ -125,6 +125,8 @@ IT 只给应用批了 SharePoint 权限（Sites.Selected + 站点 write），没
 
 列（内部名与流里的 `triggerBody()?['…']` 一一对应，改名要同步改流）：`Title`（= 标题）、`channel`（`email` / `teams`）、`to` / `cc`（多行纯文本，分号分隔，Outlook 连接器的写法）、`subject`、`html`（多行纯文本：正文转义后换行变 `<br>`，给 Outlook 的 HTML 正文与 Teams 消息用）。应用的 write 角色**不能建列表**（实测 403），列表由有站点 ManageLists 权限的人建；`python -m app.migrations notify-list-setup` 只读核对列是否齐全（缺列时它会尝试补列，同样可能 403）。
 
+**安全关卡**：流的触发器设了 Trigger condition，只处理创建者为 `SharePoint App`（系统的 Graph 应用身份）的新行。否则站点里任何有编辑权限的人都能往列表加一行，借流所有者的邮箱或 Teams 发任意内容。这个条件不能删，细节见 docs。
+
 投递结果里的 `sent` 表示"已写进列表"；流按触发器的轮询间隔（定义里是每分钟，实际以许可证允许的最短间隔为准）读到后才真正发出，结果看流的运行记录。已知限制（微软连接器文档）：Outlook 每个连接每 60 秒 300 次；Teams 以 Flow bot 发消息每个连接每 5 分钟 25 条，单日过期提醒很多时 Teams 部分可能被限流；流所有者离职 / 改密码后要换连接；列表行不会自动清理。
 
 ## Graph 接入（SharePoint 建单 + 演示文件 + 邮件兜底 + Teams 认证，可选）
