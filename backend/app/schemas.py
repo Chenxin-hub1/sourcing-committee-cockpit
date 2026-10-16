@@ -237,6 +237,12 @@ class FollowUpIn(In):
     channel: Literal["", "Email", "Teams", "Email + Teams"] = ""
 
 
+class TaskEditIn(FollowUpIn):
+    """v3 Phase-29：Follow-ups 页单条编辑；待办 id 取自路径。"""
+
+    id: Text = ""
+
+
 class CaseEditIn(CommercialIn):
     partNumbers: Annotated[PartNumbers, Field(min_length=1)]
     # bundle 金额按案例原币填写；不带时原值不动

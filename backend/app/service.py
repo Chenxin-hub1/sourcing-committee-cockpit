@@ -19,7 +19,7 @@ from typing import Any
 
 from sqlalchemy import delete, select
 
-from . import accounts, commodities, logic
+from . import accounts, commodities, logic, owners
 from .config import get_settings
 from .models import Base, CaseRow, KvRow, ReminderLogRow, SubmissionRow, UserRow
 
@@ -380,6 +380,7 @@ async def init_db(session) -> None:
     await _migrate_commodities(session)
     await _migrate_case_numbers(session)
     await _ensure_bootstrap_admin(session)
+    await _refresh_owners(session)
     await session.commit()
 
 
@@ -416,6 +417,14 @@ async def _migrate_case_numbers(session) -> None:
         # warning 级：uvicorn 只输出 warning 及以上，一次性改数据要在 docker logs 里留痕
         log.warning("case number %s %s: #%s -> #%s", logic.week_label(c), c.get("swatId"), before[c["id"]], c["caseNumber"])
     await _set_kv(session, CASE_NUMBERING_KEY, {"scheme": "per-year-week"})
+
+
+async def _refresh_owners(session) -> None:
+    """v3 Phase-29：每次启动重算待办负责人的全名，并给职能空着、但这个人职能已知的待办补上（幂等，只写改了的案例）。"""
+    rows = {row.id: row for row in (await session.execute(select(CaseRow))).scalars()}
+    cases = [deepcopy(row.doc) for row in rows.values()]
+    for c in owners.refresh(cases, owners.account_names(await list_users(session))):
+        rows[c["id"]].doc = c
 
 
 def normalize_commodities(cases: list[dict]) -> list[dict]:

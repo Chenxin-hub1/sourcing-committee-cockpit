@@ -17,6 +17,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 from zoneinfo import ZoneInfo
 
+from . import owners
 from .config import get_settings
 
 # ============================= 常量（与模板 DATA MODEL 一致） =============================
@@ -568,7 +569,7 @@ def reminder_message(c: dict, t: dict, base_url: str = "") -> str:
         "Note: " + (t.get("notes") or "—"),
         "",
         "Due Date: " + (t.get("dueDate") or "—"),
-        "Owner: " + (t.get("responsible") or "—"),
+        "Owner: " + (owners.task_owner(t) or "—"),  # v3 Phase-29：全名
         "",
         "Open Action Case: " + case_link(c, base_url),
     ])
@@ -773,6 +774,47 @@ def move_case_to_week(case: dict, day: date, cases: list[dict]) -> bool:
     return moved
 
 
+def _settle_task(task: dict, previous: dict, today: str) -> None:
+    """保存一条待办时的收尾：服务端记录沿用库里的，按截止日重判 Open / Overdue，重算分类。"""
+    # 浏览器可能携带过期快照；投递记录、每日去重标记、反馈与关闭记录（v3 Phase-14）以当前数据库为准。
+    for key in ("lastReminder", "lastAutoReminderDate", "feedback", "closure"):
+        task.pop(key, None)
+        if key in previous:
+            task[key] = deepcopy(previous[key])
+    days_until = _days_until_due(today, task.get("dueDate"))
+    if task.get("status") in ("Open", "Overdue") and days_until is not None:
+        task["status"] = "Overdue" if days_until < 0 else "Open"
+    task["categories"] = categorize_task(task)  # v3 Phase-18：分类由关键词判定，标签是自由文本
+
+
+# v3 Phase-29：Follow-ups 页单条编辑能改的字段（与案例编辑页的待办表单一致）
+TASK_EDIT_FIELDS = ("task", "tags", "responsible", "ownerFunction", "dueDate", "status", "notes",
+                    "notifyEmail", "cc", "channel")
+
+
+def task_edit_problems(case: dict, task_id: str, fields: dict) -> list[str]:
+    """单条编辑的门槛，与 case_edit_problems 里管待办的两条一致（文案同前端）。"""
+    out: list[str] = []
+    if fields.get("status") != "Closed" and not (fields.get("notifyEmail") or "").strip():
+        out.append('Enter a valid "Send reminder to" email, so the reminder reaches someone.')
+    tasks = [fields if t.get("id") == task_id else t for t in case.get("followUps") or []]
+    if rollup_action_status(tasks) == "Closed" and not (case.get("finalDocLink") or "").strip():
+        out.append("This closes the last open follow-up of the case — enter the Final PPT / Supporting Document Link "
+                   "on the case page first (Edit Case), then close this task.")
+    return out
+
+
+def apply_task_edit(case: dict, task_id: str, fields: dict) -> dict:
+    """把单条编辑合并进案例里的这条待办，收尾后重算案例的 actionStatus；返回这条待办。"""
+    task = next(t for t in case.get("followUps") or [] if t.get("id") == task_id)
+    previous = deepcopy(task)
+    task.update({k: deepcopy(fields[k]) for k in TASK_EDIT_FIELDS if k in fields})
+    task["notify"] = task.get("responsible") or ""  # 与编辑页一致：提醒称呼跟着负责人
+    _settle_task(task, previous, today_iso())
+    case["actionStatus"] = None if case.get("meetingDecision") == "PENDING" else rollup_action_status(case["followUps"])
+    return task
+
+
 def apply_case_edit(c: dict, b: dict, commercial: dict | None = None) -> None:
     """对应模板 saveCaseBtn 的 Object.assign 段：合并字段、汇总金额、重算 actionStatus。
 
@@ -808,16 +850,7 @@ def apply_case_edit(c: dict, b: dict, commercial: dict | None = None) -> None:
     follow_ups = deepcopy(b.get("followUps") or [])
     today = today_iso()
     for task in follow_ups:
-        previous = existing_tasks.get(task.get("id"), {})
-        # 浏览器可能携带过期快照；投递记录、每日去重标记、反馈与关闭记录（v3 Phase-14）以当前数据库为准。
-        for key in ("lastReminder", "lastAutoReminderDate", "feedback", "closure"):
-            task.pop(key, None)
-            if key in previous:
-                task[key] = deepcopy(previous[key])
-        days_until = _days_until_due(today, task.get("dueDate"))
-        if task.get("status") in ("Open", "Overdue") and days_until is not None:
-            task["status"] = "Overdue" if days_until < 0 else "Open"
-        task["categories"] = categorize_task(task)  # v3 Phase-18：分类由关键词判定，标签是自由文本
+        _settle_task(task, existing_tasks.get(task.get("id"), {}), today)
     c.update({
         "partNumber": part_numbers[0].get("partNumber", ""),
         "partDescription": part_numbers[0].get("partDescription", ""),
@@ -966,7 +999,7 @@ def run_daily_reminder_check(cases: list[dict], settings: dict, log: list[dict],
             entry = {
                 # id：外发完成后按它回填 delivery（外发不占用数据库事务，见 main._run_check_if_due）
                 "id": uuid.uuid4().hex,
-                "when": fmt_when(now), "trigger": trigger, "swatId": c["swatId"], "task": t["task"],
+                "when": fmt_when(now), "trigger": trigger, "swatId": c["swatId"], "taskId": t.get("id", ""), "task": t["task"],
                 "to": rc["email"] or "(no email on file)", "cc": cc, "channel": channel,
                 "message": reminder_message(c, t, base_url),
             }

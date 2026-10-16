@@ -40,7 +40,7 @@ Viewing does not require login. Submitting does.
 
 **After the meeting (case page → Edit)**
 - Set **Sourcing Decision** (Approved / Approved with conditions / Rejected). Any decision other than Pending needs the **Sourcing Presentation Link**.
-- Add **follow-up tasks**: task, owner, the owner's **function** (Purchasing, Supplier Quality, Engineering …), due date, free-text **tags**, and the owner's email (required for open tasks — that is where reminders go). Categories (CQA, Volume, Technical, Timing, Supplier strategy, BPG, Saving, Further VAVE) are derived automatically from the task text and tags — no boxes to tick.
+- Add **follow-up tasks**: task, owner, the owner's **function** (Purchasing, Supplier Quality, Engineering …; a person has one function — change it once and all of that owner's tasks follow, and it fills in by itself for an owner who already has one), due date, free-text **tags**, and the owner's email (required for open tasks — that is where reminders go). Categories (CQA, Volume, Technical, Timing, Supplier strategy, BPG, Saving, Further VAVE) are derived automatically from the task text and tags — no boxes to tick.
 - A presentation **file** on the case counts as the Sourcing Presentation — the link is then optional. You can add or remove files while editing; your other changes stay in the form until **Save Changes**.
 - If anything is missing, the page lists **all** missing points at once.
 - The Sourcing admin can move a case to another committee week (Edit → *Committee week*).
@@ -50,6 +50,8 @@ Viewing does not require login. Submitting does.
 
 **Follow-ups page**
 - Open and overdue tasks across all cases. Filter by status, year, category, function or owner.
+- Owners are shown by full name: the account name when the owner is a registered email, otherwise the name read from the email (andreas.huber1@… → Andreas Huber). Reminders still go to the email.
+- **Edit** on a row (also next to each entry of *Reminders sent automatically*) changes that one task in place — no need to open the case.
 - Anyone can post progress on a task (text + attachment, e.g. an Outlook .msg). You get "n feedback to approve": **Approve** closes the task, **Reject** needs a remark and keeps it open.
 - Closing the last open task closes the case and asks for the **Final PPT / Supporting Document Link**.
 - **Send reminder** sends a manual reminder to the owner. Until IT connects the mail relay, reminders are logged as "skipped" and nothing is sent — chase by email meanwhile.

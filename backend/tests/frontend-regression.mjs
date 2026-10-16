@@ -1788,6 +1788,76 @@ try{
     await context.close();
   });
 
+  await test('Follow-ups show owners by full name, edit a task in place (also from the reminder log) and fill in the owner\'s function', async()=>{
+    // v3 Phase-29（领导 2026-10-16）
+    const puts = [];
+    let current = null;
+    const {page, context} = await fixture({user:'manager', api:async(route,path)=>{
+      if(!path.startsWith('/api/tasks/') || route.request().method()!=='PUT') return false;
+      const body = route.request().postDataJSON();
+      puts.push({path, body});
+      const id = decodeURIComponent(path.split('/').pop());
+      current.followUps = current.followUps.map(t=> t.id===id ? {...t, ...body} : t);
+      await route.fulfill({json:{ok:true, task:current.followUps.find(t=>t.id===id), snapshot:{cases:[current]}}});
+      return true;
+    }});
+    current = await page.evaluate(()=>{
+      const task = (id, status, owner, name, fn, due) => ({id, task:'t '+id, status, responsible:owner, ownerName:name, ownerFunction:fn,
+        dueDate:due, tags:[], notifyEmail:'x@example.com', cc:'', channel:'Email + Teams'});
+      const c = mkCase({id:'C-1', swatId:'SWAT-A', partNumber:'1', partDescription:'P', recommendedSupplier:'S', presenter:'O', cluster:'Metal',
+        weekNum:40, caseNumber:1, meetingYear:2026, meetingDateISO:'2026-09-30', meetingDecision:'APPROVED', actionStatus:'Overdue',
+        followUps:[task('T1','Open','andreas.huber1@zf-lifetec.com','Andreas Huber','Sales','2027-01-01'),
+                   task('T2','Overdue','Robert Nieczyporuk','Robert Nieczyporuk','','2026-12-01')]});
+      applySnapshot({cases:[c], autoLog:[{id:'L1', when:'Dec 20, 12:42 AM', trigger:'Overdue by 19 days', swatId:'SWAT-A', taskId:'T2', task:'t T2',
+        to:'x@example.com', cc:'', channel:'Email + Teams', delivery:{email:'skipped', teams:'skipped'}}]});
+      return JSON.parse(JSON.stringify(c));
+    });
+    await goTo(page, 'followups');
+    // 状态筛选与同排写法一致；负责人统一显示全名，筛选也按全名
+    assert.deepEqual(await page.locator('#fFollowupStatus option').allTextContents(), ['Status: Open + Overdue','Open','Overdue','Closed','Status: All']);
+    const owners = await page.locator('tr[data-task-row] td:nth-child(4)').allInnerTexts();
+    assert.ok(owners[0].startsWith('Robert Nieczyporuk') && owners[1].startsWith('Andreas Huber\nSales'), owners.join(' | '));
+    assert.deepEqual(await page.locator('#fFollowupOwner option').allTextContents(), ['Owner: All','Andreas Huber','Robert Nieczyporuk']);
+    // 行内编辑：保存只发这一条
+    await page.locator('[data-task-edit="T1"]').first().click();
+    assert.equal(await page.locator('#teOwner_T1').inputValue(), 'andreas.huber1@zf-lifetec.com');
+    await page.locator('#teTask_T1').fill('Track cost recovery with MB (65K EUR)');
+    await page.locator('#teChannel_T1').selectOption('Email');
+    await page.locator('[data-task-save="T1"]').click();
+    await page.waitForFunction(()=>!state.followupEditId);
+    assert.equal(puts.length, 1);
+    assert.equal(puts[0].path, '/api/tasks/T1');
+    assert.deepEqual(puts[0].body, {task:'Track cost recovery with MB (65K EUR)', tags:[], responsible:'andreas.huber1@zf-lifetec.com', ownerFunction:'Sales',
+      dueDate:'2027-01-01', status:'Open', channel:'Email', notifyEmail:'x@example.com', cc:'', notes:''});
+    assert.ok((await page.locator('#app').innerText()).includes('Track cost recovery with MB (65K EUR)'));
+    // 从自动提醒日志打开：筛选藏起来的待办也能改（日志里的 Edit 清掉筛选）
+    await page.locator('#fFollowupStatus').selectOption('Open');
+    assert.equal(await page.locator('#teTask_T2').count(), 0);
+    await page.locator('[data-log-edit="T2"]').click();
+    assert.equal(await page.locator('#fFollowupStatus').inputValue(), 'all');
+    assert.equal(await page.locator('#teTask_T2').inputValue(), 't T2');
+    // 换成已知职能的人：职能自动带出
+    await page.locator('#teOwner_T2').fill('andreas.huber1@zf-lifetec.com');
+    await page.locator('#teOwner_T2').press('Tab');
+    assert.equal(await page.locator('#teFunc_T2').inputValue(), 'Sales');
+    // 开放的待办没有收件邮箱：前端先拦住，不发请求，已填内容不丢
+    await page.locator('#teEmail_T2').fill('');
+    await page.locator('[data-task-save="T2"]').click();
+    assert.ok((await page.locator('#teErr_T2').innerText()).includes('Send reminder to'));
+    assert.equal(puts.length, 1);
+    assert.equal(await page.locator('#teOwner_T2').inputValue(), 'andreas.huber1@zf-lifetec.com');
+    await page.locator('[data-task-edit="T2"]').last().click();  // Cancel
+    assert.equal(await page.locator('#teTask_T2').count(), 0);
+    // Dashboard 按负责人统计也用全名
+    await goTo(page, 'dashboard');
+    const ownerBars = await page.evaluate(()=>{
+      const card=[...document.querySelectorAll('.breakdown-card')].find(el=>el.querySelector('h4').textContent==='Overdue actions by owner');
+      return [...card.querySelectorAll('.bar-row')].map(r=>r.querySelector('.blabel').textContent);
+    });
+    assert.deepEqual(ownerBars, ['Robert Nieczyporuk']);
+    await context.close();
+  });
+
   console.log(`${passed} frontend regression checks passed.`);
 }finally{
   await browser.close();

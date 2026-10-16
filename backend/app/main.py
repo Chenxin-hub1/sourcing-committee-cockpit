@@ -32,6 +32,7 @@ from . import (
     files,
     graph,
     logic,
+    owners,
     presentation_match,
     service,
 )
@@ -56,6 +57,7 @@ from .schemas import (
     RejectIn,
     ReminderSettingsIn,
     SubmissionIn,
+    TaskEditIn,
     UserUpdateIn,
 )
 
@@ -264,6 +266,7 @@ async def register(b: RegisterIn, request: Request) -> dict:
         user = {"email": email, "name": b.name.strip(), "role": "user", "disabled": False, "mustChangePassword": False,
                 "createdAt": now, "lastLoginAt": now}
         await service.save_user(session, user)
+        await _refresh_owner_names(session)  # v3 Phase-29：以这个邮箱为负责人的待办改显示他的名字
         _register_times.setdefault(ip, []).append(time.time())
         token = await service.issue_session(session, email)  # 内含提交
     return _session_response(token, user)
@@ -360,6 +363,8 @@ async def update_account(email: str, b: UserUpdateIn) -> dict:
         await service.save_user(session, updated)
         if updated.get("disabled"):
             await service.revoke_user_sessions(session, updated["email"])
+        if updated.get("name") != user.get("name"):
+            await _refresh_owner_names(session)  # v3 Phase-29：负责人显示跟着账号名字走
         await session.commit()
         response = await _users_response(session)
         return {**response, "temporaryPassword": temporary} if temporary else response
@@ -651,14 +656,59 @@ async def save_case(row_id: str, b: CaseEditIn, user: Manager) -> dict:
             raise HTTPException(422, "\n".join(problems))
         left = logic.year_week(case)
         moved = new_day is not None and logic.move_case_to_week(candidate, new_day, state["cases"])
+        names = await _owner_names(session)
+        before = _owners_before(case.get("followUps") or [], names)
         case.clear()
         case.update(candidate)
+        # v3 Phase-29：改过的职能推到这个负责人的全部待办，并重算负责人全名
+        for other in owners.apply_edits(state["cases"], case["followUps"], before, names):
+            if other is not case:
+                await service.upsert_case(session, other)
         await service.upsert_case(session, case)
         if moved:  # v3 Phase-21：改走后原周补号
             for c in logic.renumber_weeks(state["cases"], {left}):
                 await service.upsert_case(session, c)
         await session.commit()
         return {"ok": True, "case": case, "snapshot": service.snapshot(state)}
+
+
+async def _owner_names(session) -> dict[str, str]:
+    """v3 Phase-29：注册账号的 邮箱 → 名字，负责人是邮箱时用来显示全名。"""
+    return owners.account_names(await service.list_users(session))
+
+
+def _owners_before(tasks: list[dict], names: dict[str, str]) -> dict[str, tuple[str, str]]:
+    """保存前每条待办的（负责人全名, 职能），判断这次是不是改了职能或换了人。"""
+    return {str(t.get("id")): (owners.display_name(t.get("responsible", ""), names), (t.get("ownerFunction") or "").strip())
+            for t in tasks}
+
+
+async def _refresh_owner_names(session) -> None:
+    """v3 Phase-29：账号名字变了（注册 / 改名）后重算待办负责人的全名。调用方持有写锁、负责提交。"""
+    state = await service.load_state(session)
+    for c in owners.refresh(state["cases"], await _owner_names(session)):
+        await service.upsert_case(session, c)
+
+
+@app.put("/api/tasks/{task_id}", dependencies=[Depends(require_manager)])
+async def save_task(task_id: str, b: TaskEditIn) -> dict:
+    """v3 Phase-29：Follow-ups 页直接改一条待办（不必进案例编辑页）；门槛与案例编辑页的待办规则一致。"""
+    async with SessionLocal() as session, _write_lock:
+        state = await service.load_state(session)
+        case, task = _find_task(state, task_id)
+        fields = b.model_dump(include=set(logic.TASK_EDIT_FIELDS))
+        problems = logic.task_edit_problems(case, task_id, {**task, **fields})
+        if problems:
+            raise HTTPException(422, "\n".join(problems))
+        names = await _owner_names(session)
+        before = _owners_before([task], names)
+        edited = logic.apply_task_edit(case, task_id, fields)
+        for other in owners.apply_edits(state["cases"], [edited], before, names):
+            if other is not case:
+                await service.upsert_case(session, other)
+        await service.upsert_case(session, case)
+        await session.commit()
+        return {"ok": True, "task": edited, "snapshot": service.snapshot(state)}
 
 
 @app.post("/api/action-items/extract", dependencies=[Depends(require_manager)])

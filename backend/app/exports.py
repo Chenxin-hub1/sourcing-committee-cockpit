@@ -23,7 +23,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from . import logic
+from . import logic, owners
 
 FONT = "Arial"
 TITLE_FONT = Font(name=FONT, size=14, bold=True)
@@ -111,7 +111,7 @@ def _notes(c: dict) -> str:
         parts.append(discussion)
     if c.get("meetingDecision") != "PENDING":
         for i, t in enumerate(c.get("followUps") or [], start=1):
-            parts.append(f"{i}. {t.get('task', '')} — {t.get('responsible') or '—'}, due {t.get('dueDate') or '—'} [{t.get('status') or ''}]")
+            parts.append(f"{i}. {t.get('task', '')} — {owners.task_owner(t) or '—'}, due {t.get('dueDate') or '—'} [{t.get('status') or ''}]")
     return "\n".join(parts)
 
 
@@ -311,7 +311,7 @@ def _actions_sheet(ws, cases: list[dict], label: str) -> None:
             n += 1
             recipient = logic.task_recipient(t)
             values = [n, c.get("swatId", ""), c.get("partDescription", ""), _decision(c), t.get("task", ""),
-                      ", ".join(logic.task_categories(t)), ", ".join(t.get("tags") or []), t.get("responsible", ""),
+                      ", ".join(logic.task_categories(t)), ", ".join(t.get("tags") or []), owners.task_owner(t),
                       t.get("ownerFunction") or "", _date(t.get("dueDate")) or t.get("dueDate", ""),
                       t.get("status") or "", recipient["email"], recipient["cc"], t.get("notes") or ""]
             for i, value in enumerate(values, start=1):

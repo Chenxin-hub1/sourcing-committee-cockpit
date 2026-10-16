@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import secrets
 
-from . import logic
+from . import logic, owners
 
 MAX_FEEDBACK_PER_TASK = 50
 PENDING, APPROVED, REJECTED = "pending", "approved", "rejected"
@@ -85,7 +85,7 @@ def _head(case: dict, task: dict, base_url: str) -> tuple[list[str], str]:
         "SWAT Case: " + case.get("swatId", ""),
         "",
         "Follow-up Task: " + (task.get("task") or "—"),
-        "Owner: " + (task.get("responsible") or "—"),
+        "Owner: " + (owners.task_owner(task) or "—"),
         "Due Date: " + (task.get("dueDate") or "—"),
     ]
     return head, logic.case_link(case, base_url)

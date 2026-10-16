@@ -668,7 +668,7 @@ function reminderMessage(c, t){
     'Note: ' + (t.notes||'—'),
     '',
     'Due Date: ' + (t.dueDate||'—'),
-    'Owner: ' + (t.responsible||'—'),
+    'Owner: ' + (ownerLabel(t)||'—'),
     '',
     'Open Action Case: ' + caseLink(c.swatId)
   ].join('\n');
@@ -745,6 +745,31 @@ function autoCatsHtml(cats){ return `Auto categories: ${cats.length ? cats.map(c
 function functionDatalist(){
   const names = uniq([...(TASK_RULES.functions||[]), ...ALL_CASES.flatMap(c=>(c.followUps||[]).map(t=>t.ownerFunction||''))].map(x=>x.trim()).filter(Boolean));
   return `<datalist id="functionOptions">${names.map(n=>`<option value="${escapeAttr(n)}"></option>`).join('')}</datalist>`;
+}
+// v3 Phase-29：负责人统一显示全名（服务端按注册账号名字、或从邮箱推出的名字算好，放在 ownerName）
+function ownerLabel(t){ return (t && (t.ownerName || t.responsible)) || ''; }
+// 职能跟着人走：同一个人（全名或原文，忽略大小写）只有一种职能时才收录；编辑时填了负责人就带出来
+const FUNCTION_TIP = 'A person has one function: changing it here updates all of this owner\'s follow-ups, and other follow-ups for the same owner fill it in automatically.';
+function personKey(s){ return String(s||'').trim().replace(/\s+/g,' ').toLowerCase(); }
+function functionForOwner(owner){
+  const key = personKey(owner); if(!key) return '';
+  const fns = new Set();
+  ALL_CASES.forEach(c=>(c.followUps||[]).forEach(t=>{
+    const fn = (t.ownerFunction||'').trim();
+    if(fn && (personKey(t.ownerName)===key || personKey(t.responsible)===key)) fns.add(fn);
+  }));
+  return fns.size===1 ? [...fns][0] : '';
+}
+// 负责人输入框改了：职能框空着、或还是上一个负责人的职能，就换成新负责人的职能（新负责人没有职能就清空）
+function wireOwnerFunction(ownerId, functionId){
+  const owner = document.getElementById(ownerId), fn = document.getElementById(functionId);
+  if(!owner || !fn) return;
+  let prev = owner.value;
+  owner.addEventListener('change', ()=>{
+    const was = functionForOwner(prev), now = functionForOwner(owner.value), cur = fn.value.trim();
+    if(!cur || (was && cur===was)) fn.value = now;
+    prev = owner.value;
+  });
 }
 // 已决议案例的待办，一条一项（驾驶舱三格与 by function / by owner 图都数这个）
 function decidedTasks(cases){ return cases.filter(c=>c.meetingDecision!=='PENDING').flatMap(c=>(c.followUps||[]).map(t=>({c,t}))); }
@@ -1082,6 +1107,7 @@ const state = {
   accountsError:null,
   pendingDeleteId:null,  // SWAT ID awaiting delete confirmation
   remindOpenId:null,     // follow-up task id whose reminder panel is open
+  followupEditId:null,   // v3 Phase-29: follow-up being edited in place on the tracker
   feedbackRowId:null,    // v3 Phase-14: follow-up whose feedback row is expanded on the tracker
   feedbackOpenId:null,   // follow-up whose "report progress" form is open
   decisionOpenId:null,   // feedback entry whose approve / reject panel is open
@@ -1151,7 +1177,7 @@ const API = {
           toast('Your login has expired — please log in again.');
           // Spec v2-admin-gate: drop to the user view AND re-render. Guarded so an in-progress
           // editor / panel / submit form is never wiped mid-interaction.
-          if(!state.detailEditMode && !state.remindOpenId && !state.pendingDeleteId && !state.feedbackOpenId && !state.decisionOpenId && !state.formDirty && !document.querySelector('.reject-box.show') && state.view!=='submit' && document.getElementById('app')) render();
+          if(!state.detailEditMode && !state.remindOpenId && !state.followupEditId && !state.pendingDeleteId && !state.feedbackOpenId && !state.decisionOpenId && !state.formDirty && !document.querySelector('.reject-box.show') && state.view!=='submit' && document.getElementById('app')) render();
         }
       }
       if(!res.ok){
@@ -2365,7 +2391,7 @@ async function downloadCasesCsv(rows, filename){
   const lines = [headers.map(csvEscape).join(',')];
   rows.forEach(c=>{
     const pending = c.meetingDecision==='PENDING';
-    const tasksSummary = pending ? '' : ((c.followUps||[]).map(t=>`${t.task} [${t.responsible}, due ${t.dueDate}, ${t.status}]`).join(' | ') || 'No action');
+    const tasksSummary = pending ? '' : ((c.followUps||[]).map(t=>`${t.task} [${ownerLabel(t)}, due ${t.dueDate}, ${t.status}]`).join(' | ') || 'No action');
     const pnLines = partNumberLines(c);
     const pnSummary = pnLines.map(p=>p.partNumber).join(' | ');
     // 项目 / 类型 / 供应商按零件行（v3 Phase-15）；旧多零件案例的行上没有就用案例级值
@@ -2436,7 +2462,7 @@ function renderDashboard(){
   const tasks = decidedTasks(periodCases);
   const openTasks = tasks.filter(x=>x.t.status==='Open'), overdueTasks = tasks.filter(x=>x.t.status==='Overdue');
   const openA = openTasks.length, overdueA = overdueTasks.length, closedA = tasks.filter(x=>x.t.status==='Closed').length;
-  const ownerKey = x => x.t.responsible || '—';
+  const ownerKey = x => ownerLabel(x.t) || '—';
   const functionKey = x => x.t.ownerFunction || 'Function not set';
   const chart = (title, items, keyFn, empty) => {
     const rows = countBy(items, keyFn), max = Math.max(1, ...rows.map(r=>r[1]));
@@ -2590,10 +2616,39 @@ function renderAutoReminderCard(){
     ${AUTO_LOG.length===0 ? `<div style="font-size:12.5px;color:var(--ink-faint);">None yet — no task was due or overdue today.</div>` : `
       <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
       <table class="data-table reminder-log-table" style="font-size:12px;"><thead><tr><th>When</th><th>Why</th><th>SWAT Case</th><th>Task</th><th>To / CC</th><th>Channel</th><th>Delivery</th></tr></thead>
-      <tbody>${AUTO_LOG.slice(0,25).map(e=>`<tr><td style="white-space:nowrap;">${esc(e.when)}</td><td>${esc(e.trigger)}</td><td class="mono swat" style="cursor:pointer;" data-swat-link="${escapeAttr(e.swatId)}">${esc(e.swatId)}</td><td>${esc(e.task)}</td><td class="mono" style="font-size:11px;">${esc(e.to)}${e.cc?'<br/>cc: '+esc(e.cc):''}</td><td>${esc(e.channel)}</td><td style="font-size:11px;white-space:nowrap;">${deliveryCell(e.delivery)}</td></tr>`).join('')}</tbody></table>
+      <tbody>${AUTO_LOG.slice(0,25).map(e=>`<tr><td style="white-space:nowrap;">${esc(e.when)}</td><td>${esc(e.trigger)}</td><td class="mono swat" style="cursor:pointer;" data-swat-link="${escapeAttr(e.swatId)}">${esc(e.swatId)}</td><td>${esc(e.task)}${(()=>{ const t = state.isAdmin && logTask(e); return t ? ` <button type="button" class="link-btn" data-log-edit="${escapeAttr(t.id)}">Edit</button>` : ''; })()}</td><td class="mono" style="font-size:11px;">${esc(e.to)}${e.cc?'<br/>cc: '+esc(e.cc):''}</td><td>${esc(e.channel)}</td><td style="font-size:11px;white-space:nowrap;">${deliveryCell(e.delivery)}</td></tr>`).join('')}</tbody></table>
       </div>`}
     </div>
   </div>`;
+}
+// v3 Phase-29：Follow-ups 页直接改一条待办（字段与案例编辑页的待办表单一致，保存只改这一条）
+function taskEditorHtml(t){
+  const id = escapeAttr(t.id), f = k => `te${k}_${id}`;
+  const inp = (k, v, extra='') => `<input class="edit-input" id="${f(k)}" value="${escapeAttr(v||'')}" ${extra}/>`;
+  const sel = (k, v, opts) => `<select class="edit-input" id="${f(k)}">${opts.map(o=>`<option ${v===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  return `<div class="followup-grid" style="padding:6px 4px;">
+      <div class="form-field"><label>Task</label>${inp('Task', t.task)}</div>
+      <div class="form-field"><label>Tags (comma-separated, free text)</label>${inp('Tags', (t.tags||[]).join(', '))}</div>
+      <div class="form-field"><label>Owner</label>${inp('Owner', t.responsible)}</div>
+      <div class="form-field"><label>Owner's function${infoTip(FUNCTION_TIP)}</label>${inp('Func', t.ownerFunction, 'list="functionOptions" placeholder="e.g. Purchasing, Supplier Quality, Engineering"')}</div>
+      <div class="form-field"><label>Due Date</label><input type="date" class="edit-input" id="${f('Due')}" value="${escapeAttr(/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate||'')?t.dueDate:'')}"/></div>
+      <div class="form-field"><label>Status</label>${sel('Status', t.status, ['Open','Overdue','Closed'])}</div>
+      <div class="form-field"><label>Channel</label>${sel('Channel', t.channel||'Email + Teams', REMINDER_CHANNELS)}</div>
+      <div class="form-field"><label>Send reminder to (email) *</label>${inp('Email', t.notifyEmail||emailFor(t.notify||t.responsible))}</div>
+      <div class="form-field"><label>CC (optional, comma-separated emails)</label>${inp('Cc', t.cc)}</div>
+      <div class="form-field span2"><label>Notes</label>${inp('Notes', t.notes)}</div>
+    </div>
+    ${functionDatalist()}
+    <div id="${f('Err')}" class="block-warning" style="margin:4px;"></div>
+    <div style="display:flex;gap:10px;align-items:center;padding:4px 4px 8px;">
+      <button class="btn-primary" style="padding:8px 16px;font-size:12.5px;" data-task-save="${id}">Save</button>
+      <button class="btn-secondary" style="padding:8px 16px;font-size:12.5px;" data-task-edit="${id}">Cancel</button>
+    </div>`;
+}
+// 自动提醒日志的一行对应哪条待办：新记录带 taskId，旧记录按案例号 + 任务原文找
+function logTask(e){
+  const c = latestByCase().find(x=>x.swatId===e.swatId);
+  return c ? (c.followUps||[]).find(t=> e.taskId ? t.id===e.taskId : t.task===e.task) || null : null;
 }
 function renderFollowups(){
   const latest = latestByCase();
@@ -2610,12 +2665,12 @@ function renderFollowups(){
   const tagOpts = [...ACTION_CATEGORIES, 'Uncategorized'];
   // 负责人 / 职能选项取自全部待办（不随状态筛选变化），否则切到 Closed 时筛选框会消失、选中的值卡住
   const allTasks = latest.flatMap(c=>c.followUps||[]);
-  const ownerOpts = uniq(allTasks.map(t=>t.responsible)).filter(Boolean).sort();
+  const ownerOpts = uniq(allTasks.map(ownerLabel)).filter(Boolean).sort();
   const functionOpts = uniq(allTasks.map(t=>t.ownerFunction||'')).filter(Boolean).sort();
   const yearOpts = yearsPresent();
 
   if(state.followupTag) items = items.filter(x=> catsOf(x.t).includes(state.followupTag));
-  if(state.followupOwner) items = items.filter(x=> x.t.responsible===state.followupOwner);
+  if(state.followupOwner) items = items.filter(x=> ownerLabel(x.t)===state.followupOwner);
   if(state.followupFunction) items = items.filter(x=> (x.t.ownerFunction||'')===state.followupFunction);
 
   items.sort((a,b)=>{
@@ -2633,7 +2688,7 @@ function renderFollowups(){
   </div>
 
   <div class="filters-bar">
-    <select id="fFollowupStatus">${[['active','Status: Open + Overdue'],['Open','Open'],['Overdue','Overdue'],['Closed','Closed'],['all','All statuses']].map(([v,l])=>`<option value="${v}" ${state.followupStatus===v?'selected':''}>${l}</option>`).join('')}</select>
+    <select id="fFollowupStatus">${[['active','Status: Open + Overdue'],['Open','Open'],['Overdue','Overdue'],['Closed','Closed'],['all','Status: All']].map(([v,l])=>`<option value="${v}" ${state.followupStatus===v?'selected':''}>${l}</option>`).join('')}</select>
     <select id="fFollowupYear"><option value="">Year: All</option>${yearOpts.map(y=>`<option value="${y}" ${String(state.followupYear)===String(y)?'selected':''}>${y}</option>`).join('')}</select>
     <select id="fFollowupTag"><option value="">Category: All</option>${tagOpts.map(c=>`<option ${state.followupTag===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
     ${(functionOpts.length || state.followupFunction) ? `<select id="fFollowupFunction"><option value="">Function: All</option>${uniq([...functionOpts, state.followupFunction]).filter(Boolean).map(o=>`<option ${state.followupFunction===o?'selected':''}>${esc(o)}</option>`).join('')}</select>` : ''}
@@ -2656,11 +2711,12 @@ function renderFollowups(){
           const open = state.remindOpenId===t.id;
           const last = t.lastReminder;
           const fbOpen = state.feedbackRowId===t.id, fbPending = (t.feedback||[]).filter(f=>f.status==='pending').length;
-          return `<tr>
+          const editOpen = state.followupEditId===t.id;
+          return `<tr data-task-row="${escapeAttr(t.id)}">
             <td class="mono swat" style="cursor:pointer;" data-swat-link="${escapeAttr(c.swatId)}">${esc(c.swatId)}</td>
             <td>${catsOf(t).map(tg=>`<span class="cat-tag ${tg==='Uncategorized'?'none':''}">${esc(tg)}</span>`).join(' ')}${(t.tags||[]).length ? `<span class="fn-sub">${esc(t.tags.join(', '))}</span>` : ''}</td>
             <td>${esc(t.task)}</td>
-            <td>${esc(t.responsible)}${t.ownerFunction ? `<span class="fn-sub">${esc(t.ownerFunction)}</span>` : ''}</td>
+            <td>${esc(ownerLabel(t))}${t.ownerFunction ? `<span class="fn-sub">${esc(t.ownerFunction)}</span>` : ''}</td>
             <td style="font-size:11px;color:var(--ink-soft);line-height:1.5;">
               <span class="mono" style="color:var(--ink);font-weight:600;">${rc.email ? esc(rc.email) : '<span style="color:var(--red);">no email on file</span>'}</span><br/>
               ${rc.cc?`CC: ${esc(rc.cc)}<br/>`:''}<span class="cat-tag">${esc(rc.channel)}</span>
@@ -2669,10 +2725,12 @@ function renderFollowups(){
             <td>${actionCell(t.status)}</td>
             <td>
               ${last ? `<div style="font-size:10.5px;color:var(--green);font-weight:600;margin-bottom:4px;">Sent ✓ ${esc(last.when)}<br/>via ${esc(last.channel)}${last.delivery ? `<br/>${deliveryCell(last.delivery)}` : ''}</div>` : ''}
+              ${state.isAdmin ? `<div style="margin-bottom:6px;"><button class="remind-btn" data-task-edit="${escapeAttr(t.id)}">${editOpen?'Close edit':'Edit'}</button></div>` : ''}
               ${state.isAdmin ? `<button class="remind-btn" data-remind-open="${escapeAttr(t.id)}">${open?'Close':(last?'Send again':'Send reminder')}</button>` : `<span style="font-size:10.5px;color:var(--ink-faint);white-space:nowrap;">Send reminder: Manager</span>`}
               <div style="margin-top:6px;"><button class="remind-btn" data-feedback-toggle="${escapeAttr(t.id)}" ${fbPending?'style="border-color:var(--amber);color:var(--amber);"':''}>${fbOpen?'Hide feedback':(fbPending?`Feedback (${fbPending} to approve)`:'Feedback')}</button></div>
             </td>
           </tr>
+          ${editOpen ? `<tr class="remind-row"><td colspan="8" style="background:#FAFAFB;">${taskEditorHtml(t)}</td></tr>` : ''}
           ${fbOpen ? `<tr class="remind-row"><td colspan="8" style="background:#FAFAFB;">${feedbackSectionHtml(c,t)}</td></tr>` : ''}
           ${open ? `<tr class="remind-row"><td colspan="8" style="background:#FAFAFB;">
             <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;padding:6px 4px;">
@@ -3248,7 +3306,7 @@ function renderDetail(){
                 <div class="form-field"><label>Task</label>${ef('editFuTask_'+i, t.task)}</div>
                 <div class="form-field"><label>Tags (comma-separated, free text)</label>${ef('editFuTags_'+i, (t.tags||[]).join(', '))}<div class="auto-cats" id="editFuAuto_${i}">${autoCatsHtml(categorizeTask(t))}</div></div>
                 <div class="form-field"><label>Owner</label>${ef('editFuResp_'+i, t.responsible)}</div>
-                <div class="form-field"><label>Owner's function</label><input class="edit-input" id="editFuFunc_${i}" list="functionOptions" value="${escapeAttr(t.ownerFunction||'')}" placeholder="e.g. Purchasing, Supplier Quality, Engineering"/></div>
+                <div class="form-field"><label>Owner's function${infoTip(FUNCTION_TIP)}</label><input class="edit-input" id="editFuFunc_${i}" list="functionOptions" value="${escapeAttr(t.ownerFunction||'')}" placeholder="e.g. Purchasing, Supplier Quality, Engineering"/></div>
                 <div class="form-field"><label>Due Date</label><input type="date" class="edit-input" id="${'editFuDue_'+i}" value="${escapeAttr(/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate||'')?t.dueDate:'')}"/></div>
                 <div class="form-field"><label>Status</label>${esel('editFuStatus_'+i, t.status, ['Open','Overdue','Closed'])}</div>
                 <div class="form-field"><label>Channel</label>${esel('editFuChannel_'+i, t.channel||'Email + Teams', REMINDER_CHANNELS)}</div>
@@ -3275,7 +3333,7 @@ function renderDetail(){
               <div class="followup-grid">
                 ${infoItem('Task', t.task)}
                 ${infoItem('Categories (auto)', taskCategories(t).length ? taskCategories(t).join(', ') : '—')}
-                ${infoItem('Owner', t.ownerFunction ? `${t.responsible} (${t.ownerFunction})` : t.responsible)}
+                ${infoItem('Owner', t.ownerFunction ? `${ownerLabel(t)} (${t.ownerFunction})` : ownerLabel(t))}
                 ${infoItem('Tags', (t.tags && t.tags.length) ? t.tags.join(', ') : '—')}
                 ${infoItem('Due Date', t.dueDate)}
                 ${infoItem('Status', t.status===null ? 'No action required' : t.status)}
@@ -3373,7 +3431,7 @@ function clearCaseHash(){
   }
 }
 function canRefresh(){
-  return !state.detailEditMode && !state.remindOpenId && !state.pendingDeleteId && !state.adminLoginOpen && !state.feedbackOpenId && !state.decisionOpenId
+  return !state.detailEditMode && !state.remindOpenId && !state.followupEditId && !state.pendingDeleteId && !state.adminLoginOpen && !state.feedbackOpenId && !state.decisionOpenId
     && !state.formDirty && !state.uploading && !API.pendingWrites && state.view!=='submit'
     && !document.querySelector('.reject-box.show')
     && !document.activeElement?.matches('input, textarea, select');
@@ -3676,6 +3734,48 @@ function wireEvents(){
     };
   });
 
+  // v3 Phase-29: edit a follow-up in place on the tracker
+  document.querySelectorAll('[data-task-edit]').forEach(el=>{
+    el.onclick = ()=>{
+      const id = el.dataset.taskEdit;
+      state.followupEditId = state.followupEditId===id ? null : id;
+      if(state.followupEditId) state.remindOpenId = null;
+      render();
+      if(state.followupEditId) (document.getElementById('teTask_'+id)||{focus(){}}).focus();
+    };
+  });
+  document.querySelectorAll('[data-log-edit]').forEach(el=>{
+    el.onclick = ()=>{
+      // 日志里的待办可能被当前筛选藏起来了：清掉筛选再打开它
+      state.followupStatus = 'all'; state.followupYear = ''; state.followupTag = ''; state.followupOwner = ''; state.followupFunction = '';
+      state.followupEditId = el.dataset.logEdit; state.remindOpenId = null;
+      render();
+      const row = document.querySelector(`tr[data-task-row="${CSS.escape(state.followupEditId)}"]`);
+      if(row) row.scrollIntoView({block:'center'});
+      (document.getElementById('teTask_'+state.followupEditId)||{focus(){}}).focus();
+    };
+  });
+  if(state.followupEditId) wireOwnerFunction('teOwner_'+state.followupEditId, 'teFunc_'+state.followupEditId);
+  document.querySelectorAll('[data-task-save]').forEach(el=>{
+    el.onclick = async ()=>{
+      if(el.disabled) return;
+      const id = el.dataset.taskSave, g = k => (document.getElementById(`te${k}_${id}`)||{}).value || '';
+      const err = document.getElementById('teErr_'+id);
+      const showErr = msg => { if(err){ err.innerHTML = problemListHtml(String(msg).split('\n'), 'before saving'); err.style.display = 'block'; } };
+      const b = {task:g('Task'), tags:splitTags(g('Tags')), responsible:g('Owner').trim(), ownerFunction:g('Func').trim(), dueDate:g('Due'),
+        status:g('Status'), channel:g('Channel'), notifyEmail:g('Email').trim(), cc:g('Cc').trim(), notes:g('Notes')};
+      if(b.status!=='Closed' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(b.notifyEmail)){ showErr('Enter a valid "Send reminder to" email, so the reminder reaches someone.'); return; }
+      el.disabled = true;
+      try{
+        const resp = await API.put('/api/tasks/'+encodeURIComponent(id), b);
+        applySnapshot(resp.snapshot);
+      }catch(e){ el.disabled = false; showErr(e.detail||e.message); return; }
+      state.followupEditId = null;
+      toast('✓ Follow-up saved.');
+      render();
+    };
+  });
+
   // Follow-up feedback & closure approval (v3 Phase-14)
   document.querySelectorAll('[data-feedback-toggle]').forEach(el=>{
     el.onclick = ()=>{ const id = el.dataset.feedbackToggle; state.feedbackRowId = state.feedbackRowId===id ? null : id; if(state.feedbackRowId!==id){ state.feedbackOpenId=null; state.decisionOpenId=null; } render(); };
@@ -3852,6 +3952,7 @@ function wireEvents(){
       if(box) box.innerHTML = autoCatsHtml(categorizeTask({task:g('editFuTask_'+i), tags:splitTags(g('editFuTags_'+i)), notes:g('editFuNotes_'+i)}));
     });
   });
+  document.querySelectorAll('[id^="editFuResp_"]').forEach(el=> wireOwnerFunction(el.id, 'editFuFunc_'+el.id.split('_')[1]));
   const editMeetingDate = document.getElementById('editMeetingDate');
   if(editMeetingDate) editMeetingDate.oninput = ()=>{
     const hist = historyFor(state.selectedSwatId), cur = hist[Math.min(state.selectedEntryIndex, hist.length-1)];
