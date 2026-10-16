@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import AliasChoices, ValidationError
 
-from app.config import Settings
+from app.config import SERVER_URL, Settings
 
 
 @pytest.mark.parametrize("values", [
@@ -65,3 +65,17 @@ def test_teams_channel_ids_use_the_documented_names(monkeypatch):
     monkeypatch.setenv("SC_TEAMS_CHANNEL_ID", "19:channel-9")
     s = Settings(_env_file=None)
     assert (s.teams_graph_team_id, s.teams_graph_channel_id) == ("team-9", "19:channel-9")
+
+
+# ---------- 提醒链接前缀：默认正式服务器，本机地址不算数 ----------
+
+def test_public_url_defaults_to_the_server():
+    assert Settings(_env_file=None).public_url == SERVER_URL == "http://10.13.100.10:8031/"
+
+
+@pytest.mark.parametrize("url", [
+    "http://localhost:8031/", "http://LOCALHOST:8062/", "http://127.0.0.1:8031/", "http://[::1]:8031/", "http://0.0.0.0:8031",
+])
+def test_local_public_url_falls_back_to_the_server(url):
+    # 收信人点链接时 localhost 指的是他自己的电脑，打不开
+    assert Settings(_env_file=None, public_url=url).public_url == SERVER_URL

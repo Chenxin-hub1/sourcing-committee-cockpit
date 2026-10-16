@@ -7,6 +7,11 @@ from urllib.parse import urlsplit
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# 正式服务器：同事在自己电脑上打开 Cockpit 的地址（免安装方式，端口 8031），也是提醒链接的默认前缀
+SERVER_URL = "http://10.13.100.10:8031/"
+# 「本机」地址：收信人点链接时指的是他自己的电脑，打不开，所以链接前缀里不用它们
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
 
 class Settings(BaseSettings):
     """Runtime configuration — all overridable via SC_* environment variables."""
@@ -19,8 +24,9 @@ class Settings(BaseSettings):
 
     # 连接串接缝：换 PostgreSQL 只需改这一个值（届时再引 Alembic 做 schema 迁移）
     database_url: str = "sqlite+aiosqlite:///./data/cockpit.db"
-    # 提醒消息里「Open Action Case」链接的前缀（部署时设为对外访问地址）
-    public_url: str = "http://localhost:8062/"
+    # 提醒消息里「Open Action Case」链接的前缀：同事在自己电脑上打开 Cockpit 用的地址。
+    # 默认是正式服务器；配成 localhost 等本机地址时也换回正式服务器（见 _valid_url）
+    public_url: str = SERVER_URL
     # 首次启动且库为空时，是否装载与模板一致的演示数据
     seed_on_empty: bool = True
     # 提醒引擎的参考时区（IANA 名）——"今天/到期"的判断基准；模板原设定为北美东部
@@ -52,6 +58,8 @@ class Settings(BaseSettings):
             raise ValueError("Use a complete HTTP or HTTPS URL without credentials or a fragment.")
         if info.field_name == "public_url" and parsed.query:
             raise ValueError("SC_PUBLIC_URL must not contain a query string.")
+        if info.field_name == "public_url" and (parsed.hostname or "").lower() in _LOCAL_HOSTS:
+            return SERVER_URL
         return value
 
     # ---- 个人账号（v3 Phase-6，取代共享管理员口令） ----

@@ -19,7 +19,7 @@ cd sourcing-cockpit
 
 # 2) 设置对外访问地址与首个 Sourcing 管理员账号（提醒消息里的链接前缀 + 启动时建立的第一个管理员）
 cp .env.example .env
-nano .env   # 至少改 SC_PUBLIC_URL 与 SC_BOOTSTRAP_ADMIN_EMAIL / SC_BOOTSTRAP_ADMIN_PASSWORD；其余项见文件内注释
+nano .env   # 至少改 SC_BOOTSTRAP_ADMIN_EMAIL / SC_BOOTSTRAP_ADMIN_PASSWORD；其余项见文件内注释
 # 把 id -u / id -g 的输出填入 .env 的 SC_UID / SC_GID，匹配宿主机目录所有者
 id -u
 id -g
@@ -45,7 +45,7 @@ Compose 通过 `SC_UID` / `SC_GID` 指定容器身份，默认均为 1000；`dat
 
 | 项 | 填什么 |
 | --- | --- |
-| `SC_PUBLIC_URL` | 同事访问的地址，如 `http://<服务器IP>:8062/`（免安装方式是 `:8031/`；提醒邮件里的链接前缀） |
+| `SC_PUBLIC_URL` | 同事在自己电脑上访问的地址（提醒邮件里的链接前缀）。不写就是正式服务器 `http://10.13.100.10:8031/`；Docker 方式是 `http://<服务器IP>:8062/`。写成 `localhost` / `127.0.0.1` 不算数，仍用正式服务器地址——收信人点链接时它指的是收信人自己的电脑 |
 | `SC_SEED_ON_EMPTY` | `false`（正式库从空开始，不灌 22 条演示案例） |
 | `SC_TIMEZONE` | `Europe/Berlin`（登记截止周一 23:59 按这个时区；文件名日期也是） |
 | `SC_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` | 领导本人的邮箱（xiangwei.chen@zf-lifetec.com）+ 初始密码；他首次登录后自己改密码 |
