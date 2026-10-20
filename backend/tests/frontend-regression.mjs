@@ -1858,6 +1858,142 @@ try{
     await context.close();
   });
 
+  // v3 Phase-30：零件号表格 —— 从委员会 Excel 粘贴、键盘、Fill all、按格子标红
+  await test('Part numbers are entered in an Excel-like table: paste from the committee Excel, keyboard, fill all, cell checks', async()=>{
+    let submitted;
+    const {page, context} = await fixture({user:'user', api:async(route,path)=>{
+      if(path!=='/api/submissions') return false;
+      submitted = route.request().postDataJSON();
+      await route.fulfill({json:{subId:'SUB-GRID',snapshot:empty}});
+      return true;
+    }});
+    await goTo(page, 'submit');
+    // 数字读法：带单位 / 第二种货币取表单币种那个；有两种读法的不猜
+    const reads = await page.evaluate(()=>[
+      ['0,0865 Euro/pc\n0,0952 USD/pc', {}], ['0,0865 Euro/pc\n0,0952 USD/pc', {currency:'USD'}], ['1.234,56', {}], ['1,234.56', {}],
+      ['3.796.085', {integer:true}], ['378.979', {integer:true}], ['39,157 Euro\n325.000 RMB', {}], ['110.273 EUR 121.300 USD', {}],
+      ['tbd', {}], ['0,56 RMB/pc', {}], ['391K Euro', {}], ['0.02532', {}], ['10.50', {}], ['0,2108 Euro/pc\n1,75 RMB/pc\n (Q2/25 RM index)', {}],
+      ['', {}], ['1,5', {integer:true}], ['00,7089 Euro/pc', {}], ['101266Euro\n850000 RMB', {}],
+    ].map(([t,o])=>parseGridNumber(t,o)));
+    assert.deepEqual(reads.map(r=>r.error ? (r.choices ? r.choices : 'error') : r.value), [
+      '0.0865', '0.0952', '1234.56', '1234.56', 3796085, 378979, ['39.157','39157'], ['110.273','110273'],
+      'error', 'error', 'error', 'error', '10.50', '0.2108', null, 'error', '0.7089', '101266']);
+    assert.ok(reads[9].error.includes('is in CNY') && reads[10].error.includes('K / Mio') && reads[11].error.includes('4 decimal places'), JSON.stringify(reads));
+    assert.deepEqual(await page.evaluate(()=>parseClipboardTable('"a\nb"\tc\r\nd\t"x""y"\r\n\r\n')), [['a\nb','c'],['d','x"y']]);
+    assert.deepEqual(await page.evaluate(()=>['New part','Carry over','GCS','Rebid',''].map(normalizeSourcingType)), ['New','C/O','GCS',null,'']);
+
+    // 委员会 MM 表（KW39 写法）连同表头复制：按表头对列，其他列跳过；Supplier 是合并格，下面几行为空
+    const q = c=> /[\t\n"]/.test(String(c)) ? '"'+String(c).replace(/"/g,'""')+'"' : String(c);
+    const tsv = rows=> rows.map(r=>r.map(q).join('\t')).join('\r\n')+'\r\n';
+    const header = ['#','Region','Type','Project/ Product','Commodity','Parent PF Code','SWAT ID / Bundle ID','Part Description','PN','Recommended Supplier (s)','Presenter','Decision Level',
+      'Peak Year Spend\nEuro','LT Spend\nEuro','Comment','Sourcing Decision ','Notes/Task/ Resp./ Due Date','CQA PC PRICE','Rec. Supplier Landed','Average Volume','LT volume',
+      'Average Year Saving vs CQA','LT saving','CQA Tooling','Rec. Supplier Tooling ','Tooling Saving vs CQA'];
+    const committee = [header,
+      ['1','EU, NA','New','MBEAL','CH01','CH01016\nMedium Precision','B/2025/00361\n110000034017','ECU Housing, WMS','R003B136A','Ningbo Deke','Sandra Novegil','L2','439K Euro','2,5Mio Euro','1. note','Approved','',
+        '0,64 Euro/pc','0,74 Euro/pc','378979','3410814','37897.9','341081.4','277000','4352','-272648'],
+      ['','','New part','MBEAL','CH01','CH01016','B/2025/00361\n110000034018','ECU Housing, w/o WMS','R003H147A','','','','139K Euro','873K Euro','','','',
+        '0,64 Euro/pc','tbd','165280','1322241','','','39,157 Euro\n325.000 RMB','138908',''],
+      ['','','Carry over','MBEAL\nFamily 8','CH01','CH01016','B/2025/00361\n110000034019','ECU Cover','R004D369A, R004D370A','','','','139K Euro','852K Euro','','','',
+        '0,12 Euro/pc','0,18 Euro/pc','525.895','4733055','','','0','49529','']];
+    const paste = (selector, text)=> page.evaluate(([sel,t])=>{
+      const el = document.querySelector(sel), dt = new DataTransfer();
+      dt.setData('text/plain', t); el.focus();
+      el.dispatchEvent(new ClipboardEvent('paste', {clipboardData:dt, bubbles:true, cancelable:true}));
+    }, [selector, text]);
+    await paste('#pnPartNumber_0', tsv(committee));
+    const v = id=> page.locator('#'+id).inputValue();
+    const bad = id=> page.locator('#'+id).evaluate(el=>el.classList.contains('pn-bad'));
+    assert.equal(await page.locator('[data-pn-grid="submit"] tbody tr').count(), 3);
+    assert.deepEqual([await v('pnSourcingType_0'), await v('pnSourcingType_1'), await v('pnSourcingType_2')], ['New','New','C/O']);
+    assert.deepEqual([await v('pnProject_2'), await v('pnPartDescription_1'), await v('pnSupplier_1'), await v('pnSupplier_2')], ['MBEAL Family 8','ECU Housing, w/o WMS','Ningbo Deke','Ningbo Deke']);
+    assert.deepEqual([await v('pnPcPriceCQA_0'), await v('pnAvgVolume_2'), await v('pnLtVolume_0'), await v('pnSupplierToolingCost_1')], ['0.64','525895','3410814','138908']);
+    assert.deepEqual([await bad('pnSupplierPriceLanded_1'), await bad('pnToolingCQA_1'), await bad('pnPartNumber_2'), await bad('pnPcPriceCQA_0')], [true, true, true, false]);
+    assert.equal(await v('pnSupplierPriceLanded_1'), 'tbd');
+    const msg = await page.locator('[data-pn-grid="submit"] .pn-grid-msg').innerText();
+    assert.ok(msg.includes('Pasted 3 rows (columns matched by their header)') && msg.includes('not used') && msg.includes('3 cells need a look'), msg);
+    assert.ok(msg.includes('Row 2 · Tooling CQA: "39,157 Euro 325.000 RMB" has several') || msg.includes('Row 2 · Tooling CQA'), msg);
+    assert.equal(await page.locator('.pn-count').textContent(), '3 part numbers');
+    // 有两种读法：点选一个；其他红格改掉后自动变回正常
+    await page.locator('[data-pn-pick="pnToolingCQA_1"][data-value="39157"]').click();
+    assert.deepEqual([await v('pnToolingCQA_1'), await bad('pnToolingCQA_1')], ['39157', false]);
+    await page.locator('#pnSupplierPriceLanded_1').fill('0,66');
+    await page.locator('#pnPartNumber_2').fill('R004D369A');
+    assert.deepEqual([await bad('pnSupplierPriceLanded_1'), await bad('pnPartNumber_2')], [false, false]);
+
+    // Enter 往下，最后一行再按 Enter 加一行（带上一行的项目 / 类型 / 供应商），× 删行
+    await page.locator('#pnPcPriceCQA_2').press('Enter');
+    assert.equal(await page.evaluate(()=>document.activeElement.id), 'pnPcPriceCQA_3');
+    assert.deepEqual([await v('pnSupplier_3'), await v('pnSourcingType_3')], ['Ningbo Deke','C/O']);
+    await page.locator('#pnPcPriceCQA_3').press('Shift+Enter');
+    assert.equal(await page.evaluate(()=>document.activeElement.id), 'pnPcPriceCQA_2');
+    await page.locator('#pnPartNumber_3').locator('xpath=ancestor::tr').locator('.pn-remove').click();
+    assert.equal(await page.locator('[data-pn-grid="submit"] tbody tr').count(), 3);
+    // Fill all：把第 1 行的值填到所有行
+    await page.locator('#pnProject_0').fill('MBEAL');
+    await page.locator('[data-pn-fill="project"]').click();
+    assert.equal(await v('pnProject_2'), 'MBEAL');
+    // 重复零件号：标黄提示，不拦
+    await page.locator('#pnPartNumber_2').fill('r003b136a');
+    assert.ok(await page.locator('#pnPartNumber_0.pn-dup').count() && await page.locator('#pnPartNumber_2.pn-dup').count());
+    assert.ok((await page.locator('[data-pn-grid="submit"] .pn-grid-msg').innerText()).includes('R003B136A is in rows 1, 3'));
+    await page.locator('#pnPartNumber_2').fill('R004D369A');
+    assert.equal(await page.locator('.pn-dup').count(), 0);
+
+    // 提交：缺项在格子上标红，并说是哪一行
+    await page.locator('#pnPartDescription_1').fill('');
+    for(const [id,value] of Object.entries({fExistingSwat:'B/2025/00361', fBundlePeak:'10', fBundleLife:'20'})) await page.locator('#'+id).fill(value);
+    await page.locator('#fRegionIn input[value="EU"]').check();
+    await page.locator('#qFamily').selectOption('No');
+    await page.locator('#qECM').selectOption('No');
+    await fillCommercial(page);
+    await page.locator('#submitCaseBtn').click();
+    await page.waitForFunction(()=>document.getElementById('submitBanner')?.textContent.includes('Missing in row 2 (marked red)'));
+    assert.equal(submitted, undefined);
+    assert.ok(await page.locator('#pnPartDescription_1.pn-missing').count());
+    await page.locator('#pnPartDescription_1').fill('ECU Housing, w/o WMS');
+    assert.equal(await page.locator('.pn-missing').count(), 0);
+    await page.locator('#submitCaseBtn').click();
+    await page.waitForFunction(()=>document.getElementById('submitBanner')?.textContent.includes('SUB-GRID'));
+    assert.deepEqual(submitted.partNumbers.map(r=>[r.sourcingType, r.project, r.partNumber, r.recommendedSupplier, r.supplierPriceLanded, r.toolingCQA, r.averageVolume, r.lifetimeVolume]), [
+      ['New','MBEAL','R003B136A','Ningbo Deke','1.1','120000',378979,3410814],
+      ['New','MBEAL','R003H147A','Ningbo Deke','0.66','39157',165280,1322241],
+      ['C/O','MBEAL','R004D369A','Ningbo Deke','0.18','0',525895,4733055]]);
+    await context.close();
+
+    // 编辑页：同一个表格；没改过的原值（1.125）不拦，新填的歧义值拦下保存；不带表头的粘贴从光标所在格往右填
+    let saved, puts = 0;
+    const view = await fixture({api:async(route,path)=>{
+      if(path==='/api/bootstrap'){ await route.fulfill({json:{...empty, currentUser:ADMIN}}); return true; }
+      if(path==='/api/cases/C-TEST' && route.request().method()==='PUT'){ puts++; saved = route.request().postDataJSON(); await route.fulfill({json:{ok:true, case:{}, snapshot:empty}}); return true; }
+      return false;
+    }});
+    await seed(view.page, {partNumbers:[{partNumber:'PN1', partDescription:'Spool', project:'MBEAL', sourcingType:'', recommendedSupplier:'Supplier A',
+      pcPriceCQA:1.125, supplierPriceLanded:1, toolingCQA:0, supplierToolingCost:0, averageVolume:1000, lifetimeVolume:null}], sourcingType:'', spendCurrency:'EUR'});
+    await view.page.evaluate(()=>goToDetail('SWAT-TEST'));
+    await view.page.locator('#editCaseBtn').click();
+    const ev = id=> view.page.locator('#'+id).inputValue();
+    assert.deepEqual([await ev('editPnPcPriceCQA_0'), await ev('editPnSourcingType_0')], ['1.125', '']);
+    await view.page.locator('#editPnToolingCQA_0').fill('39,157');
+    await view.page.locator('#saveCaseBtn').click();
+    await view.page.waitForFunction(()=>document.querySelector('.block-warning')?.textContent.includes('Row 1 · Tooling CQA'));
+    assert.equal(puts, 0);
+    assert.ok(await view.page.locator('#editPnToolingCQA_0.pn-bad').count(), 'still red after the editor re-renders');
+    await view.page.evaluate(([sel,t])=>{
+      const el = document.querySelector(sel), dt = new DataTransfer();
+      dt.setData('text/plain', t); el.focus();
+      el.dispatchEvent(new ClipboardEvent('paste', {clipboardData:dt, bubbles:true, cancelable:true}));
+    }, ['#editPnPartDescription_0, #editPnDesc_0', 'Spool\tPN1\tSupplier A\r\nCover\tPN2\tSupplier B\t0,6\r\n']);
+    assert.deepEqual([await ev('editPnDesc_1'), await ev('editPnNumber_1'), await ev('editPnSupplier_1'), await ev('editPnPcPriceCQA_1'), await ev('editPnPcPriceCQA_0')],
+      ['Cover','PN2','Supplier B','0.6','1.125']);
+    await view.page.locator('#editPnToolingCQA_0').fill('39157');
+    await view.page.locator('#saveCaseBtn').click();
+    await view.page.waitForFunction(()=>!document.getElementById('saveCaseBtn'));
+    assert.deepEqual(saved.partNumbers.map(r=>[r.partNumber, r.sourcingType, r.pcPriceCQA, r.toolingCQA, r.averageVolume, r.lifetimeVolume]),
+      [['PN1','','1.125','39157',1000,null], ['PN2','','0.6',null,null,null]]);
+    assert.ok(saved.partNumbers.every(r=>!('_ok' in r)));
+    await view.context.close();
+  });
+
   console.log(`${passed} frontend regression checks passed.`);
 }finally{
   await browser.close();

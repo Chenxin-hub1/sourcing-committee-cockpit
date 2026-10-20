@@ -586,6 +586,46 @@
 .table-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 .table-scroll .data-table{overflow-wrap:normal;}
 .reminder-log-table{min-width:840px;}
+/* v3 Phase-30：零件号表格（像 Excel）：格子紧凑、表头固定、行号列横滚时固定；红 = 要改，黄 = 重复零件号（只提示） */
+.pn-grid .table-scroll{border:1px solid var(--border);border-radius:var(--radius);max-height:min(70vh,640px);overflow:auto;}
+.pn-table{border-collapse:separate;border-spacing:0;table-layout:fixed;width:100%;min-width:1240px;font-size:12.5px;background:#fff;}
+.pn-table th{position:sticky;top:0;z-index:2;background:#FAFAFB;color:var(--ink-soft);font-size:11px;font-weight:600;text-align:left;vertical-align:bottom;line-height:1.25;padding:7px 7px;border-bottom:1px solid var(--border-strong);border-right:1px solid var(--border);}
+.pn-table td{padding:0;border-bottom:1px solid var(--border);border-right:1px solid var(--border);}
+.pn-table .pn-rownum{position:sticky;left:0;z-index:1;width:34px;text-align:center;background:#FAFAFB;color:var(--ink-faint);font-size:11px;}
+.pn-table th.pn-rownum{z-index:3;}
+.pn-table tbody{counter-reset:pnrow;}
+.pn-table tbody tr{counter-increment:pnrow;}
+.pn-table td.pn-rownum::before{content:counter(pnrow);}
+.pn-table .pn-th-type{width:80px;}
+.pn-table .pn-th-text{width:140px;}
+.pn-table .pn-th-pn{width:116px;}
+.pn-table .pn-th-money{width:98px;}
+.pn-table .pn-th-int{width:102px;}
+.pn-table .pn-actions{width:32px;border-right:0;}
+.pn-cell{display:block;width:100%;min-width:0;border:0;border-radius:0;padding:8px 7px;font:inherit;color:var(--ink);background:transparent;}
+select.pn-cell{padding:7px 3px;cursor:pointer;}
+.pn-cell[inputmode]{text-align:right;font-variant-numeric:tabular-nums;}
+.pn-cell:focus{outline:2px solid var(--accent);outline-offset:-2px;background:#fff;}
+.pn-cell.pn-missing{background:var(--red-tint);}
+.pn-cell.pn-bad{background:var(--red-tint);box-shadow:inset 0 0 0 1px var(--red);color:var(--red);}
+.pn-cell.pn-dup:not(.pn-bad){background:var(--amber-tint);}
+.pn-fill{display:block;margin-top:4px;padding:1px 6px;font-size:10.5px;font-weight:600;color:var(--accent);background:#fff;border:1px solid var(--border-strong);border-radius:4px;cursor:pointer;}
+.pn-fill:hover{border-color:var(--accent);}
+.pn-remove{display:block;width:100%;padding:6px 0;border:0;background:none;color:var(--ink-faint);font-size:16px;line-height:1;cursor:pointer;}
+.pn-remove:hover{color:var(--red);}
+.pn-table tbody tr:only-child .pn-remove{visibility:hidden;}
+.pn-grid-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:10px;}
+.pn-count{font-size:12px;font-weight:600;color:var(--ink-soft);}
+.pn-tip{font-size:11.5px;color:var(--ink-faint);}
+.pn-grid-msg{margin-top:8px;font-size:12px;}
+.pn-grid-msg:empty{display:none;}
+.pn-msg-note{color:var(--ink-soft);}
+.pn-msg-list{margin:4px 0 0;padding-left:18px;}
+.pn-msg-list li{margin:2px 0;}
+.pn-msg-list li.bad{color:var(--red);}
+.pn-msg-list li.warn{color:var(--amber);}
+.pn-pick{padding:1px 8px;font-size:11px;font-weight:600;color:var(--red);background:#fff;border:1px solid var(--red);border-radius:4px;cursor:pointer;}
+.pn-pick:hover{background:var(--red-tint);}
 .reminder-settings-grid{grid-template-columns:repeat(4,minmax(0,1fr));}
 @media(max-width:700px){.reminder-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:400px){.reminder-settings-grid{grid-template-columns:1fr;}}
@@ -2763,24 +2803,353 @@ function fxHintText(cur){
   if(!perEur) return {text:`No ${cur} rate is set yet — enter the amounts in EUR, or ask the Sourcing admin to set the ${cur} rate.`, missing:true};
   return {text:`Converted to EUR at ${fxLabel({currency:cur, perEur, basis:FX_SETTINGS.basis})} when you submit.`, missing:false};
 }
-function partNumberRowHtml(i){
-  return `
-  <div class="pn-row pn-editor" data-pn-row="${i}" style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;position:relative;">
-    ${i>0?`<button type="button" data-remove-pn="${i}" class="btn-danger" style="position:absolute;top:10px;right:10px;padding:4px 9px;font-size:11px;">Remove</button>`:''}
-    <div class="form-grid" style="${i>0?'margin-right:80px;':''}">
-      <div class="form-field"><label>Part Number *</label><input class="pn-input" data-pn-field="partNumber" id="pnPartNumber_${i}" placeholder="e.g. R004A930"/></div>
-      <div class="form-field"><label>Part Description *</label><input class="pn-input" data-pn-field="partDescription" id="pnPartDescription_${i}" placeholder="e.g. Anchor Bracket"/></div>
-      <div class="form-field"><label>Project *</label><input class="pn-input" data-pn-field="project" id="pnProject_${i}" list="projectOptions" autocomplete="off" placeholder="e.g. MBEAL — type a new name or pick one you used before"/></div>
-      <div class="form-field"><label>Sourcing Type *</label><select class="pn-input" data-pn-field="sourcingType" id="pnSourcingType_${i}">${SOURCING_TYPES.map(r=>`<option>${r}</option>`).join('')}</select></div>
-      <div class="form-field span2"><label>Recommended Supplier *</label><input class="pn-input" data-pn-field="recommendedSupplier" id="pnSupplier_${i}" placeholder="Supplier name — if regions go to different suppliers, name each supplier with its region"/></div>
-      <div class="form-field"><label>Pc Price CQA (<span class="cur-label">${submitCurrency()}</span>) *</label><input class="pn-input" data-pn-field="pcPriceCQA" id="pnPcPriceCQA_${i}" type="number" min="0" step="0.0001" placeholder="e.g. 1.25"/></div>
-      <div class="form-field"><label>Supplier Price, landed (<span class="cur-label">${submitCurrency()}</span>) *</label><input class="pn-input" data-pn-field="supplierPriceLanded" id="pnSupplierPriceLanded_${i}" type="number" min="0" step="0.0001" placeholder="e.g. 1.18"/></div>
-      <div class="form-field"><label>Tooling CQA (<span class="cur-label">${submitCurrency()}</span>) *</label><input class="pn-input" data-pn-field="toolingCQA" id="pnToolingCQA_${i}" type="number" min="0" step="0.01" placeholder="e.g. 120000 (0 if none)"/></div>
-      <div class="form-field"><label>Supplier Tooling Cost (<span class="cur-label">${submitCurrency()}</span>) *</label><input class="pn-input" data-pn-field="supplierToolingCost" id="pnSupplierToolingCost_${i}" type="number" min="0" step="0.01" placeholder="e.g. 118500 (0 if none)"/></div>
-      <div class="form-field"><label>Average yearly volume (pcs)</label><input class="pn-input" data-pn-field="averageVolume" id="pnAvgVolume_${i}" type="number" min="0" step="1" placeholder="e.g. 378979"/></div>
-      <div class="form-field"><label>Lifetime volume (pcs)</label><input class="pn-input" data-pn-field="lifetimeVolume" id="pnLtVolume_${i}" type="number" min="0" step="1" placeholder="e.g. 3410814"/></div>
+// ===== v3 Phase-30（同事反馈）：零件号表格，一行一个零件号，像 Excel =====
+// 列顺序按委员会周会 Excel（KW20～KW39 Agenda / MM 表头，只留零件行字段、保持原相对顺序）。
+// 提交页与编辑页共用；输入框 id 沿用旧卡片的命名（pnPartNumber_0 / editPnNumber_0 …），读值与回归测试不变。
+// headers：粘贴时认表头用（小写、去掉空格和标点后比较），委员会 Excel 与本系统 CSV 的写法都收。
+const PN_GRID_COLUMNS = [
+  {key:'sourcingType', label:'Type', kind:'type', fill:true, ids:{submit:'pnSourcingType_', edit:'editPnSourcingType_'}, headers:['type','sourcingtype']},
+  {key:'project', label:'Project', kind:'text', fill:true, ids:{submit:'pnProject_', edit:'editPnProject_'}, headers:['projectproduct','project']},
+  {key:'partDescription', label:'Part Description', kind:'text', ids:{submit:'pnPartDescription_', edit:'editPnDesc_'}, headers:['partdescription','partdescriptions']},
+  {key:'partNumber', label:'Part Number', kind:'pn', ids:{submit:'pnPartNumber_', edit:'editPnNumber_'}, headers:['pn','partnumber','partnumbers']},
+  {key:'recommendedSupplier', label:'Recommended Supplier', kind:'text', fill:true, ids:{submit:'pnSupplier_', edit:'editPnSupplier_'}, headers:['recommendedsuppliers','recommendedsupplier']},
+  {key:'pcPriceCQA', label:'Pc Price CQA', kind:'money', ids:{submit:'pnPcPriceCQA_', edit:'editPnPcPriceCQA_'}, headers:['cqapcprice','pcpricecqa']},
+  {key:'supplierPriceLanded', label:'Supplier Price (landed)', kind:'money', ids:{submit:'pnSupplierPriceLanded_', edit:'editPnSupplierPriceLanded_'}, headers:['recsupplierlanded','supplierpricelanded']},
+  {key:'averageVolume', label:'Average Volume (pcs)', kind:'int', optional:true, ids:{submit:'pnAvgVolume_', edit:'editPnAvgVolume_'}, headers:['averagevolume','averageyearlyvolume','averageyearlyvolumepcs']},
+  {key:'lifetimeVolume', label:'Lifetime Volume (pcs)', kind:'int', optional:true, ids:{submit:'pnLtVolume_', edit:'editPnLtVolume_'}, headers:['ltvolume','lifetimevolume','lifetimevolumepcs']},
+  {key:'toolingCQA', label:'Tooling CQA', kind:'money', ids:{submit:'pnToolingCQA_', edit:'editPnToolingCQA_'}, headers:['cqatooling','toolingcqa']},
+  {key:'supplierToolingCost', label:'Supplier Tooling Cost', kind:'money', ids:{submit:'pnSupplierToolingCost_', edit:'editPnSupplierToolingCost_'}, headers:['recsuppliertooling','suppliertoolingcost']},
+];
+const PN_COL = Object.fromEntries(PN_GRID_COLUMNS.map(col=>[col.key, col]));
+const PN_GRID_MAX_ROWS = 50;  // 与服务端 schemas.PartNumbers 的上限一致
+const PN_CURRENCY_WORDS = {eur:'EUR', euro:'EUR', euros:'EUR', '€':'EUR', usd:'USD', 'us$':'USD', '$':'USD', cny:'CNY', rmb:'CNY', yuan:'CNY', '¥':'CNY'};
+const PN_CURRENCY_RE = 'us\\$|euros?|eur|usd|cny|rmb|yuan|[€$¥]';
+
+const pnOneLine = s=>String(s??'').replace(/\s*\n\s*/g,' ').trim();
+function pnColumnForHeader(text){
+  const h = String(text||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const col = h && PN_GRID_COLUMNS.find(c=>c.headers.includes(h));
+  return col ? col.key : null;
+}
+// 与导入器 excel_import.normalize_type 同一规则；认不出返回 null
+function normalizeSourcingType(text){
+  const t = pnOneLine(text).toLowerCase().replace(/-/g,' ');
+  if(!t) return '';
+  if(t.includes('gcs')) return 'GCS';
+  if(/carry|\bc\/o\b|\bco\b/.test(t)) return 'C/O';
+  if(t.includes('new') || t.includes('family')) return 'New';
+  return null;
+}
+// Excel 复制出来是制表符分隔；带换行、制表符或引号的格子用双引号包起来，"" 表示一个引号
+function parseClipboardTable(text){
+  const s = String(text||'').replace(/\r\n?/g,'\n'), rows = [];
+  let row = [], cell = '', quoted = false;
+  for(let i=0; i<s.length; i++){
+    const ch = s[i];
+    if(quoted){
+      if(ch==='"' && s[i+1]==='"'){ cell += '"'; i++; }
+      else if(ch==='"') quoted = false;
+      else cell += ch;
+    }
+    else if(ch==='"' && cell==='') quoted = true;
+    else if(ch==='\t'){ row.push(cell); cell = ''; }
+    else if(ch==='\n'){ row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if(cell!=='' || row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(r=>r.some(c=>c.trim()!==''));  // Excel 末尾总带一个换行；空行一并去掉
+}
+// 一个数字串本身怎么读：小数点逗号、点号都认；只有一种分隔符且后面正好三位时，既可能是小数也可能是千分位 → 不猜，给出两种读法
+function readNumberText(raw, integer){
+  const bad = {error:`"${raw}" is not a number`};
+  const groupsOk = (s, sep)=> s.split(sep).every((g,i)=> i===0 ? /^\d{1,3}$/.test(g) : /^\d{3}$/.test(g));
+  const hasDot = raw.includes('.'), hasComma = raw.includes(',');
+  let intPart = raw, frac = '';
+  if(hasDot && hasComma){
+    const dec = raw.lastIndexOf('.') > raw.lastIndexOf(',') ? '.' : ',', thou = dec==='.' ? ',' : '.';
+    const parts = raw.split(dec);
+    if(parts.length!==2 || parts[1].includes(thou) || !groupsOk(parts[0], thou)) return bad;
+    intPart = parts[0].split(thou).join(''); frac = parts[1];
+  } else if(hasDot || hasComma){
+    const sep = hasDot ? '.' : ',', parts = raw.split(sep);
+    if(parts.length>2){
+      if(!groupsOk(raw, sep)) return bad;
+      intPart = parts.join('');
+    } else {
+      const [a, b] = parts;
+      if(b.length!==3 || /^0+$/.test(a) || a.length>3){ intPart = a; frac = b; }
+      else if(integer) intPart = a+b;  // 产量列只收整数：378.979 只能是千分位
+      else return {error:`"${raw}" could be ${a}.${b} or ${a}${b}`, choices:[`${a}.${b}`, `${a}${b}`]};
+    }
+  }
+  // 小数位照原样保留（10.50 仍是 10.50）；超过 4 位时去掉末尾的 0 再看（服务端最多 4 位小数）
+  intPart = intPart.replace(/^0+(?=\d)/,'');
+  if(integer || frac.length>4) frac = frac.replace(/0+$/,'');
+  if(integer && frac) return {error:`"${raw}" — use a whole number`};
+  if(frac.length>4) return {error:`"${raw}" — use at most 4 decimal places`};
+  const value = frac ? `${intPart}.${frac}` : intPart;
+  return {value: integer ? Number(value) : value};
+}
+// 一个格子里的数：历史 Excel 常带单位和第二种货币（"0,0865 Euro/pc⏎0,0952 USD/pc"），取与表单币种一致的那个；
+// 读不准的不猜，返回 error（有两种读法时附 choices，让人点选）
+function parseGridNumber(text, {currency='EUR', integer=false}={}){
+  const s = String(text??'').trim();
+  if(!s) return {value:null};
+  const nums = [...s.matchAll(/(?<![\w.,])-?\d(?:[\d.,]*\d)?/g)];
+  if(!nums.length) return {error:`"${pnOneLine(s)}" is not a number`};
+  const after = new RegExp(`^\\s*(${PN_CURRENCY_RE})(?![a-z])`, 'i'), before = new RegExp(`(${PN_CURRENCY_RE})\\s*$`, 'i');
+  const cands = nums.map((m,i)=>{
+    const end = m.index + m[0].length;
+    const tail = s.slice(end, i+1<nums.length ? nums[i+1].index : s.length);
+    const head = s.slice(i>0 ? nums[i-1].index + nums[i-1][0].length : 0, m.index);
+    const word = (tail.match(after)||[])[1] || (head.match(before)||[])[1];
+    return {raw:m[0], cur: word ? PN_CURRENCY_WORDS[word.toLowerCase()] : '', scaled:/^\s*(k|tsd|mio|mn|million|bn)(?![a-z])/i.test(tail)};
+  });
+  let pick = cands[0];
+  if(cands.length>1){
+    const mine = cands.filter(c=>c.cur===currency);
+    if(mine.length!==1) return {error: integer || !mine.length ? `"${pnOneLine(s)}" has several numbers — keep only ${integer ? 'one' : 'the '+currency+' value'}` : `"${pnOneLine(s)}" has several ${currency} values — keep only one`};
+    pick = mine[0];
+  }
+  if(!integer && pick.cur && pick.cur!==currency) return {error:`"${pnOneLine(s)}" is in ${pick.cur}, the form currency is ${currency} — enter the ${currency} value`};
+  if(pick.scaled) return {error:`"${pnOneLine(s)}" — write the full number instead of K / Mio`};
+  if(pick.raw.startsWith('-')) return {error:`"${pnOneLine(s)}" cannot be negative`};
+  return readNumberText(pick.raw, integer);
+}
+
+const pnCell = (tr, key)=> tr.querySelector(`[data-pn-field="${key}"]`);
+const pnGridCurrency = grid=> grid.dataset.pnGrid==='submit' ? submitCurrency() : (grid.dataset.cur || 'EUR');
+// row：{字段: 值}；_ok 记下已确认的数字写法（编辑页的原值、点选过的读法），这些不再按歧义拦
+function pnGridCellHtml(mode, col, i, row){
+  const v = row[col.key]===undefined || row[col.key]===null ? '' : String(row[col.key]);
+  const attrs = `class="pn-input pn-cell" data-pn-field="${col.key}" id="${col.ids[mode]}${i}" aria-label="${escapeAttr(col.label)}"`;
+  if(col.kind==='type'){
+    // 编辑页的旧案例可能没有类型：保留空选项，不悄悄改成 New
+    const opts = mode==='edit' && !v ? ['', ...SOURCING_TYPES] : uniq([...SOURCING_TYPES, v].filter(Boolean));
+    const sel = v || (mode==='edit' ? '' : 'New');
+    return `<td><select ${attrs}>${opts.map(o=>`<option ${o===sel?'selected':''}>${esc(o)}</option>`).join('')}</select></td>`;
+  }
+  const ok = row._ok && row._ok[col.key]!==undefined ? ` data-ok="${escapeAttr(row._ok[col.key])}"` : '';
+  const extra = col.key==='project' ? ` list="${mode==='edit' ? 'editProjectOptions' : 'projectOptions'}"`
+    : col.kind==='money' ? ' inputmode="decimal"' : col.kind==='int' ? ' inputmode="numeric"' : '';
+  return `<td><input ${attrs}${extra}${ok} autocomplete="off" value="${escapeAttr(v)}"/></td>`;
+}
+function pnGridRowHtml(mode, i, row={}){
+  return `<tr class="pn-row" data-pn-row="${i}"><td class="pn-rownum"></td>${PN_GRID_COLUMNS.map(col=>pnGridCellHtml(mode, col, i, row)).join('')}`
+    + `<td class="pn-actions"><button type="button" class="pn-remove" data-remove-pn tabindex="-1" title="Remove this row" aria-label="Remove this row">×</button></td></tr>`;
+}
+function pnGridHtml(mode, rows, cur){
+  const list = rows && rows.length ? rows : [{}];
+  return `<div class="pn-grid" data-pn-grid="${mode}" data-next-row="${list.length}" data-cur="${escapeAttr(cur)}">
+    <div class="table-scroll"><table class="pn-table">
+      <thead><tr><th class="pn-rownum">#</th>${PN_GRID_COLUMNS.map(col=>`<th class="pn-th-${col.kind}">${esc(col.label)}${col.kind==='money' ? ` (<span class="cur-label">${esc(cur)}</span>)` : ''}${mode==='submit' && !col.optional ? ' *' : ''}${col.fill ? `<button type="button" class="pn-fill" data-pn-fill="${col.key}" title="Copy row 1's ${escapeAttr(col.label)} to every row">Fill all</button>` : ''}</th>`).join('')}<th class="pn-actions"></th></tr></thead>
+      <tbody>${list.map((r,i)=>pnGridRowHtml(mode, i, r)).join('')}</tbody>
+    </table></div>
+    <div class="pn-grid-foot">
+      <button type="button" class="btn-secondary" id="${mode==='edit' ? 'addPnLineBtn' : 'addPartNumberBtn'}">+ Add Part Number</button>
+      <span class="pn-count"></span>
+      <span class="pn-tip">Paste rows straight from Excel: select the cells (with or without the header row), Ctrl+C, click a cell here, Ctrl+V. Enter moves down, Tab moves right.</span>
     </div>
+    <div class="pn-grid-msg" aria-live="polite"></div>
   </div>`;
+}
+// 一个格子的问题：数字读不准、零件号格里写了多个、粘贴来的类型认不出
+function pnCellProblem(grid, cell){
+  const col = PN_COL[cell.dataset.pnField], v = cell.value.trim();
+  if(col.kind==='money' || col.kind==='int'){
+    if(!v || v===cell.dataset.ok) return null;
+    const r = parseGridNumber(v, {currency:pnGridCurrency(grid), integer:col.kind==='int'});
+    return r.error ? r : null;
+  }
+  if(col.kind==='pn' && /[,;]/.test(v)) return {error:`"${v}" lists several part numbers — put each one on its own row`};
+  if(col.kind==='type' && cell.dataset.typeBad) return {error:cell.dataset.typeBad};
+  return null;
+}
+// live：边打字边校验时只清除已修好的红格，不在半截输入上报错（离开格子、粘贴、提交时才报）
+function validatePnCell(grid, cell, {live=false}={}){
+  const p = pnCellProblem(grid, cell);
+  if(!p){ delete cell.dataset.bad; delete cell.dataset.choices; return; }
+  if(live && !cell.dataset.bad) return;
+  cell.dataset.bad = p.error;
+  if(p.choices) cell.dataset.choices = JSON.stringify(p.choices); else delete cell.dataset.choices;
+}
+function addPnGridRow(grid){
+  const tbody = grid.querySelector('tbody');
+  if(tbody.rows.length >= PN_GRID_MAX_ROWS){ grid.dataset.note = `One registration holds at most ${PN_GRID_MAX_ROWS} part numbers.`; return null; }
+  const mode = grid.dataset.pnGrid, i = Number(grid.dataset.nextRow) || tbody.rows.length;
+  grid.dataset.nextRow = i+1;
+  // 同一 bundle 的项目 / 类型 / 供应商多半一样：新行先带上一行的
+  const last = tbody.rows[tbody.rows.length-1], seed = {};
+  if(last) PN_GRID_COLUMNS.filter(c=>c.fill).forEach(c=>{ seed[c.key] = pnCell(last, c.key).value; });
+  tbody.insertAdjacentHTML('beforeend', pnGridRowHtml(mode, i, seed));
+  return tbody.rows[tbody.rows.length-1];
+}
+function setPnCellFromPaste(grid, tr, key, raw, prevTr){
+  const col = PN_COL[key], cell = pnCell(tr, key);
+  let text = String(raw??'');
+  // 委员会 Excel 里同一 bundle 的 Type / Project / Supplier 常是合并格，复制出来下面几行是空的 → 沿用上一行
+  if(!text.trim() && col.fill && prevTr) text = pnCell(prevTr, key).value;
+  delete cell.dataset.ok; delete cell.dataset.typeBad;
+  if(col.kind==='type'){
+    const t = normalizeSourcingType(text);
+    if(t===null) cell.dataset.typeBad = `"${pnOneLine(text)}" is not a sourcing type — pick New, C/O or GCS`;
+    else if(t) cell.value = t;
+  } else if(col.kind==='money' || col.kind==='int'){
+    const r = parseGridNumber(text, {currency:pnGridCurrency(grid), integer:col.kind==='int'});
+    if(r.error) cell.value = pnOneLine(text);
+    else { cell.value = r.value===null ? '' : String(r.value); if(r.value!==null) cell.dataset.ok = String(r.value); }
+  } else cell.value = col.kind==='pn' ? text.trim().split(/\s*\n\s*/).filter(Boolean).join(', ') : pnOneLine(text);
+  validatePnCell(grid, cell);
+}
+function pastePnGrid(grid, cell, e){
+  const table = parseClipboardTable(e.clipboardData ? e.clipboardData.getData('text/plain') : '');
+  if(!table.length) return;
+  if(table.length===1 && table[0].length===1 && cell.tagName==='INPUT') return;  // 单个格子照常粘贴，离开格子时再校验
+  e.preventDefault();
+  const tbody = grid.querySelector('tbody');
+  const startRow = [...tbody.rows].indexOf(cell.closest('tr'));
+  const startCol = PN_GRID_COLUMNS.findIndex(c=>c.key===cell.dataset.pnField);
+  const header = table[0].map(pnColumnForHeader);
+  const byHeader = header.filter(Boolean).length >= 2;
+  const body = byHeader ? table.slice(1) : table;
+  const width = Math.max(...table.map(r=>r.length));
+  const seen = new Set();
+  // 带表头：按表头名对列，其他列（Region、SWAT ID、Spend、Comment …）跳过；不带：从光标所在格往右按表格列顺序填
+  const keys = Array.from({length:width}, (_,j)=>{
+    const k = byHeader ? header[j] : (PN_GRID_COLUMNS[startCol+j]||{}).key;
+    if(!k || seen.has(k)) return null;
+    seen.add(k); return k;
+  });
+  const unused = keys.filter((k,j)=>!k && body.some(r=>(r[j]||'').trim())).length;
+  if(!body.length){ grid.dataset.note = 'Only a header row was pasted — copy the part number rows as well.'; refreshPnGrid(grid); return; }
+  let pasted = 0, cut = 0;
+  body.forEach((cells, k)=>{
+    const tr = tbody.rows[startRow+k] || addPnGridRow(grid);
+    if(!tr){ cut++; return; }
+    pasted++;
+    const prev = k>0 ? tbody.rows[startRow+k-1] : null;
+    keys.forEach((key,j)=>{ if(key && j<cells.length) setPnCellFromPaste(grid, tr, key, cells[j], prev); });  // 这一行没带到的格子不清空
+  });
+  const bad = [...tbody.querySelectorAll('.pn-cell')].filter(c=>c.dataset.bad).length;
+  grid.dataset.note = `Pasted ${pasted} row${pasted===1?'':'s'}${byHeader ? ' (columns matched by their header)' : ''}.`
+    + (unused ? ` ${unused} column${unused===1?'':'s'} not used.` : '')
+    + (bad ? ` ${bad} cell${bad===1?' needs':'s need'} a look — marked red below.` : '')
+    + (cut ? ` ${cut} row${cut===1?' was':'s were'} not pasted: one registration holds at most ${PN_GRID_MAX_ROWS} part numbers.` : '');
+  refreshPnGrid(grid);
+}
+function fillPnColumn(grid, key){
+  const rows = [...grid.querySelector('tbody').rows];
+  const first = pnCell(rows[0], key);
+  if(!first.value.trim()){ grid.dataset.note = `Fill in row 1's ${PN_COL[key].label} first — Fill all copies it to every row.`; refreshPnGrid(grid); return; }
+  rows.slice(1).forEach(tr=>{ const c = pnCell(tr, key); c.value = first.value; delete c.dataset.typeBad; validatePnCell(grid, c); });
+  delete first.dataset.typeBad; validatePnCell(grid, first);
+  grid.dataset.note = `Copied ${PN_COL[key].label} "${first.value}" to all ${rows.length} rows.`;
+  refreshPnGrid(grid);
+}
+// 重新标红 / 标黄并写提示区：数字问题（带点选按钮）、重复零件号（只提示，不拦：同一零件号按地区分给不同供应商时会出现两行）、
+// 提交过一次以后的缺项
+function refreshPnGrid(grid){
+  const rows = [...grid.querySelector('tbody').rows];
+  const checked = grid.dataset.checked==='1' && grid.dataset.pnGrid==='submit';
+  const byPn = new Map();
+  rows.forEach((tr,r)=>{ const v = pnCell(tr,'partNumber').value.trim().toUpperCase(); if(v) byPn.set(v, [...(byPn.get(v)||[]), r+1]); });
+  const dups = [...byPn].filter(([,rs])=>rs.length>1), dupRows = new Set(dups.flatMap(([,rs])=>rs));
+  const bads = [];
+  rows.forEach((tr,r)=>{
+    tr.querySelectorAll('.pn-cell').forEach(cell=>{
+      const col = PN_COL[cell.dataset.pnField];
+      const missing = checked && !col.optional && !cell.value.trim() && !cell.dataset.bad;
+      cell.classList.toggle('pn-bad', !!cell.dataset.bad);
+      cell.classList.toggle('pn-missing', missing);
+      cell.title = cell.dataset.bad || (missing ? 'Required' : '');
+      if(cell.dataset.bad) bads.push({row:r+1, col, cell});
+    });
+    pnCell(tr,'partNumber').classList.toggle('pn-dup', dupRows.has(r+1));
+  });
+  const count = grid.querySelector('.pn-count');
+  if(count) count.textContent = `${rows.length} part number${rows.length===1?'':'s'}`;
+  const add = grid.querySelector('#addPartNumberBtn, #addPnLineBtn');
+  if(add) add.disabled = rows.length >= PN_GRID_MAX_ROWS;
+  const items = [
+    ...bads.slice(0,10).map(b=>`<li class="bad">Row ${b.row} · ${esc(b.col.label)}: ${esc(b.cell.dataset.bad)}${b.cell.dataset.choices ? ' — '+JSON.parse(b.cell.dataset.choices).map(v=>`<button type="button" class="pn-pick" data-pn-pick="${escapeAttr(b.cell.id)}" data-value="${escapeAttr(v)}">${esc(v)}</button>`).join(' ') : ''}</li>`),
+    ...(bads.length>10 ? [`<li class="bad">… and ${bads.length-10} more cells marked red.</li>`] : []),
+    ...dups.map(([pn,rs])=>`<li class="warn">${esc(pn)} is in rows ${rs.join(', ')} — check that this is intended (e.g. one row per region).</li>`),
+  ];
+  // 内容没变就不重写：点选按钮时上一个格子失焦会触发这里，重写会把正被点的按钮换掉，点击就落空
+  const msg = grid.querySelector('.pn-grid-msg');
+  const html = (grid.dataset.note ? `<div class="pn-msg-note">${esc(grid.dataset.note)}</div>` : '') + (items.length ? `<ul class="pn-msg-list">${items.join('')}</ul>` : '');
+  if(msg && msg.dataset.html!==html){ msg.innerHTML = html; msg.dataset.html = html; }
+}
+function wirePnGrid(grid){
+  if(!grid || grid.dataset.wired) return;
+  grid.dataset.wired = '1';
+  const tbody = grid.querySelector('tbody');
+  const isCell = e=> e.target.closest && e.target.closest('.pn-cell');
+  grid.addEventListener('click', e=>{
+    const rm = e.target.closest('[data-remove-pn]');
+    if(rm){ if(tbody.rows.length>1){ rm.closest('tr').remove(); grid.dataset.note = ''; refreshPnGrid(grid); } return; }
+    const fill = e.target.closest('[data-pn-fill]');
+    if(fill){ fillPnColumn(grid, fill.dataset.pnFill); return; }
+    const pick = e.target.closest('[data-pn-pick]');
+    if(pick){
+      const cell = document.getElementById(pick.dataset.pnPick);
+      if(cell){ cell.value = pick.dataset.value; cell.dataset.ok = pick.dataset.value; validatePnCell(grid, cell); refreshPnGrid(grid); }
+      return;
+    }
+    if(e.target.closest('#addPartNumberBtn, #addPnLineBtn')){
+      grid.dataset.note = '';
+      const tr = addPnGridRow(grid);
+      refreshPnGrid(grid);
+      if(tr) tr.querySelector('.pn-cell').focus();
+    }
+  });
+  // Enter 往下（最后一行再加一行），Shift+Enter 往上；Tab 往右走浏览器默认的顺序
+  grid.addEventListener('keydown', e=>{
+    const cell = isCell(e);
+    if(!cell || e.key!=='Enter' || e.isComposing) return;
+    e.preventDefault();
+    const tr = cell.closest('tr'), col = [...tr.querySelectorAll('.pn-cell')].indexOf(cell);
+    validatePnCell(grid, cell);
+    let next = e.shiftKey ? tr.previousElementSibling : tr.nextElementSibling;
+    if(!next && !e.shiftKey) next = addPnGridRow(grid);
+    refreshPnGrid(grid);
+    if(next){ const t = next.querySelectorAll('.pn-cell')[col]; t.focus(); if(t.select) t.select(); }
+  });
+  grid.addEventListener('paste', e=>{ const cell = isCell(e); if(cell) pastePnGrid(grid, cell, e); });
+  grid.addEventListener('input', e=>{ const cell = isCell(e); if(cell){ validatePnCell(grid, cell, {live:true}); refreshPnGrid(grid); } });
+  grid.addEventListener('change', e=>{ const cell = isCell(e); if(cell && cell.tagName==='SELECT'){ delete cell.dataset.typeBad; validatePnCell(grid, cell); refreshPnGrid(grid); } });
+  grid.addEventListener('focusout', e=>{ const cell = isCell(e); if(cell && cell.tagName==='INPUT'){ validatePnCell(grid, cell); refreshPnGrid(grid); } });
+  tbody.querySelectorAll('.pn-cell').forEach(cell=>validatePnCell(grid, cell));  // 编辑页重绘后，未修好的格子仍是红的
+  refreshPnGrid(grid);
+}
+// 表格当前内容（原样文字 + 已确认写法），编辑页重绘前存回 editBuffer 用
+function pnGridDomRows(grid){
+  return [...grid.querySelector('tbody').rows].map(tr=>{
+    const row = {_ok:{}};
+    PN_GRID_COLUMNS.forEach(col=>{ const c = pnCell(tr, col.key); row[col.key] = c.value; if(c.dataset.ok!==undefined) row._ok[col.key] = c.dataset.ok; });
+    return row;
+  });
+}
+// 提交 / 保存前读表：数字按规则读成服务端要的写法（金额字符串、产量整数，空 = null），问题按"行 · 列"列出并标红
+function checkPnGrid(grid, {required=false}={}){
+  if(required) grid.dataset.checked = '1';
+  const trs = [...grid.querySelector('tbody').rows], cur = pnGridCurrency(grid), errors = [];
+  const rows = trs.map((tr,r)=>{
+    const row = {};
+    PN_GRID_COLUMNS.forEach(col=>{
+      const cell = pnCell(tr, col.key), v = cell.value.trim();
+      validatePnCell(grid, cell);
+      if(cell.dataset.bad) errors.push(`Row ${r+1} · ${col.label}: ${cell.dataset.bad}.`);
+      if(col.kind==='money' || col.kind==='int'){
+        const p = !v ? {value:null} : v===cell.dataset.ok ? {value: col.kind==='int' ? Number(v) : v} : parseGridNumber(v, {currency:cur, integer:col.kind==='int'});
+        row[col.key] = p.error ? null : p.value;
+      } else row[col.key] = v;
+    });
+    return row;
+  });
+  refreshPnGrid(grid);
+  const emptyRows = keys=> trs.map((tr,r)=> keys.some(k=>!pnCell(tr,k).value.trim()) ? r+1 : 0).filter(Boolean);
+  return {rows, errors, emptyRows};
 }
 function renderSubmit(){
   const mine = [...SUBMISSIONS].sort((a,b)=> b.subId.localeCompare(a.subId));
@@ -2833,14 +3202,13 @@ function renderSubmit(){
     </div>
 
     <div class="screening-section" style="margin-top:16px;padding-top:16px;">
-      <h3>Part Numbers${infoTip(`Project, Sourcing Type and Recommended Supplier are entered per part number — a bundle can mix projects, GCS / New and suppliers.`)}</h3>
+      <h3>Part Numbers${infoTip(`One row per part number. Project, Sourcing Type and Recommended Supplier are entered per part number — a bundle can mix projects, GCS / New and suppliers. Copy rows from the committee Excel and paste them into the table: with the header row, columns are matched by name.`)}</h3>
       <div class="form-grid" style="margin-bottom:12px;">
         <div class="form-field"><label>Spend Currency *</label><select id="fCurrency">${CURRENCIES.map(cur=>`<option>${cur}</option>`).join('')}</select>
           <div id="fxHint" class="fx-hint">${esc(fxHintText('EUR').text)}</div></div>
       </div>
       ${projectDatalist('projectOptions')}
-      <div id="partNumbersContainer">${partNumberRowHtml(0)}</div>
-      <button type="button" class="btn-secondary" id="addPartNumberBtn">+ Add Another Part Number</button>
+      <div id="partNumbersContainer">${pnGridHtml('submit', [{}], submitCurrency())}</div>
       <div class="form-grid" style="margin-top:14px;">
         <div class="form-field"><label>Bundle Peak Year Spend (<span class="cur-label">${submitCurrency()}</span>) *${fieldTip(`One total for all part numbers in this registration — no need to split the spend per part number.`)}</label><input id="fBundlePeak" type="number" min="0" step="1" placeholder="e.g. 1500000"/></div>
         <div class="form-field"><label>Bundle Lifetime Spend (<span class="cur-label">${submitCurrency()}</span>) *${fieldTip(`One total for all part numbers in this registration — no need to split the spend per part number.`)}</label><input id="fBundleLife" type="number" min="0" step="1" placeholder="e.g. 6000000"/></div>
@@ -3153,37 +3521,24 @@ function renderDetail(){
     `}
   </div>
 
+  ${editing ? `
+  <div class="card section-card">
+    <h3>Part Numbers${infoTip('One row per part number. Copy rows from the committee Excel and paste them into the table: with the header row, columns are matched by name.')}</h3>
+    ${projectDatalist('editProjectOptions')}
+    ${pnGridHtml('edit', b.partNumbers, editCur)}
+    <div class="form-grid" style="margin-top:12px;">
+      <div class="form-field"><label>Bundle Peak Year Spend (${editCur})${fieldTip('One total for all part numbers of this case.')}</label>${ef('editBundlePeak', b.peakYearSpend)}</div>
+      <div class="form-field"><label>Bundle Lifetime Spend (${editCur})${fieldTip('One total for all part numbers of this case.')}</label>${ef('editBundleLife', b.lifetimeSpend)}</div>
+    </div>
+    ${isConverted(c) ? `<div class="fx-hint">Enter amounts in ${esc(editCur)}. They are saved in EUR at ${esc(fxLabel(c.fx))} — ${esc(fxOrigin(c.fx))}.</div>` : ''}
+  </div>
+  ` : ''}
+
   <div class="detail-grid">
     <div>
+      ${editing ? '' : `
       <div class="card section-card">
         <h3>Part Numbers</h3>
-        ${editing ? `
-          ${b.partNumbers.map((p,i)=>`
-            <div class="pn-editor" style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;position:relative;">
-              ${b.partNumbers.length>1?`<button data-remove-pnl="${i}" class="btn-danger" style="position:absolute;top:10px;right:10px;padding:4px 9px;font-size:11px;">Remove</button>`:''}
-              <div class="form-grid" style="${b.partNumbers.length>1?'margin-right:80px;':''}">
-                <div class="form-field"><label>Part Number</label>${ef('editPnNumber_'+i, p.partNumber)}</div>
-                <div class="form-field"><label>Part Description</label>${ef('editPnDesc_'+i, p.partDescription)}</div>
-                <div class="form-field"><label>Project</label><input class="edit-input" id="editPnProject_${i}" list="editProjectOptions" autocomplete="off" value="${escapeAttr(p.project||'')}"/></div>
-                <div class="form-field"><label>Sourcing Type</label>${esel('editPnSourcingType_'+i, p.sourcingType||'', uniq([...SOURCING_TYPES, p.sourcingType||'']))}</div>
-                <div class="form-field span2"><label>Recommended Supplier</label>${ef('editPnSupplier_'+i, p.recommendedSupplier||'')}</div>
-                <div class="form-field"><label>Pc Price CQA (${editCur})</label>${ef('editPnPcPriceCQA_'+i, p.pcPriceCQA ?? '')}</div>
-                <div class="form-field"><label>Supplier Price, landed (${editCur})</label>${ef('editPnSupplierPriceLanded_'+i, p.supplierPriceLanded ?? '')}</div>
-                <div class="form-field"><label>Tooling CQA (${editCur})</label>${ef('editPnToolingCQA_'+i, p.toolingCQA ?? '')}</div>
-                <div class="form-field"><label>Supplier Tooling Cost (${editCur})</label>${ef('editPnSupplierToolingCost_'+i, p.supplierToolingCost ?? '')}</div>
-                <div class="form-field"><label>Average yearly volume (pcs)</label>${ef('editPnAvgVolume_'+i, p.averageVolume ?? '')}</div>
-                <div class="form-field"><label>Lifetime volume (pcs)</label>${ef('editPnLtVolume_'+i, p.lifetimeVolume ?? '')}</div>
-              </div>
-            </div>
-          `).join('')}
-          ${projectDatalist('editProjectOptions')}
-          <button class="btn-secondary" id="addPnLineBtn">+ Add Another Part Number</button>
-          <div class="form-grid" style="margin-top:12px;">
-            <div class="form-field"><label>Bundle Peak Year Spend (${editCur})${fieldTip('One total for all part numbers of this case.')}</label>${ef('editBundlePeak', b.peakYearSpend)}</div>
-            <div class="form-field"><label>Bundle Lifetime Spend (${editCur})${fieldTip('One total for all part numbers of this case.')}</label>${ef('editBundleLife', b.lifetimeSpend)}</div>
-          </div>
-          ${isConverted(c) ? `<div class="fx-hint">Enter amounts in ${esc(editCur)}. They are saved in EUR at ${esc(fxLabel(c.fx))} — ${esc(fxOrigin(c.fx))}.</div>` : ''}
-        ` : `
           ${partNumberLines(c).length>1 ? `
           <div style="overflow-x:auto;margin-bottom:10px;-webkit-overflow-scrolling:touch;">
             <table class="data-table">
@@ -3202,8 +3557,8 @@ function renderDetail(){
             ${isConverted(c) ? infoItem('Exchange Rate', fxLabel(c.fx)) : ''}
           </div>
           `}
-        `}
       </div>
+      `}
 
       <div class="card section-card">
         <h3>Case Information${editing ? infoTip('Project, Sourcing Type and Recommended Supplier are edited per part number above.') : ''}</h3>
@@ -3856,6 +4211,8 @@ function wireEvents(){
         // 件价 / 模具费按录入币种编辑（外币折算来的用原币值）；服务端按案例记录的汇率重新折算
         ROW_MONEY_KEYS.forEach(k=>{ const v = isConverted(c) && p[k+'Entered']!==undefined && p[k+'Entered']!==null ? p[k+'Entered'] : p[k]; row[k] = (v===undefined||v===null) ? null : v; });
         ROW_INT_KEYS.forEach(k=>{ row[k] = (p[k]===undefined||p[k]===null) ? null : p[k]; });
+        // v3 Phase-30：原有数字记为已确认写法 —— 没改过的 1.125 不会被当成"可能是千分位"拦下
+        row._ok = Object.fromEntries([...ROW_MONEY_KEYS, ...ROW_INT_KEYS].filter(k=>row[k]!==null).map(k=>[k, String(row[k])]));
         return row;
       }),
       // bundle 金额按录入币种编辑（外币折算来的用原币值）；服务端按案例记录的汇率重新折算
@@ -3907,15 +4264,9 @@ function wireEvents(){
       else if(COMMERCIAL_INT_KEYS.includes(key)) b[key] = t==='' ? null : Number(t);
       else b[key] = t;
     });
-    b.partNumbers.forEach((p,i)=>{
-      const pn = val('editPnNumber_'+i); if(pn!==undefined) p.partNumber=pn;
-      const pd = val('editPnDesc_'+i); if(pd!==undefined) p.partDescription=pd;
-      const pj = val('editPnProject_'+i); if(pj!==undefined) p.project=pj.trim();
-      const st = val('editPnSourcingType_'+i); if(st!==undefined) p.sourcingType=st;
-      const sp = val('editPnSupplier_'+i); if(sp!==undefined) p.recommendedSupplier=sp.trim();
-      const rowIds = {pcPriceCQA:'editPnPcPriceCQA_', supplierPriceLanded:'editPnSupplierPriceLanded_', toolingCQA:'editPnToolingCQA_', supplierToolingCost:'editPnSupplierToolingCost_', averageVolume:'editPnAvgVolume_', lifetimeVolume:'editPnLtVolume_'};
-      Object.entries(rowIds).forEach(([key,prefix])=>{ const v = val(prefix+i); if(v===undefined) return; const t = v.trim(); p[key] = t==='' ? null : (ROW_INT_KEYS.includes(key) ? Number(t) : t); });
-    });
+    // v3 Phase-30：零件行存原样文字和已确认写法，重绘后表格照原样恢复；数字在保存时才读
+    const pnGrid = document.querySelector('[data-pn-grid="edit"]');
+    if(pnGrid) b.partNumbers = pnGridDomRows(pnGrid);
     b.followUps.forEach((t,i)=>{
       const task = val('editFuTask_'+i); if(task!==undefined) t.task=task;
       const tagsText = val('editFuTags_'+i); if(tagsText!==undefined) t.tags = splitTags(tagsText);
@@ -3930,21 +4281,7 @@ function wireEvents(){
       const ch = val('editFuChannel_'+i); if(ch!==undefined) t.channel=ch;
     });
   }
-  const addPnLineBtn = document.getElementById('addPnLineBtn');
-  if(addPnLineBtn) addPnLineBtn.onclick = ()=>{
-    syncEditBufferFromDom();
-    const last = state.editBuffer.partNumbers[state.editBuffer.partNumbers.length-1] || {};
-    state.editBuffer.partNumbers.push({partNumber:'', partDescription:'', project:last.project||'', sourcingType:last.sourcingType||'New', recommendedSupplier:last.recommendedSupplier||'',
-      pcPriceCQA:null, supplierPriceLanded:null, toolingCQA:null, supplierToolingCost:null, averageVolume:null, lifetimeVolume:null});
-    render();
-  };
-  document.querySelectorAll('[data-remove-pnl]').forEach(el=>{
-    el.onclick = ()=>{
-      syncEditBufferFromDom();
-      state.editBuffer.partNumbers.splice(Number(el.dataset.removePnl), 1);
-      render();
-    };
-  });
+  wirePnGrid(document.querySelector('[data-pn-grid="edit"]'));
   document.querySelectorAll('[id^="editFuTask_"], [id^="editFuTags_"], [id^="editFuNotes_"]').forEach(el=>{
     el.addEventListener('input', ()=>{
       const i = el.id.split('_')[1], g = id => (document.getElementById(id)||{}).value||'';
@@ -4019,11 +4356,13 @@ function wireEvents(){
     const idx = Math.min(state.selectedEntryIndex, hist.length-1);
     const c = hist[idx];
     const b = state.editBuffer;
+    const pnGrid = document.querySelector('[data-pn-grid="edit"]');
+    const pnRead = pnGrid ? checkPnGrid(pnGrid) : {rows: b.partNumbers.map(({_ok, ...row})=>row), errors: []};
     const isUrl = isHttpUrl;
     b.finalDocLink = (b.finalDocLink||'').trim();
     b.sourcingPresentationLink = (b.sourcingPresentationLink||'').trim();
     // v3 Phase-19：全部问题一次列出；案例上已有演示文件（上传或从服务器挂接）即满足规则 1
-    const problems = [];
+    const problems = [...pnRead.errors];
     const hasFiles = !!(c.files && c.files.length);
     // Rule 1: recording a Sourcing Decision (anything other than Pending) requires the Sourcing Presentation (link or file).
     // A newly registered case sits at Pending and is exempt until an admin records a decision.
@@ -4043,7 +4382,7 @@ function wireEvents(){
     // Server is the authority: it re-runs the same three rules, merges, recomputes rollups and persists.
     saveCaseBtn.disabled = true; // 防双击（两条路径随后都会 render 重建按钮，无需手工恢复）
     try{
-      const resp = await API.put('/api/cases/'+encodeURIComponent(c.id), b);
+      const resp = await API.put('/api/cases/'+encodeURIComponent(c.id), {...b, partNumbers: pnRead.rows});
       applySnapshot(resp.snapshot);
       // 改了周以后这条记录在时间线里的位置可能变了：跟着它走
       const newHist = historyFor(state.selectedSwatId), pos = newHist.findIndex(x=>x.id===c.id);
@@ -4065,18 +4404,10 @@ function wireEvents(){
   // Submit Case
   const submitBtn = document.getElementById('submitCaseBtn');
 
-  // Part Numbers (repeatable rows) — appended/removed via direct DOM ops so other
-  // typed fields on the form are never lost the way a full re-render would lose them.
+  // Part Numbers 表格（v3 Phase-30）—— 行的增删都在表格里直接改 DOM，表单上其他已填内容不受影响
   if(document.getElementById('partNumbersContainer')){
-    if(state.pnRowCounter===undefined) state.pnRowCounter = 0;
-    function wirePnRow(i){
-      const removeBtn = document.querySelector(`[data-remove-pn="${i}"]`);
-      if(removeBtn) removeBtn.onclick = ()=>{
-        const row = document.querySelector(`[data-pn-row="${i}"]`);
-        if(row) row.remove();
-        recomputePnTotals();
-      };
-    }
+    const pnGrid = document.querySelector('[data-pn-grid="submit"]');
+    wirePnGrid(pnGrid);
     // v3 Phase-15：金额按整个 bundle 填一个（案例级），这里只做欧元预览与 BPG 提示
     function recomputePnTotals(){
       const cur = submitCurrency(), rate = fxRate(cur);
@@ -4099,20 +4430,16 @@ function wireEvents(){
         bpgHint.classList.toggle('missing', over);
       }
     }
-    wirePnRow(0);
     ['fBundlePeak','fBundleLife'].forEach(id=>{ const el = document.getElementById(id); if(el) el.oninput = recomputePnTotals; });
     const currencyEl = document.getElementById('fCurrency');
     if(currencyEl) currencyEl.onchange = ()=>{
       const cur = submitCurrency(), hint = fxHintText(cur), el = document.getElementById('fxHint');
       if(el){ el.textContent = hint.text; el.classList.toggle('missing', hint.missing); }
       document.querySelectorAll('.cur-label').forEach(span=>{ span.textContent = cur; });
+      // 换币种后，格子里写着别的货币的值要重新判断
+      pnGrid.querySelectorAll('.pn-cell').forEach(cell=>validatePnCell(pnGrid, cell));
+      refreshPnGrid(pnGrid);
       recomputePnTotals();
-    };
-    const addPnBtn = document.getElementById('addPartNumberBtn');
-    if(addPnBtn) addPnBtn.onclick = ()=>{
-      state.pnRowCounter++;
-      document.getElementById('partNumbersContainer').insertAdjacentHTML('beforeend', partNumberRowHtml(state.pnRowCounter));
-      wirePnRow(state.pnRowCounter);
     };
   }
 
@@ -4176,24 +4503,17 @@ function wireEvents(){
       banner.scrollIntoView({block:'nearest'});
     };
     const name = val('fSubmitter'), email = val('fSubmitterEmail');
-    const rowVal = (row, f)=>((row.querySelector(`[data-pn-field="${f}"]`)||{}).value||'').trim();
-    const rowStr = (row, f)=>{ const v = rowVal(row, f); return v==='' ? null : v; };
-    const rowInt = (row, f)=>{ const v = rowVal(row, f); return v==='' ? null : Number(v); };
-    const pnRows = [...document.querySelectorAll('.pn-row')].map(row=>({
-      partNumber: rowVal(row,'partNumber'),
-      partDescription: rowVal(row,'partDescription'),
-      // v3 Phase-15：项目 / 寻源类型 / 推荐供应商按零件行
-      project: rowVal(row,'project'), sourcingType: rowVal(row,'sourcingType'), recommendedSupplier: rowVal(row,'recommendedSupplier'),
-      // 件价 / 模具费按零件行（字符串，服务端按 Decimal 折算）；产量整数，留空为 null
-      pcPriceCQA: rowStr(row,'pcPriceCQA'), supplierPriceLanded: rowStr(row,'supplierPriceLanded'),
-      toolingCQA: rowStr(row,'toolingCQA'), supplierToolingCost: rowStr(row,'supplierToolingCost'),
-      averageVolume: rowInt(row,'averageVolume'), lifetimeVolume: rowInt(row,'lifetimeVolume'),
-    }));
+    // v3 Phase-30：零件行从表格读（件价 / 模具费为字符串，服务端按 Decimal 折算；产量整数；留空为 null），缺项与读不准的格子标红
+    const pnGrid = checkPnGrid(document.querySelector('[data-pn-grid="submit"]'), {required:true});
+    const pnRows = pnGrid.rows;
+    const inRows = list=> list.length ? ` Missing in row${list.length>1?'s':''} ${list.join(', ')} (marked red).` : '';
     const problems = [];
     const need = msg => problems.push(msg);
     if(!name || !email) need('⚠ Please fill in Name and Email before submitting.');
-    if(pnRows.length===0 || pnRows.some(r=>!r.partNumber || !r.partDescription)) need('⚠ Please fill in Part Number and Part Description for every part number row before submitting.');
-    if(pnRows.some(r=>!r.project || !r.sourcingType || !r.recommendedSupplier)) need('⚠ Please fill in Project, Sourcing Type and Recommended Supplier for every part number row before submitting.');
+    const missPn = pnGrid.emptyRows(['partNumber','partDescription']), missRow = pnGrid.emptyRows(ROW_BUNDLE_KEYS);
+    if(pnRows.length===0 || missPn.length) need('⚠ Please fill in Part Number and Part Description for every part number row before submitting.'+inRows(missPn));
+    if(missRow.length) need('⚠ Please fill in Project, Sourcing Type and Recommended Supplier for every part number row before submitting.'+inRows(missRow));
+    pnGrid.errors.forEach(m=>need('⚠ '+m));
     if(!checkedRegions('fRegionIn').length) need('⚠ Please select at least one Region before submitting.');
     const currency = submitCurrency();
     const rateOk = !!fxRate(currency);
@@ -4219,7 +4539,8 @@ function wireEvents(){
     }
     // 商务字段（反馈 PPT 第 2、3 页）：文案与服务端 logic.commercial_problems 一致
     const numOrNull = id => { const v = val(id).trim(); return v==='' ? null : v; };
-    if(pnRows.some(r=>ROW_MONEY_KEYS.some(k=>r[k]===null))) need('⚠ Please fill in Pc Price CQA, Supplier Price (landed), Tooling CQA and Supplier Tooling Cost for every part number row before submitting (enter 0 if not applicable).');
+    const missMoney = pnGrid.emptyRows(ROW_MONEY_KEYS);
+    if(missMoney.length) need('⚠ Please fill in Pc Price CQA, Supplier Price (landed), Tooling CQA and Supplier Tooling Cost for every part number row before submitting (enter 0 if not applicable).'+inRows(missMoney));
     if(!val('fToolingPayment')) need('⚠ Please select the Tooling Payment (Lumpsum, MPC or No tooling involved) before submitting.');
     const lifetimeEur = rateOk ? eurPreview(bundleLife, currency) : 0;
     if(lifetimeEur > BPG_THRESHOLD_EUR){
