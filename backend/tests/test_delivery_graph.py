@@ -1,5 +1,7 @@
 """Graph 外发：邮件 sendMail 兜底与通道优先级、Teams webhook Bearer —— HTTP 全替身。"""
 
+import pytest
+
 from app import delivery, graph
 from app.config import get_settings
 
@@ -92,7 +94,7 @@ async def test_graph_send_mail_payload_and_recipient_cleanup(monkeypatch):
     msg = kwargs["json"]["message"]
     assert [r["emailAddress"]["address"] for r in msg["toRecipients"]] == ["a@zf.com", "b@zf.com"]
     assert [r["emailAddress"]["address"] for r in msg["ccRecipients"]] == ["c@zf.com"]
-    assert msg["body"] == {"contentType": "Text", "content": "Body"}
+    assert msg["body"] == {"contentType": "HTML", "content": "Body"}
     assert kwargs["json"]["saveToSentItems"] is False
     assert kwargs["headers"]["Authorization"] == "Bearer fake-token"
 
@@ -173,3 +175,35 @@ async def test_graph_channel_message_errors_carry_hints(monkeypatch):
 
 async def test_teams_all_unconfigured_returns_skipped(monkeypatch):
     assert await delivery.deliver_teams({"swatId": "SWAT-1", "message": "x"}) == "skipped"
+
+
+# ---------- v3 Phase-32：正文里的网址可直接点击 ----------
+
+@pytest.mark.parametrize("text,expected", [
+    ("Open Action Case: http://10.13.100.10:8031/#case/110000034978",
+     'Open Action Case: <a href="http://10.13.100.10:8031/#case/110000034978">http://10.13.100.10:8031/#case/110000034978</a>'),
+    # 句末标点不算进网址；百分号编码的案例号原样保留
+    ("See http://cockpit/#case/B%2F2026%2F00078.", 'See <a href="http://cockpit/#case/B%2F2026%2F00078">http://cockpit/#case/B%2F2026%2F00078</a>.'),
+    ("(https://zf.sharepoint.com/a?x=1&y=2)", '(<a href="https://zf.sharepoint.com/a?x=1&amp;y=2">https://zf.sharepoint.com/a?x=1&amp;y=2</a>)'),
+    # 不是 http / https 的不变成链接；其余文字照常转义，换行变 <br>
+    ("javascript:alert(1)\n<b>x</b>", "javascript:alert(1)<br>&lt;b&gt;x&lt;/b&gt;"),
+    ('http://a/"onmouseover=x', '<a href="http://a/">http://a/</a>"onmouseover=x'),
+])
+def test_text_to_html_links_urls_and_escapes_the_rest(text, expected):
+    assert delivery.text_to_html(text) == expected
+
+
+async def test_smtp_mail_carries_a_clickable_html_part(monkeypatch):
+    monkeypatch.setattr(get_settings(), "smtp_host", "smtp.example.com")
+    sent = []
+
+    async def fake_send(message, **kwargs):
+        sent.append(message)
+        return {}, "ok"
+
+    import aiosmtplib
+    monkeypatch.setattr(aiosmtplib, "send", fake_send)
+    assert await delivery.send_email("a@zf.com", "S", "Open Action Case: http://cockpit/#case/SWAT-1") == "sent"
+    msg = sent[0]
+    assert msg.get_body(("plain",)).get_content().strip() == "Open Action Case: http://cockpit/#case/SWAT-1"
+    assert '<a href="http://cockpit/#case/SWAT-1">' in msg.get_body(("html",)).get_content()

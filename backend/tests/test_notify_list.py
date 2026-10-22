@@ -82,7 +82,7 @@ async def test_email_is_written_to_the_notification_list(monkeypatch, notify):
         "Title": "Follow-up Task for Sourcing Case SWAT-1", "channel": "email",
         "to": "a@zf.com; b@zf.com", "cc": "c@zf.com",  # Outlook 连接器用分号分隔
         "subject": "Follow-up Task for Sourcing Case SWAT-1",
-        "html": "Follow-up Task: &lt;check&gt; cost &amp; capa<br>Open Action Case: http://cockpit/#case/SWAT-1",
+        "html": 'Follow-up Task: &lt;check&gt; cost &amp; capa<br>Open Action Case: <a href="http://cockpit/#case/SWAT-1">http://cockpit/#case/SWAT-1</a>',
     }
 
 

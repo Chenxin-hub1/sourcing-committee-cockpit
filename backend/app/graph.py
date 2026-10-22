@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import asyncio
-import html
 import logging
 import time
 from urllib.parse import quote, urlsplit
@@ -354,7 +353,7 @@ async def send_mail(to: str, subject: str, body: str, cc: str = "") -> str:
     s = get_settings()
     if not s.graph_sender:
         return "skipped"
-    from .delivery import clean_addresses  # 函数内导入：delivery 顶层依赖本模块，顶层互导会循环
+    from .delivery import clean_addresses, text_to_html  # 函数内导入：delivery 顶层依赖本模块，顶层互导会循环
 
     to_list = [a for a in clean_addresses(to).split(", ") if a]
     cc_list = [a for a in clean_addresses(cc).split(", ") if a]
@@ -362,7 +361,7 @@ async def send_mail(to: str, subject: str, body: str, cc: str = "") -> str:
         return "failed: no valid recipient address"
     message: dict = {
         "subject": subject,
-        "body": {"contentType": "Text", "content": body},
+        "body": {"contentType": "HTML", "content": text_to_html(body)},  # v3 Phase-32：链接可点
         "toRecipients": [{"emailAddress": {"address": a}} for a in to_list],
     }
     if cc_list:
@@ -397,15 +396,17 @@ async def send_channel_message(text: str) -> str:
 
     已知边界（用户知情取舍，见 DEPLOY.md）：微软将应用权限直发频道消息定位为迁移场景，
     未来可能按量计费；webhook 路径保留为兜底，清空两个 ID 配置即切换。
-    纯文本按 HTML 投递：转义 + 换行转 <br>，Teams 的 text 模式对换行渲染不稳定。
+    纯文本按 HTML 投递（delivery.text_to_html：转义、网址变链接、换行转 <br>），Teams 的 text 模式对换行渲染不稳定。
     """
+    from .delivery import text_to_html  # 函数内导入：避免与 delivery 顶层互导
+
     s = get_settings()
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             resp = await client.post(
                 f"{GRAPH}/teams/{quote(s.teams_graph_team_id)}/channels/{quote(s.teams_graph_channel_id)}/messages",
                 json={"body": {"contentType": "html",
-                               "content": html.escape(text).replace("\n", "<br>")}},
+                               "content": text_to_html(text)}},
                 headers={"Authorization": f"Bearer {await _token(client)}"},
             )
             if resp.status_code == 403:

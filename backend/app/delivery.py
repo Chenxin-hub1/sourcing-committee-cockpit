@@ -22,6 +22,21 @@ log = logging.getLogger("cockpit.delivery")
 
 _ADDR_SPLIT_RE = re.compile(r"[;,]")
 _ADDR_UNSAFE_RE = re.compile(r"[\r\n]")
+# v3 Phase-32：正文里的网址变成可点击链接；只认 http / https，句末的标点不算进网址
+_URL_RE = re.compile(r"https?://[^\s<>\"']+")
+_URL_TRAILING = ".,;:!?)]"
+
+
+def text_to_html(text: str) -> str:
+    """纯文字正文 → HTML：转义、网址包成 <a>（Outlook 不会把内网 IP 地址自动变成链接）、换行变 <br>。"""
+    parts, last = [], 0
+    for m in _URL_RE.finditer(text):
+        url = m.group().rstrip(_URL_TRAILING)
+        parts.append(html.escape(text[last:m.start()], quote=False))
+        parts.append(f'<a href="{html.escape(url, quote=True)}">{html.escape(url, quote=False)}</a>')
+        last = m.start() + len(url)
+    parts.append(html.escape(text[last:], quote=False))
+    return "".join(parts).replace("\n", "<br>")
 
 
 def clean_addresses(value: str) -> str:
@@ -53,14 +68,14 @@ async def send_email(to: str, subject: str, body: str, cc: str = "") -> str:
 
 
 async def _queue(channel: str, to: str, subject: str, text: str, cc: str = "") -> str:
-    """交给通知列表：收件人用分号分隔（Outlook 连接器的写法），正文转义后换行变 <br>
-    （Outlook 的 Body 与 Teams 消息都是 HTML）。流按 channel 分支发邮件或 Teams。"""
+    """交给通知列表：收件人用分号分隔（Outlook 连接器的写法），正文转成 HTML（见 text_to_html；
+    Outlook 的 Body 与 Teams 消息都是 HTML）。流按 channel 分支发邮件或 Teams。"""
     to = clean_addresses(to).replace(", ", "; ")
     if not to:
         return "failed: no valid recipient address"
     return await graph.queue_notification(channel, to, clean_addresses(cc).replace(", ", "; "),
                                           _ADDR_UNSAFE_RE.sub(" ", subject),
-                                          html.escape(text, quote=False).replace("\n", "<br>"))
+                                          text_to_html(text))
 
 
 async def _send_via_smtp(to: str, subject: str, body: str, cc: str = "") -> str:
@@ -80,6 +95,7 @@ async def _send_via_smtp(to: str, subject: str, body: str, cc: str = "") -> str:
             m["Cc"] = cc
         m["Subject"] = subject
         m.set_content(body)
+        m.add_alternative(text_to_html(body), subtype="html")  # v3 Phase-32：HTML 版里链接可点，纯文字版留作兜底
         refused, _ = await aiosmtplib.send(
             m,
             hostname=s.smtp_host, port=s.smtp_port,
