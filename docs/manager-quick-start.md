@@ -21,6 +21,7 @@ Password rules (admins only): at least 6 characters, not your email address, at 
 | View cases, download files, export Excel | ✓ | ✓ | ✓ |
 | Submit a case registration | ✓ | ✓ | ✓ |
 | Report progress on a follow-up (with attachment) | ✓ | ✓ | ✓ |
+| Edit the Case Comments (background) of a case | own cases | ✓ | ✓ |
 | Confirm / return registrations (Approval page) | | ✓ | ✓ |
 | Edit cases, record decisions and follow-ups | | ✓ | ✓ |
 | Send reminders, approve / reject follow-up feedback | | ✓ | ✓ |
@@ -82,4 +83,5 @@ Viewing does not require login. Submitting does.
 - Uploaded files are renamed automatically to `YYYY.MM.DD Project Part-description PN, Supplier.ext`; the original name is still shown ("uploaded as …").
 - Amounts are stored in EUR. USD / CNY entries are converted with the OP rate maintained by the Sourcing admin on the Dashboard; the entered amount stays visible.
 - Week numbers are ISO calendar weeks (KW).
+- **Case Comments** on the case page hold the background for the committee (e.g. "No tooling budget available. CO current supplier Getac."), apart from the Sourcing Decision and the Committee Discussion. The person who registered the case, Managers and the Sourcing admin can edit them at any time with "Edit comments"; they are saved on their own, not with Edit Case.
 - **Import weekly committee Excel** (Home page, Sourcing admin only): drop the week's Agenda or Meeting Minutes files, or pick a stored historical file from the "Stored weekly files" dropdown ("Add all not yet imported" loads the whole 2025–2026 history in one go), tick the ones to import, press Import. The meeting date comes from the file name (KW39 23.09.2026); a file without a date asks for it. Importing the same week again replaces what was imported before. Imported cases show "Imported from …" and the original decision wording on the case page.

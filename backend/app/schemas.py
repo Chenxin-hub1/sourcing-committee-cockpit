@@ -297,6 +297,12 @@ class FeedbackIn(In):
     text: LongText = ""
 
 
+class CaseCommentsIn(In):
+    """v3 Phase-31：Case Comments（背景说明）单独保存。"""
+
+    comments: LongText = ""
+
+
 class ActionItemsIn(In):
     """v3 Phase-23：从纪要文字列出待办草稿（不写库）；会议日期用来推算没写年份的 KW。"""
 

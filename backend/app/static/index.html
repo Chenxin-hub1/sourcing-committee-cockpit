@@ -1148,6 +1148,7 @@ const state = {
   pendingDeleteId:null,  // SWAT ID awaiting delete confirmation
   remindOpenId:null,     // follow-up task id whose reminder panel is open
   followupEditId:null,   // v3 Phase-29: follow-up being edited in place on the tracker
+  commentsEditId:null,   // v3 Phase-31: case row whose Case Comments are being edited
   feedbackRowId:null,    // v3 Phase-14: follow-up whose feedback row is expanded on the tracker
   feedbackOpenId:null,   // follow-up whose "report progress" form is open
   decisionOpenId:null,   // feedback entry whose approve / reject panel is open
@@ -2084,7 +2085,7 @@ function caseAttachmentCount(swat){
 }
 function goToView(view){
   const changed = state.view!==view;
-  state.view=view; state.dashFilter=null; state.pendingDeleteId=null; state.feedbackOpenId=null; state.decisionOpenId=null;
+  state.view=view; state.dashFilter=null; state.pendingDeleteId=null; state.feedbackOpenId=null; state.decisionOpenId=null; state.commentsEditId=null;
   try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
   render();
   if(changed) window.scrollTo(0,0);
@@ -3239,7 +3240,7 @@ function renderSubmit(){
         </div>` : ''}
       </div>
 
-      <div class="form-field span2"><label>Case Comments (optional)</label><textarea id="fDiscussionIn" placeholder="Anything the approver or committee should know..."></textarea></div>
+      <div class="form-field span2"><label>Case Comments (optional)</label><textarea id="fDiscussionIn" placeholder="Background for the committee, e.g. no tooling budget available, current supplier — you can still edit this on the case page later"></textarea></div>
     </div>
 
     <div class="screening-section">
@@ -3457,6 +3458,66 @@ function renderApprovals(){
 }
 
 
+// v3 Phase-31：Case Comments（背景说明）单独一块；提交人本人或经理 / 管理员可改，单独保存（服务端同样把关）
+// 普通用户能不能改要问服务端（它去查登记单）：页面拿不到、也不保存提交人邮箱。结果按"账号 + 案例行"记在内存里
+const commentAccess = {};  // 'email|rowId' → true / false；没有这个键 = 还没问
+function canEditCaseComments(c){
+  if(!state.user || state.user.mustChangePassword) return false;
+  if(state.isAdmin) return true;
+  const key = state.user.email+'|'+c.id;
+  if(!(key in commentAccess)) loadCommentAccess(c.id, key);
+  return commentAccess[key]===true;
+}
+async function loadCommentAccess(rowId, key){
+  commentAccess[key] = false;  // 先占位，避免重复请求；问到之前不显示按钮
+  try{ commentAccess[key] = !!(await API.get(`/api/cases/${encodeURIComponent(rowId)}/comments/access`)).canEdit; }
+  catch(e){ delete commentAccess[key]; return; }  // 网络失败：下次画页面时再问
+  // 只换掉这张卡片，不重画整页，页面上别处正在输入的内容不受影响
+  const card = document.getElementById('caseCommentsCard'), c = ALL_CASES.find(x=>x.id===rowId);
+  if(commentAccess[key] && card && card.dataset.row===rowId && c){ card.outerHTML = caseCommentsCardHtml(c); wireCaseComments(); }
+}
+// v3 Phase-31：Case Comments 单独保存；Edit Case 打开时先收起未保存的编辑内容，重画不丢
+// keepEdits：页面接线时传入（Edit Case 打开时把未保存的内容收进 editBuffer）；只换卡片时普通用户不会在编辑页，空操作即可
+function wireCaseComments(keepEdits = ()=>{}){
+  const commentsEdit = document.getElementById('caseCommentsEdit');
+  if(commentsEdit) commentsEdit.onclick = ()=>{
+    const hist = historyFor(state.selectedSwatId);
+    state.commentsEditId = hist[Math.min(state.selectedEntryIndex, hist.length-1)].id;
+    keepEdits(); render();
+    document.getElementById('caseCommentsIn')?.focus();
+  };
+  const commentsCancel = document.getElementById('caseCommentsCancel');
+  if(commentsCancel) commentsCancel.onclick = ()=>{ state.commentsEditId = null; keepEdits(); render(); };
+  const commentsSave = document.getElementById('caseCommentsSave');
+  if(commentsSave) commentsSave.onclick = async ()=>{
+    if(commentsSave.disabled) return;
+    const rowId = state.commentsEditId;
+    commentsSave.disabled = true;
+    try{
+      const resp = await API.put(`/api/cases/${encodeURIComponent(rowId)}/comments`, {comments: document.getElementById('caseCommentsIn').value});
+      applySnapshot(resp.snapshot);
+    }catch(err){ commentsSave.disabled = false; toast('⚠ Comments not saved — '+(err.detail||err.message)); return; }
+    state.commentsEditId = null;
+    keepEdits(); render();
+    toast('✓ Case comments saved.');
+  };
+}
+function caseCommentsCardHtml(c){
+  const edited = c.submitterCommentsEdited;
+  const body = state.commentsEditId===c.id ? `
+    <textarea class="edit-input" id="caseCommentsIn" style="min-height:70px;" placeholder="Background for the committee, e.g. No tooling budget available. CO current supplier Getac.">${esc(c.submitterComments||'')}</textarea>
+    <div class="form-actions" style="margin-top:10px;">
+      <button type="button" class="btn-primary" id="caseCommentsSave">Save comments</button>
+      <button type="button" class="btn-secondary" id="caseCommentsCancel">Cancel</button>
+    </div>` : `
+    ${c.submitterComments ? `<div class="discussion-box">${esc(c.submitterComments)}</div>` : `<div style="color:var(--ink-faint);font-size:12.5px;">No comments yet.</div>`}
+    ${edited ? `<div class="fb-hint" style="margin-top:6px;">Last edited by ${esc(edited.by)} · ${esc(edited.when)}</div>` : ''}
+    ${canEditCaseComments(c) ? `<div class="form-actions" style="margin-top:10px;"><button type="button" class="btn-secondary" id="caseCommentsEdit">${c.submitterComments ? 'Edit comments' : 'Add comments'}</button></div>` : ''}`;
+  return `<div class="card section-card" id="caseCommentsCard" data-row="${escapeAttr(c.id)}">
+        <h3>Case Comments${infoTip('Background for the committee, apart from the Sourcing Decision and the Committee Discussion — e.g. no tooling budget, current supplier. The person who registered the case, a Manager or the Sourcing admin can edit it. Saved on its own, not with Edit Case.')}</h3>
+        ${body}
+      </div>`;
+}
 function renderDetail(){
   const hist = historyFor(state.selectedSwatId);
   if(hist.length===0){ state.view='database'; return renderDatabase(); }
@@ -3644,10 +3705,11 @@ function renderDetail(){
         <div class="fb-hint" id="caseLibHint">${libraryHintHtml()}</div>` : ''}
       </div>
 
+      ${caseCommentsCardHtml(c)}
+
       <div class="card section-card">
         <h3>Committee Discussion</h3>
         ${editing ? eta('editDiscussion', b.committeeDiscussion) : `<div class="discussion-box">${esc(c.committeeDiscussion)}</div>`}
-        ${(!editing && c.submitterComments) ? `<div class="info-item" style="margin-top:10px;"><div class="k">Case Comments (from registration)</div><div class="v" style="font-weight:400;">${esc(c.submitterComments)}</div></div>` : ''}
       </div>
 
       <div class="card section-card" style="margin-bottom:0;">
@@ -3777,6 +3839,7 @@ function goToDetail(swatId){
   state.view='detail';
   state.detailEditMode = false;
   state.editBuffer = null;
+  state.commentsEditId = null;
   render();
   window.scrollTo(0,0);
 }
@@ -3786,7 +3849,7 @@ function clearCaseHash(){
   }
 }
 function canRefresh(){
-  return !state.detailEditMode && !state.remindOpenId && !state.followupEditId && !state.pendingDeleteId && !state.adminLoginOpen && !state.feedbackOpenId && !state.decisionOpenId
+  return !state.detailEditMode && !state.remindOpenId && !state.followupEditId && !state.commentsEditId && !state.pendingDeleteId && !state.adminLoginOpen && !state.feedbackOpenId && !state.decisionOpenId
     && !state.formDirty && !state.uploading && !API.pendingWrites && state.view!=='submit'
     && !document.querySelector('.reject-box.show')
     && !document.activeElement?.matches('input, textarea, select');
@@ -4195,7 +4258,7 @@ function wireEvents(){
   const back = document.getElementById('backToDb');
   if(back) back.onclick = ()=>{ state.view='database'; render(); window.scrollTo(0,0); };
   document.querySelectorAll('.tl-item').forEach(el=>{
-    el.onclick = ()=>{ state.selectedEntryIndex = Number(el.dataset.idx); state.detailEditMode=false; state.editBuffer=null; render(); };
+    el.onclick = ()=>{ state.selectedEntryIndex = Number(el.dataset.idx); state.detailEditMode=false; state.editBuffer=null; state.commentsEditId=null; render(); };
   });
   const editCaseBtn = document.getElementById('editCaseBtn');
   if(editCaseBtn) editCaseBtn.onclick = ()=>{
@@ -4685,6 +4748,8 @@ function wireEvents(){
       };
     });
   }
+
+  wireCaseComments(keepEdits);
 
   // Approvals
   document.querySelectorAll('[data-approve]').forEach(el=>{

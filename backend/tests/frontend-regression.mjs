@@ -1994,6 +1994,67 @@ try{
     await view.context.close();
   });
 
+  // v3 Phase-31：Case Comments 单独一块；提交人本人与经理 / 管理员可改，单独保存，Edit Case 里没保存的内容不丢。
+  // 普通用户能不能改由服务端回答（页面拿不到提交人邮箱），经理 / 管理员不用问
+  await test('Case Comments have their own card that the submitter and managers can edit', async()=>{
+    let seeded = null, sent = null, canEdit = true;
+    const asked = [];
+    const api = async(route,path)=>{
+      if(path==='/api/cases/C-TEST/comments/access'){ asked.push(path); await route.fulfill({json:{canEdit}}); return true; }
+      if(path!=='/api/cases/C-TEST/comments') return false;
+      sent = {method:route.request().method(), body:route.request().postDataJSON()};
+      await route.fulfill({json:{ok:true, snapshot:{...empty, cases:[{...seeded, submitterComments:sent.body.comments,
+        submitterCommentsEdited:{by:'Test owner', when:'Dec 20, 7:00 AM'}}]}}});
+      return true;
+    };
+    const mine = await fixture({user:'user', api});
+    seeded = await seed(mine.page, {committeeDiscussion:'Pending for Sourcing Committee Review'});
+    await mine.page.evaluate(()=>goToDetail('SWAT-TEST'));
+    const card = mine.page.locator('.section-card', {has: mine.page.locator('h3', {hasText:'Case Comments'})});
+    assert.match(await card.innerText(), /No comments yet\./);
+    await mine.page.locator('#caseCommentsEdit').click();  // 服务端答"能"之后按钮才出现
+    await mine.page.locator('#caseCommentsIn').fill('No tooling budget available. CO current supplier Getac.');
+    assert.equal(await mine.page.evaluate(()=>canRefresh()), false);  // 输入中不被每小时刷新冲掉
+    await mine.page.locator('#caseCommentsSave').click();
+    await mine.page.waitForFunction(()=>!document.getElementById('caseCommentsIn'));
+    assert.deepEqual(sent, {method:'PUT', body:{comments:'No tooling budget available. CO current supplier Getac.'}});
+    assert.match(await card.innerText(), /No tooling budget available\. CO current supplier Getac\.\s+Last edited by Test owner · Dec 20, 7:00 AM/);
+    assert.equal(await mine.page.locator('#caseCommentsEdit').innerText(), 'Edit comments');
+    // 会议讨论那一块不受影响
+    assert.match(await mine.page.locator('.section-card', {has: mine.page.locator('h3', {hasText:/^Committee Discussion/})}).innerText(), /Pending for Sourcing Committee Review/);
+    await mine.context.close();
+
+    assert.equal(asked.length, 1);  // 同一账号同一案例只问一次
+
+    // 别人登记的案例：普通用户只能看，没有编辑按钮
+    canEdit = false;
+    const other = await fixture({user:'user', api});
+    await seed(other.page, {submitterComments:'Background'});
+    await other.page.evaluate(()=>goToDetail('SWAT-TEST'));
+    await other.page.waitForFunction(()=>Object.values(commentAccess).includes(false));
+    assert.equal(await other.page.locator('#caseCommentsEdit').count(), 0);
+    assert.match(await other.page.locator('#app').innerText(), /Background/);
+    await other.context.close();
+
+    // 管理员在 Edit Case 打开时改 Case Comments：单独保存，编辑页里没保存的会议讨论还在
+    const admin = await fixture({user:'admin', api});
+    seeded = await seed(admin.page, {submitterComments:'Old'});
+    asked.length = 0;
+    await admin.page.evaluate(()=>goToDetail('SWAT-TEST'));
+    await admin.page.locator('#editCaseBtn').click();
+    await admin.page.locator('#editDiscussion').fill('Typed but not saved');
+    await admin.page.locator('#caseCommentsEdit').click();
+    assert.equal(await admin.page.locator('#caseCommentsIn').inputValue(), 'Old');
+    await admin.page.locator('#caseCommentsIn').fill('New background');
+    await admin.page.locator('#caseCommentsSave').click();
+    await admin.page.waitForFunction(()=>!document.getElementById('caseCommentsIn'));
+    assert.equal(sent.body.comments, 'New background');
+    assert.equal(await admin.page.locator('#editDiscussion').inputValue(), 'Typed but not saved');
+    assert.equal(await admin.page.evaluate(()=>state.detailEditMode), true);
+    assert.deepEqual(asked, []);
+    await admin.context.close();
+  });
+
   console.log(`${passed} frontend regression checks passed.`);
 }finally{
   await browser.close();

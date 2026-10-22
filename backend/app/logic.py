@@ -917,6 +917,18 @@ def confirm_submission(sub: dict, cases: list[dict]) -> dict:
     return case
 
 
+def is_case_submitter(case: dict, submissions: list[dict], email: str) -> bool:
+    """v3 Phase-31：这个案例是不是这个人登记的。
+
+    现查已确认的登记单（同一 SWAT 号、案例创建时间 = 登记提交时间），不在案例上另存提交人（公司不允许多一份个人信息）。
+    Excel 导入的案例没有登记单，永远不是。"""
+    email = (email or "").strip().lower()
+    return bool(email) and any(
+        s.get("status") == "Registration Confirmed" and s.get("approvedSwatId") == case.get("swatId")
+        and s.get("submittedAt") == case.get("createdDate") and (s.get("submitterEmail") or "").strip().lower() == email
+        for s in submissions)
+
+
 def iter_attachments(cases: list[dict], submissions: list[dict]):
     """全部附件记录：案例与登记单的 files，加待办反馈的证据（v3 Phase-14）。登记单确认后同一条记录也在案例上。"""
     for record in (*cases, *submissions):

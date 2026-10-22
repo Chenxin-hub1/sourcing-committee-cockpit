@@ -41,6 +41,7 @@ from .db import SessionLocal
 from .schemas import (
     COMMERCIAL_INPUT_FIELDS,
     ActionItemsIn,
+    CaseCommentsIn,
     CaseEditIn,
     ExportSelectionIn,
     FeedbackDecisionIn,
@@ -668,6 +669,42 @@ async def save_case(row_id: str, b: CaseEditIn, user: Manager) -> dict:
         if moved:  # v3 Phase-21：改走后原周补号
             for c in logic.renumber_weeks(state["cases"], {left}):
                 await service.upsert_case(session, c)
+        await session.commit()
+        return {"ok": True, "case": case, "snapshot": service.snapshot(state)}
+
+
+def _may_edit_comments(case: dict, submissions: list[dict], user: dict | None) -> bool:
+    """v3 Phase-31：NPI 经理及以上，或登记这个案例的本人（现查登记单，见 logic.is_case_submitter）。"""
+    if not user or user.get("mustChangePassword"):
+        return False
+    return (accounts.RANK.get(user.get("role", "user"), 0) >= accounts.RANK["npi_manager"]
+            or logic.is_case_submitter(case, submissions, user["email"]))
+
+
+@app.get("/api/cases/{row_id}/comments/access")
+async def case_comments_access(row_id: str, user: CurrentUser) -> dict:
+    """v3 Phase-31：页面只问"我能不能改"，拿不到别人的邮箱。"""
+    async with SessionLocal() as session:
+        state = await service.load_state(session)
+    case = next((c for c in state["cases"] if c["id"] == row_id), None)
+    if case is None:
+        raise HTTPException(404, f"Case row {row_id} not found.")
+    return {"canEdit": _may_edit_comments(case, state["submissions"], user)}
+
+
+@app.put("/api/cases/{row_id}/comments")
+async def save_case_comments(row_id: str, b: CaseCommentsIn, user: LoggedIn) -> dict:
+    """v3 Phase-31：Case Comments（背景说明）单独保存；登记这个案例的本人，或 NPI 经理及以上。"""
+    async with SessionLocal() as session, _write_lock:
+        state = await service.load_state(session)
+        case = next((c for c in state["cases"] if c["id"] == row_id), None)
+        if case is None:
+            raise HTTPException(404, f"Case row {row_id} not found.")
+        if not _may_edit_comments(case, state["submissions"], user):
+            raise HTTPException(403, "Only the person who registered this case, a Manager or the Sourcing admin can edit its comments.")
+        case["submitterComments"] = b.comments
+        case["submitterCommentsEdited"] = {"when": logic.fmt_when(logic.na_now()), "by": user["name"]}
+        await service.upsert_case(session, case)
         await session.commit()
         return {"ok": True, "case": case, "snapshot": service.snapshot(state)}
 
