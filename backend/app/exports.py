@@ -45,6 +45,8 @@ DECISION_TEXT = {"PENDING": "Pending", "APPROVED": "Approved", "CONDITIONAL APPR
 THEME = {"agenda": "1F4E79", "minutes": "375623"}
 KIND_TITLE = {"agenda": "Sourcing Committee Agenda", "minutes": "Sourcing Committee Meeting Minutes"}
 HEADER_ROW = 4
+# XML 1.0 不接受这些字符；仅导出时清理粘贴进来的控制字符，换行、回车和制表符保留。
+_INVALID_XML_TEXT = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]")
 
 Getter = Callable[[dict, dict], Any]
 Formula = Callable[[dict[str, str], int], str]
@@ -183,6 +185,8 @@ def _style(cell, value: Any, fmt: str | None, *, wrap: bool) -> None:
 
 def _write_text_or_number(ws, r: int, col: int, value: Any, fmt: str | None) -> None:
     cell = ws.cell(row=r, column=col)
+    if isinstance(value, str):
+        value = _INVALID_XML_TEXT.sub("", value)
     cell.value = value
     if isinstance(value, str) and cell.data_type == "f":
         cell.data_type = "s"  # 以 "=" 开头的文本按文本存，Excel 不会当公式执行

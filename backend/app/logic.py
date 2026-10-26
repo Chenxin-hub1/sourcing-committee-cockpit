@@ -195,7 +195,7 @@ def cutoff_moment_label(meeting_date: date, settings: dict) -> str:
 
 def wk(w: int, year: int | None = None) -> str:
     # ISO 周（KW）标签，如 "2026-KW40"。year 缺省随当前日期走（v3 Phase-18：导入了往年历史后，有记录的地方传 meetingYear）
-    return f"{int(year) if year else na_now().year}-KW{w:02d}"
+    return f"{int(year) if year else na_now().isocalendar().year}-KW{w:02d}"
 
 
 def case_year(record: dict) -> int | None:
@@ -884,7 +884,8 @@ def confirm_submission(sub: dict, cases: list[dict]) -> dict:
     w = sub.get("meetingWeekNum") or (max(c["weekNum"] for c in cases) if cases else 1)
     part_numbers = sub.get("partNumbers")
     meeting_date = sub.get("meetingDateISO") or ""
-    meeting_year = int(meeting_date[:4]) if _days_until_due(today_iso(), meeting_date) is not None else None
+    meeting_year = (date.fromisoformat(meeting_date).isocalendar().year
+                    if _days_until_due(today_iso(), meeting_date) is not None else None)
     # v3 Phase-21：按"年份 + 周"编号（之前只看周号，2026-KW42 接着 2025-KW42 的历史从 4 号排起）
     same_week = [int(c.get("caseNumber") or 0) for c in cases if int(c.get("weekNum") or 0) == w
                  and (meeting_year is None or case_year(c) == meeting_year)]

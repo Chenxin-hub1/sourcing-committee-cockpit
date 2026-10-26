@@ -2343,7 +2343,7 @@ function renderDatabase(){
     <div class="resultcount">${rows.length} case${rows.length!==1?'s':''}</div>
   </div>
 
-  <div class="card" style="overflow-x:auto;">
+  <div class="card" id="databaseResults" style="overflow-x:auto;">
     ${rows.length===0 ? emptyState() : `
     <table class="data-table">
       <thead><tr>
@@ -3497,6 +3497,8 @@ function wireCaseComments(keepEdits = ()=>{}){
       const resp = await API.put(`/api/cases/${encodeURIComponent(rowId)}/comments`, {comments: document.getElementById('caseCommentsIn').value});
       applySnapshot(resp.snapshot);
     }catch(err){ commentsSave.disabled = false; toast('⚠ Comments not saved — '+(err.detail||err.message)); return; }
+    // 保存途中已切到别处：更新数据即可，不能重画并清掉新页面正在填写的草稿。
+    if(!commentsSave.isConnected){ toast('✓ Case comments saved.'); return; }
     state.commentsEditId = null;
     keepEdits(); render();
     toast('✓ Case comments saved.');
@@ -3800,6 +3802,7 @@ function render(){
   if(state.view!=='detail'){
     state.detailEditMode = false;
     state.editBuffer = null;
+    state.commentsEditId = null;
     clearCaseHash();
   }
   const viewKey = state.view==='detail' ? 'detail:'+state.selectedSwatId : state.view;
@@ -4368,13 +4371,19 @@ function wireEvents(){
     extractTasksBtn.disabled = true;
     try{
       const resp = await API.post('/api/action-items/extract', {text: b.committeeDiscussion||'', meetingDateISO});
+      if(state.editBuffer!==b) return;  // 已离开或重新打开编辑器：旧响应不能重画当前页面。
+      syncEditBufferFromDom();  // 等待识别期间仍可继续输入，先保留最新内容。
       const existing = new Set(b.followUps.map(t=>(t.task||'').trim()));
       // 任务文字带上纪要里的编号（"6a. …"），和会议纪要对得上；已在列表里的默认不勾
       state.actionDrafts = {buffer:b, items: resp.items.map(i=>{
         const task = `${i.ref}. ${i.task}`, duplicate = existing.has(task);
         return {...i, task, duplicate, checked:!duplicate};
       })};
-    }catch(err){ state.editError = 'Could not read the action items: '+(err.detail||err.message); }
+    }catch(err){
+      if(state.editBuffer!==b) return;
+      syncEditBufferFromDom();
+      state.editError = 'Could not read the action items: '+(err.detail||err.message);
+    }
     render();
   };
   document.querySelectorAll('[data-draft]').forEach(el=>{
@@ -4795,18 +4804,18 @@ function wireEvents(){
   });
 }
 function refreshDbTableOnly(){
-  // lightweight re-render preserving focus in search box
+  // 只替换查询结果：保留搜索框本身，光标、选区与输入法尚未确认的内容都不受影响。
   const scrollY = window.scrollY;
   const app = document.getElementById('app');
-  const hadFocus = document.activeElement && document.activeElement.id==='dbSearch';
-  app.innerHTML = renderDatabase();
+  const results = document.getElementById('databaseResults');
+  const scrollLeft = results.scrollLeft;
+  const next = document.createElement('template');
+  next.innerHTML = renderDatabase();
+  results.replaceWith(next.content.querySelector('#databaseResults'));
+  app.querySelector('.resultcount').textContent = next.content.querySelector('.resultcount').textContent;
   wireEvents();
-  if(hadFocus){
-    document.getElementById('dbSearch').focus();
-    const v = document.getElementById('dbSearch').value;
-    document.getElementById('dbSearch').value=v;
-    document.getElementById('dbSearch').selectionStart = document.getElementById('dbSearch').selectionEnd = v.length;
-  }
+  wireScrollRegions();
+  document.getElementById('databaseResults').scrollLeft = scrollLeft;
   window.scrollTo(0,scrollY);
 }
 

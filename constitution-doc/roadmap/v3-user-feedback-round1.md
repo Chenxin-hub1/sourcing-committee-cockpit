@@ -281,3 +281,15 @@ Status: `awaiting-acceptance`
 Description: 领导 2026-10-22 反馈（截图）："Open Action Case: http://10.13.100.10:8031/#case/110000034978 — Can we show the link which we could click directly?" 现状：通知正文是纯文字转义后换行变 `<br>`，网址没包成超链接，Outlook 不会把内网 IP 地址自动变成链接。用户 2026-10-22 定做。范围：邮件与 Teams 正文里的 http / https 网址都变成可点击的超链接（通知列表 + Power Automate 流这条现用的路，以及 Graph 直发邮件 / 频道消息、SMTP 备用路），文字内容不变；只认 http / https，其余照原样转义。同一张截图的另两条不在本 Phase：发件人显示 "Sourcing Open Action Reminder"（用户 2026-10-22 正在申请公共邮箱，到位后改流）；自动提醒记录 "We can't do anything"（含义待用户向领导确认）。 实现（2026-10-22）：`delivery.text_to_html` 统一把纯文字正文转成 HTML（转义、http / https 网址包成 `<a>`、句末标点不算进网址、换行变 `<br>`）；通知列表、Graph 频道消息共用它，Graph sendMail 正文改为 HTML，SMTP 另附 HTML 版（纯文字版保留）。Power Automate 流不用改。验证：pytest 551（新增 tests/test_delivery_graph.py 6 项：内网地址、句末标点与百分号编码、`&` 转义、非 http 不成链接且其余转义、引号截断、SMTP 带 HTML 版；改了通知列表与 Graph sendMail 两处期望值）、前端回归 49、ruff；2026-10-22 从本机经通知列表 + 流给用户发了一封测试提醒，用户确认 Outlook 里链接可点。服务器 8031 要 pull 新代码后自动提醒里的链接才可点。
 
 Spec: non-spec
+
+## Phase-33: 全项目检查修复（2026-10-23 审计）
+
+Status: `awaiting-acceptance`
+
+Description: 用户 2026-10-23 让另一个工具（Codex）"整体检查一下整个项目有没有需要修复优化的地方"，它修了约 12 类问题、补了测试，检查记录在 `docs/project-audit-2026-10-23.md`；没有提交，只更新了本机 Docker（8000 端口），服务器没动。用户 2026-10-26 定：审查后记成本 Phase 再提交。审查（2026-10-26）：逐行看了代码与文档改动，文档里端口、通知通道顺序等说法与代码一致；36 份历史 Excel 用改动前后两版各解析一遍对比，发现一处回归——金额区间 `1,76 -2,17 M€`（KW12、KW28 同一案例）的连字符被当成负号，Peak Year Spend 从 2,170,000 变成 0 并多一条警告，要修。用户 2026-10-26 定：修这处，并顺手让 Currency 列认 RMB / € / Euro 等写法。
+
+范围（审计改动，详见检查记录）：账号读取、验证与写入放进同一写锁（登录、改密码不再覆盖并发的改名 / 停用 / 重置密码）；登录失败次数在写锁内检查；引导管理员恢复时撤销旧会话；临时密码账号不能给登记单传文件；账号更新显式 `null` 返回 422；确认登记与默认周标签用 ISO 周年（2025-12-31 记为 2026-KW01），文件名里无效周数不再抛异常；Excel 导入负数与非有限数给警告并跳过、裸金额按 Currency 列折算；导出不存在的周返回 422、导出时清掉 XML 不接受的控制字符；Database 搜索只换结果区（光标、输入法、横滚位置保留）；Extract action items 与 Case Comments 保存的慢响应不再冲掉新输入或新页面草稿；注册限流字典清理不活跃来源；测试清空 `SC_NOTIFY_LIST_NAME`；README / DEPLOY / Windows 说明按代码更正（`SC_PORT`、通知通道顺序、WAL 数据库备份）。金额与跨年修复只影响以后的导入与确认，已有记录未重算。
+
+实现（2026-10-26 复核修复）：`excel_import.parse_amount` 先把紧跟在数字后面的连字符（`-` / `−` / `–`）换成区间记号，再把其余的当负号，带单位的区间取紧挨单位的那个数，无单位的 `5-6` 仍读不出、不会并成 56，警告里显示单元格原文；Currency 列按 `UNIT_CURRENCY` 认 RMB / ¥ / € / Euro / $ 等写法。验证：36 份历史 Excel 改动前后逐字段对比完全一致；pytest 611（审计新增 43 项 + 复核新增 17 项：区间写法 4 例、无单位区间 2 例、币种写法 10 例、未知币种 1 例）、前端回归 52、滚动回归 17、ruff 全过。`docs/project-audit-2026-10-23.md` 补了“2026-10-26 复核”一节。
+
+Spec: non-spec

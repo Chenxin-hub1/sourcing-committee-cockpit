@@ -9,7 +9,8 @@ CQA PC PRICE / Rec. Supplier Landed / Average Volume / LT volume / CQA Tooling /
 解析规则（都有单元测试）：
 - 表头行 = 同时含 "PN" 与 "Region" 的那一行；列按去掉空格标点后的前缀匹配，多一列少一列都不报错。
 - 合并单元格先展开：每个格子记住自己是"合并填充"来的还是"自己的值"；案例边界 = '#' 是自己的值的那一行。
-- 金额：取第一个带欧元单位的数（K / Mio / M 倍数），只有 USD / RMB 时按 Dashboard 汇率折算，都没有则记 0 并给警告；
+- 金额：取第一个带欧元单位的数（K / Mio / M 倍数），只有 USD / RMB 时按 Dashboard 汇率折算；裸数沿用 Currency 列（缺省 EUR，
+  也认 RMB / € / Euro / $ 等写法），负数与无法识别的金额跳过并给警告；数字之间的连字符是区间（"1,76 -2,17 M€" 取 2,17 M€），不是负号；
   逗号 / 点号：件价里逗号一律当小数点；总额里 "60,000" 这种 3 位一组当千分位、"1,03 Mio" 当小数。
 - 决议文案按关键词归类（rejected / not approved → REJECTED；condition / with action(s) → CONDITIONAL APPROVAL；
   approved → APPROVED；其余 → PENDING），原文保留在 decisionText。
@@ -49,6 +50,7 @@ COLUMN_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("decisionLevel", ("decisionlevel",)),
     ("peak", ("peakyearspend",)),
     ("lifetime", ("ltspend", "lifetimespend")),
+    ("currency", ("currency",)),
     ("comment", ("comment",)),
     ("decision", ("sourcingdecision",)),
     ("notes", ("notes",)),
@@ -66,11 +68,14 @@ ROW_INT = ("averageVolume", "lifetimeVolume")
 PART_FIELDS = {"pn", "partDescription", "swat", *ROW_MONEY, *ROW_INT}
 
 AMOUNT_RE = re.compile(
-    r"(?P<num>\d[\d.,]*)\s*(?P<mult>mio|mil|m|k|tsd)?\s*(?P<unit>euro|eur|€|usd|\$|rmb|cny|¥)",
+    r"(?P<num>-?\d[\d.,]*)\s*(?P<mult>mio|mil|m|k|tsd)?\s*(?P<unit>euro|eur|€|usd|\$|rmb|cny|¥)",
     re.IGNORECASE,
 )
 NUMBER_RE = re.compile(r"-?\d[\d.,]*")
-BARE_MULTIPLIER_RE = re.compile(r"(?P<num>\d[\d.,]*)(?P<mult>mio|mil|m|k|tsd)", re.IGNORECASE)
+BARE_MULTIPLIER_RE = re.compile(r"(?P<num>-?\d[\d.,]*)(?P<mult>mio|mil|m|k|tsd)", re.IGNORECASE)
+# 紧跟在数字后面的连字符是区间（"1,76 -2,17 M€"），不是负号；其余的 "-" / "−" 才当负号
+RANGE_DASH_RE = re.compile(r"(?<=\d)\s*[-−–]\s*(?=\d)")
+NEGATIVE_SIGN_RE = re.compile(r"[-−]\s*(?=\d)")
 BUNDLE_RE = re.compile(r"B/\d{4}/\d{5}", re.IGNORECASE)
 SWAT_RE = re.compile(r"\b\d{9,12}\b")
 PN_TOKEN_RE = re.compile(r"^[A-Za-z0-9-]{5,16}$")
@@ -97,6 +102,8 @@ def meeting_from_name(name: str) -> tuple[int | None, date | None]:
     kw = None
     if (m := re.search(r"(?<![A-Za-z0-9])(?:KW|WK)\s*(\d{1,2})(?!\d)", stem, re.IGNORECASE)):  # "KW46_SBS" 下划线紧跟也算
         kw = int(m.group(1))
+        if not 1 <= kw <= 53:
+            return kw, None
     day: date | None = None
     # 文件名里日期后面常紧跟下划线（"23.09.2026_SBS"），下划线算单词字符，所以不用 \b 而用前后不是数字来界定
     if (m := re.search(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(20\d{2})(?!\d)", stem)):  # 23.09.2026
@@ -107,18 +114,27 @@ def meeting_from_name(name: str) -> tuple[int | None, date | None]:
         month = _MONTHS.get(m.group(1).lower())
         day = _safe_date(int(m.group(3)), month, int(m.group(2))) if month else None
     if day is None and kw is not None and (m := re.search(r"(?<!\d)(20\d{2})(?!\d)", stem)):
-        day = wednesday_of_iso_week(int(m.group(1)), kw)
+        day = _safe_wednesday(int(m.group(1)), kw)
     if day is not None and kw is None:
         kw = day.isocalendar().week
     if day is not None and kw is not None:
         # 委员会周三开会；文件名里的日期可能是周一或周五的准备日 —— 以 KW 为准取那周的周三（跨年周按离得近的年份）
-        candidates = {wednesday_of_iso_week(y, kw) for y in (day.isocalendar().year, day.year) if 1 <= kw <= 53}
-        day = min(candidates, key=lambda d: abs((d - day).days)) if candidates else day
+        named = day
+        candidates = {d for y in (named.isocalendar().year, named.year) if (d := _safe_wednesday(y, kw)) is not None}
+        day = min(candidates, key=lambda d: abs((d - named).days)) if candidates else None
     return kw, day
 
 
 def wednesday_of_iso_week(year: int, week: int) -> date:
     return date.fromisocalendar(year, week, 3)
+
+
+def _safe_wednesday(year: int, week: int) -> date | None:
+    """第 53 周不是每年都有；文件名无效时留给手填日期，不能拖垮整个文件库列表。"""
+    try:
+        return wednesday_of_iso_week(year, week)
+    except ValueError:
+        return None
 
 
 def _safe_date(y: int, m: int | None, d: int) -> date | None:
@@ -176,13 +192,34 @@ def _to_decimal(num: str, *, price: bool, has_multiplier: bool) -> Decimal | Non
         return None
 
 
-def parse_amount(value: Any, fx_settings: dict | None, *, price: bool = False) -> tuple[Decimal | None, str | None]:
-    """金额格子 → (欧元数, 警告)。数字按欧元；文本找第一个带欧元单位的数，只有外币时按 Dashboard 汇率折算。"""
+def _amount_in_eur(amount: Decimal, currency: str, fx_settings: dict | None, text: str) -> tuple[Decimal | None, str | None]:
+    """导入与表单沿用同一非负金额约束；币种明确后再按 Dashboard 汇率折算。"""
+    if not amount.is_finite():
+        return None, f"cannot read non-finite amount {text[:40]!r}"
+    if amount < 0:
+        return None, f"negative amounts are not allowed: {text[:40]!r}"
+    currency = UNIT_CURRENCY.get(currency.strip().lower(), currency.strip().upper()) or "EUR"  # "RMB"、"€"、"Euro" 等写法
+    if currency == "EUR":
+        return amount, None
+    if currency not in ("USD", "CNY"):
+        return None, f"unsupported currency {currency!r}: {text[:40]!r}"
+    rate = _per_eur(fx_settings, currency)
+    if rate is None:
+        return None, f"{currency} amount but no {currency} rate on the Dashboard: {text[:40]!r}"
+    return (amount / rate).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP), f"{currency} converted at 1 EUR = {rate} {currency}"
+
+
+def parse_amount(value: Any, fx_settings: dict | None, *, price: bool = False,
+                 currency: str = "EUR") -> tuple[Decimal | None, str | None]:
+    """金额格子 → (欧元数, 警告)。裸数按 Currency 列（缺省 EUR）；显式欧元优先，其余外币按 Dashboard 汇率折算。"""
     if value is None or isinstance(value, bool) or _is_blank(value):
         return None, None
     if isinstance(value, (int, float)):
-        return Decimal(str(value)), None
-    text = _clean(value)
+        return _amount_in_eur(Decimal(str(value)), currency, fx_settings, str(value))
+    shown = _clean(value)
+    # 区间的连字符换成 "~"：带单位时取紧挨单位的那个数（与改动前相同），没单位的 "5-6" 仍读不出、不会并成 56；
+    # Excel 复制来的数学负号与负号后空格也要保留负值含义
+    text = NEGATIVE_SIGN_RE.sub("-", RANGE_DASH_RE.sub(" ~ ", shown))
     candidates: list[tuple[str, Decimal]] = []
     for m in AMOUNT_RE.finditer(text):
         n = _to_decimal(m.group("num"), price=price, has_multiplier=bool(m.group("mult")))
@@ -193,22 +230,19 @@ def parse_amount(value: Any, fx_settings: dict | None, *, price: bool = False) -
         candidates.append((UNIT_CURRENCY[m.group("unit").lower()], n))
     for cur, n in candidates:
         if cur == "EUR":
-            return n, None
+            return _amount_in_eur(n, cur, fx_settings, shown)
     for cur, n in candidates:
-        rate = _per_eur(fx_settings, cur)
-        if rate is None:
-            return None, f"{cur} amount but no {cur} rate on the Dashboard: {text[:40]!r}"
-        return (n / rate).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP), f"{cur} converted at 1 EUR = {rate} {cur}"
+        return _amount_in_eur(n, cur, fx_settings, shown)
     compact = text.replace(" ", "")
-    if (m := BARE_MULTIPLIER_RE.fullmatch(compact)):  # "5k"、"2.27Mio"：没写币种，按欧元
+    if (m := BARE_MULTIPLIER_RE.fullmatch(compact)):  # "5k"、"2.27Mio"：没写币种，沿用 Currency 列
         n = _to_decimal(m.group("num"), price=price, has_multiplier=True)
         if n is not None:
-            return n * MULTIPLIER[m.group("mult").lower()], None
-    if NUMBER_RE.fullmatch(compact):  # 没有单位、整格就是一个数：按欧元
+            return _amount_in_eur(n * MULTIPLIER[m.group("mult").lower()], currency, fx_settings, shown)
+    if NUMBER_RE.fullmatch(compact):  # 没有单位、整格就是一个数：沿用 Currency 列
         n = _to_decimal(compact.lstrip("-"), price=price, has_multiplier=False)
         if n is not None:
-            return (-n if compact.startswith("-") else n), None
-    return None, f"cannot read amount {text[:40]!r}"
+            return _amount_in_eur(-n if compact.startswith("-") else n, currency, fx_settings, shown)
+    return None, f"cannot read amount {shown[:40]!r}"
 
 
 def _per_eur(fx_settings: dict | None, currency: str) -> Decimal | None:
@@ -217,7 +251,7 @@ def _per_eur(fx_settings: dict | None, currency: str) -> Decimal | None:
         value = Decimal(str(raw)) if raw not in (None, "") else None
     except InvalidOperation:
         return None
-    return value if value and value > 0 else None
+    return value if value is not None and value.is_finite() and value > 0 else None
 
 
 def parse_int(value: Any) -> int | None:
@@ -407,6 +441,7 @@ def parse_workbook(data: bytes, filename: str, fx_settings: dict | None = None, 
         regions: list[str] = []
         for r in group:
             v = rows[r]
+            currency = _line(v["currency"]) or _line(head["currency"]) or "EUR"
             region_text = normalize_region(v["region"]) if ("region" in own[r] or r == first) else ""
             if region_text:
                 regions.append(region_text)
@@ -415,7 +450,7 @@ def parse_workbook(data: bytes, filename: str, fx_settings: dict | None = None, 
                 # 自己的值逐行相加；合并填充的值整个案例只算一次（合并区域的首行）
                 if col is None or _is_blank(v[field]) or ((r, col + 1) in filled and r != first):
                     continue
-                amount, note = parse_amount(v[field], fx_settings)
+                amount, note = parse_amount(v[field], fx_settings, currency=currency)
                 if note:
                     warnings.append(f"Row {r} {field} spend: {note}")
                 if amount is not None:
@@ -439,7 +474,8 @@ def parse_workbook(data: bytes, filename: str, fx_settings: dict | None = None, 
                 if region_text and r != first:
                     row["region"] = region_text
                 for field in ROW_MONEY:
-                    amount, note = parse_amount(v[field], fx_settings, price=field in ("pcPriceCQA", "supplierPriceLanded"))
+                    amount, note = parse_amount(v[field], fx_settings, price=field in ("pcPriceCQA", "supplierPriceLanded"),
+                                                currency=currency)
                     if note:
                         warnings.append(f"Row {r} {field}: {note}")
                     row[field] = _money_text(amount)

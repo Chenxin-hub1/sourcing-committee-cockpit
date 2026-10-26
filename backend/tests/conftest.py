@@ -27,6 +27,7 @@ for key, value in {
     "SC_GRAPH_CLIENT_SECRET": "",
     "SC_SP_SITE_URL": "",
     "SC_SP_LIST_NAME": "",
+    "SC_NOTIFY_LIST_NAME": "",
     "SC_GRAPH_SENDER": "",
 }.items():
     os.environ[key] = value

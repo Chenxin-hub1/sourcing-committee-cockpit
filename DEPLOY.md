@@ -4,11 +4,11 @@
 
 ## 前提
 
-> 服务器上没有管理员权限、装不了 Docker？看 [windows-portable/README.md](windows-portable/README.md)：免安装 Python 运行时，`git clone` 后双击 `start.bat` 即可（这条路监听 **8031** 端口，Docker 那条路是 8062）。
+> Windows 服务器上没有管理员权限、装不了 Docker？看 [windows-portable/README.md](windows-portable/README.md)：免安装 Python 运行时，`git clone` 后双击 `start.bat` 即可。两种部署都读取 `.env` 的 `SC_PORT`；当前模板填写 **8031**。只有未设置 `SC_PORT` 时，Docker 才回退到 8062，Windows 回退到 8031。
 
 - 一台内网 Linux 服务器，能访问外网（拉基础镜像）或已有 Docker 镜像缓存
 - 服务器上已安装 **Docker Engine + Docker Compose**（`docker compose version` 能出版本号即可；没有则让 IT 装，或参考官方文档 docs.docker.com/engine/install）
-- 8062 端口可用（被占用见下方「改端口」）
+- `.env` 中 `SC_PORT` 指定的端口可用（当前模板 8031，被占用见下方「改端口」）
 
 ## 首次部署
 
@@ -31,11 +31,11 @@ mkdir -p data
 docker compose up -d --build
 
 # 5) 验证
-curl http://127.0.0.1:8062/api/bootstrap   # 应返回 cases / submissions JSON
+curl http://127.0.0.1:8031/api/health   # 当前模板 SC_PORT=8031；改过端口则同步替换
 docker compose ps                          # STATUS 一栏应显示 (healthy)
 ```
 
-浏览器访问 `http://<服务器IP>:8062/` 即可使用。首次初始化空数据库默认装载演示数据（22 个案例 + 1 条待审提交）；正式使用请在首次启动前设置 `SC_SEED_ON_EMPTY=false`。初始化记录落库后，重启或删除全部案例都不会再次灌入演示数据。
+浏览器访问 `http://<服务器IP>:8031/` 即可使用（以 `.env` 的 `SC_PORT` 为准）。首次初始化空数据库默认装载演示数据（22 个案例 + 1 条待审提交）；正式使用请在首次启动前设置 `SC_SEED_ON_EMPTY=false`。初始化记录落库后，重启或删除全部案例都不会再次灌入演示数据。
 
 Compose 通过 `SC_UID` / `SC_GID` 指定容器身份，默认均为 1000；`data` 目录必须属于相同身份。当前写锁与限流为进程内实现，镜像明确使用 `--workers 1`，请保持单实例部署。
 
@@ -45,7 +45,7 @@ Compose 通过 `SC_UID` / `SC_GID` 指定容器身份，默认均为 1000；`dat
 
 | 项 | 填什么 |
 | --- | --- |
-| `SC_PUBLIC_URL` | 同事在自己电脑上访问的地址（提醒邮件里的链接前缀）。不写就是正式服务器 `http://10.13.100.10:8031/`；Docker 方式是 `http://<服务器IP>:8062/`。写成 `localhost` / `127.0.0.1` 不算数，仍用正式服务器地址——收信人点链接时它指的是收信人自己的电脑 |
+| `SC_PUBLIC_URL` | 同事在自己电脑上访问的地址（提醒邮件里的链接前缀），端口应与 `SC_PORT` 一致。不写就是正式服务器 `http://10.13.100.10:8031/`，换服务器或端口时必须显式填写。写成 `localhost` / `127.0.0.1` 不算数，仍用正式服务器地址——收信人点链接时它指的是收信人自己的电脑 |
 | `SC_SEED_ON_EMPTY` | `false`（正式库从空开始，不灌 22 条演示案例） |
 | `SC_TIMEZONE` | `Europe/Berlin`（登记截止周一 23:59 按这个时区；文件名日期也是） |
 | `SC_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` | 领导本人的邮箱（xiangwei.chen@zf-lifetec.com）+ 初始密码；他首次登录后自己改密码 |
@@ -77,7 +77,7 @@ docker compose up -d --build
 | 恢复/迁移服务器 | 停止目标服务，将上面的在线备份放到新的 `data/cockpit.db`，确认目录所有者与 `SC_UID` / `SC_GID` 一致，再启动；勿与旧库的 WAL/SHM 文件混放 |
 | 术语归一（Cluster / Commodity） | 从 Excel 导入的 Commodity 原文自动映射到三个固定 Cluster + 规范 Commodity 名（词表在 `backend/app/commodities.py`，v3 Phase-18）；服务启动时按词表版本自动重算一次，`python -m app.migrations normalize-clusters` 可先看映射表（`--apply` 写回）。认不出的原文保持原样，列在预览的 notes 里，补进词表后把 `VERSION` 加一即可 |
 | 导入历史 Excel | 最简单：Sourcing admin 登录首页，"Stored weekly files" 下拉框旁点 "Add all not yet imported" 再 Import（36 周历史文件随程序放在 `backend/app/history/`，`git pull` 就有）。命令行方式：把 "KW39, 23.09.2026" 这类周文件夹（含里面的 Agenda / MM .xlsx）拷到服务器，`python -m app.migrations import-excel <文件夹> --apply`（免安装方式用 `..\windows-portable\python\python.exe -m app.migrations …`，在 backend 目录下跑）；先不带 `--apply` 看预览。每周只放一份文件（优先 MM）。同一周再跑会替换上次导入的案例 |
-| 改端口 | `docker-compose.yml` 里 `"8062:8000"` 左边（对外端口）改成想要的端口，如 `"80:8000"`；右边 8000 是容器内监听，保持不动 |
+| 改端口 | 在 `.env` 设置 `SC_PORT`（如 `80`），同步修改 `SC_PUBLIC_URL`，再 `docker compose up -d`；Windows 则重启启动脚本。容器内仍监听 8000，无须改 Compose 文件 |
 | 改提醒时区 | `.env` 里 `SC_TIMEZONE=Asia/Shanghai`（IANA 名）后 `docker compose up -d` |
 | 清空演示数据、从零开始 | 先完成备份，再 `docker compose down`；将原 `data` 目录改名留存，创建新的空目录；设置 `SC_SEED_ON_EMPTY=false` 后启动 |
 | 换 PostgreSQL | 当前交付仅验证 SQLite；切换需补充异步数据库驱动、连接配置、迁移及并发验证，不能只改连接串 |
@@ -123,7 +123,7 @@ IT 只给应用批了 SharePoint 权限（Sites.Selected + 站点 write），没
 | 邮件（5 种通知都算） | SMTP（`SC_SMTP_HOST`）→ Graph 发信（凭据 + `SC_GRAPH_SENDER`）→ 通知列表 → `skipped` |
 | Teams（提醒） | Graph 直发频道 → 通知列表 → 旧 webhook（`SC_TEAMS_WEBHOOK_URL`）→ `skipped` |
 
-列（内部名与流里的 `triggerBody()?['…']` 一一对应，改名要同步改流）：`Title`（= 标题）、`channel`（`email` / `teams`）、`to` / `cc`（多行纯文本，分号分隔，Outlook 连接器的写法）、`subject`、`html`（多行纯文本：正文转义后换行变 `<br>`，给 Outlook 的 HTML 正文与 Teams 消息用）。应用的 write 角色**不能建列表**（实测 403），列表由有站点 ManageLists 权限的人建；`python -m app.migrations notify-list-setup` 只读核对列是否齐全（缺列时它会尝试补列，同样可能 403）。
+列（内部名与流里的 `triggerBody()?['…']` 一一对应，改名要同步改流）：`Title`（= 标题）、`channel`（`email` / `teams`）、`to` / `cc`（多行纯文本，分号分隔，Outlook 连接器的写法）、`subject`、`html`（多行纯文本：正文转义、换行变 `<br>`，HTTP(S) 地址变为可点击链接，给 Outlook 的 HTML 正文与 Teams 消息用）。应用的 write 角色**不能建列表**（实测 403），列表由有站点 ManageLists 权限的人建；`python -m app.migrations notify-list-setup` 会检查并尝试创建缺少的列表或列，不是只读检查；权限不足时可能返回 403。
 
 **安全关卡**：流的触发器设了 Trigger condition，只处理创建者为 `SharePoint App`（系统的 Graph 应用身份）的新行。否则站点里任何有编辑权限的人都能往列表加一行，借流所有者的邮箱或 Teams 发任意内容。这个条件不能删，细节见 docs。
 
@@ -139,12 +139,12 @@ IT 只给应用批了 SharePoint 权限（Sites.Selected + 站点 write），没
 | --- | --- | --- |
 | SharePoint 建单 | 凭据 + `SC_SP_SITE_URL` + `SC_SP_LIST_NAME` 齐备 | 提交照常，记 `skipped` |
 | 演示文件存 SharePoint 文档库（v3 Phase-5） | 凭据 + `SC_SP_SITE_URL` 齐备 | 文件存服务器本地 `data/uploads/` |
-| 邮件（Graph sendMail） | SMTP 未配置，且凭据 + `SC_GRAPH_SENDER` 齐备 | 记 `skipped` |
-| Teams（Graph 直发频道） | 凭据 + `SC_TEAMS_TEAM_ID` + `SC_TEAMS_CHANNEL_ID` 齐备（优先于 webhook） | 回落 webhook，再无则记 `skipped` |
+| 邮件（Graph sendMail） | SMTP 未配置，且凭据 + `SC_GRAPH_SENDER` 齐备 | 尝试通知列表，再无则记 `skipped` |
+| Teams（Graph 直发频道） | 凭据 + `SC_TEAMS_TEAM_ID` + `SC_TEAMS_CHANNEL_ID` 齐备 | 尝试通知列表，再回落 webhook，均未配置则记 `skipped` |
 
-**邮件通道选择**：配置了 `SC_SMTP_HOST` 优先走 SMTP 中继；未配置而 Graph 凭据与发件邮箱齐备时走 Graph `POST /users/{sender}/sendMail`（`saveToSentItems=false`）；两者皆空记 `skipped`。
+**邮件通道选择**：配置了 `SC_SMTP_HOST` 优先走 SMTP 中继；未配置而 Graph 凭据与发件邮箱齐备时走 Graph `POST /users/{sender}/sendMail`（`saveToSentItems=false`）；否则尝试通知列表，均未配置记 `skipped`。这是按配置选通道，所选通道投递失败时记录失败，不会自动换通道重复发送。
 
-**Teams 通道选择**：Graph 直发频道消息优先（`POST /teams/{id}/channels/{id}/messages`，与邮件共用凭据）；团队/频道 ID 未配时回落 Workflows / Power Automate webhook（见上节契约，Graph 凭据齐备时附带 Bearer）；两者皆未配置记 `skipped`。团队/频道 ID 从 Teams 网页版频道链接获取：链接中 `groupId=` 后是团队 ID，`19:` 开头的一段是频道 ID。
+**Teams 通道选择**：Graph 直发频道消息优先（`POST /teams/{id}/channels/{id}/messages`，与邮件共用凭据）；未配齐时先尝试通知列表，再回落 Workflows / Power Automate webhook（Graph 凭据齐备时附带 Bearer）；均未配置记 `skipped`。团队/频道 ID 从 Teams 网页版频道链接获取：链接中 `groupId=` 后是团队 ID，`19:` 开头的一段是频道 ID。
 
 **已知限制（用户知情取舍）**：微软官方将「应用权限直发频道消息」定位为**迁移场景**，未来可能按数据量计费（[权限参考](https://learn.microsoft.com/en-us/graph/api/channel-post-messages)）。当前按业务决策采用直发；若 IT 或微软政策不允许，清空 `SC_TEAMS_TEAM_ID` / `SC_TEAMS_CHANNEL_ID` 即回落 webhook，无需改代码。
 

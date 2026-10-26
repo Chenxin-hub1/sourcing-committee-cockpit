@@ -385,3 +385,10 @@ class UserUpdateIn(In):
     role: Literal["user", "npi_manager", "admin"] | None = None
     disabled: Annotated[bool, Field(strict=True)] | None = None
     name: Annotated[Text, Field(min_length=1, max_length=80)] | None = None
+
+    @model_validator(mode="after")
+    def _no_explicit_nulls(self) -> "UserUpdateIn":
+        # 未提供的字段保持原值；显式 null 不能写进账号，姓名与角色后续都按有效值使用。
+        if any(getattr(self, field) is None for field in self.model_fields_set):
+            raise ValueError("Account fields cannot be null; omit fields you do not want to change.")
+        return self

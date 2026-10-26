@@ -104,6 +104,26 @@ async function swipe(session,from,to){
 }
 
 try{
+  await test('Searching and sorting preserve table scrolling and keyboard access',{width:900},async page=>{
+    await navigate(page,'database');
+    await page.locator('#dbSearch').fill('SWAT');
+    let region = await tableRegion(page);
+    assert.equal(await region.getAttribute('role'),'region','Filtering must retain the accessible scroll region');
+    assert.equal(await region.getAttribute('tabindex'),'0');
+    await page.locator('th[data-sort="action"]').scrollIntoViewIfNeeded();
+    const before = await region.evaluate(element=>element.scrollLeft);
+    assert.ok(before>0,'The sort column must require horizontal scrolling');
+    await page.locator('th[data-sort="action"]').click();
+    region = await tableRegion(page);
+    assert.equal(await region.getAttribute('role'),'region');
+    assert.ok(Math.abs(await region.evaluate(element=>element.scrollLeft)-before)<2,'Sorting must retain horizontal position');
+    await region.evaluate(element=>{ element.scrollLeft=0; });
+    await moveOverTable(page);
+    await page.keyboard.down('Shift');
+    try{ await page.mouse.wheel(0,320); }finally{ await page.keyboard.up('Shift'); }
+    await page.waitForFunction(()=>document.querySelector('#app table.data-table').parentElement.scrollLeft>100);
+  });
+
   await test('Vertical wheel over a wide table scrolls the page down and up',{width:900},async page=>{
     await navigate(page,'database');
     const region = await moveOverTable(page);

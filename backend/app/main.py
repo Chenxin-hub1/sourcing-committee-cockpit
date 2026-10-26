@@ -205,8 +205,14 @@ _register_times: dict[str, list[float]] = {}
 
 def _register_allowed(ip: str) -> bool:
     now = time.time()
+    for key, entries in list(_register_times.items()):
+        if not entries or now - entries[-1] >= SUBMIT_WINDOW_SECONDS:
+            _register_times.pop(key, None)
     times = [t for t in _register_times.get(ip, []) if now - t < SUBMIT_WINDOW_SECONDS]
-    _register_times[ip] = times
+    if times:
+        _register_times[ip] = times
+    else:
+        _register_times.pop(ip, None)
     return len(times) < REGISTER_MAX_PER_WINDOW
 
 
@@ -276,26 +282,27 @@ async def register(b: RegisterIn, request: Request) -> dict:
 @app.post("/api/auth/login")
 async def login(b: LoginIn, request: Request) -> dict:
     ip = request.client.host if request.client else "unknown"
-    remaining = _login_remaining_lock(ip)
-    if remaining:
-        raise HTTPException(429, f"Too many failed login attempts. Try again in {max(1, remaining // 60)} minute(s).")
     email = accounts.normalize_email(b.email)
     async with _write_lock, SessionLocal() as session:
+        # 排队中的请求也要检查刚刚触发的锁定，不能在进锁前集体通过检查。
+        remaining = _login_remaining_lock(ip)
+        if remaining:
+            raise HTTPException(429, f"Too many failed login attempts. Try again in {max(1, remaining // 60)} minute(s).")
+        # 验证与签发会话必须同锁完成；否则并发停用、改角色或重置密码会被旧账号文档覆盖。
         user = await service.get_user(session, email)
-    if user is None:
-        _login_record_failure(ip)
-        raise HTTPException(401, "No account with this email yet — register first (Register tab), it only takes your name.")
-    # v3 Phase-16：只有 Sourcing 管理员用密码；其他角色凭邮箱直接登录
-    if user.get("role") == "admin":
-        if not b.password:
-            raise HTTPException(401, PASSWORD_REQUIRED)
-        if not accounts.verify_or_dummy(b.password, user.get("passwordHash")):
+        if user is None:
             _login_record_failure(ip)
-            raise HTTPException(401, "Wrong email or password.")
-    if user.get("disabled"):
-        raise HTTPException(403, "This account is disabled. Ask the Sourcing admin to re-enable it.")
-    _login_failures.pop(ip, None)
-    async with _write_lock, SessionLocal() as session:
+            raise HTTPException(401, "No account with this email yet — register first (Register tab), it only takes your name.")
+        # v3 Phase-16：只有 Sourcing 管理员用密码；其他角色凭邮箱直接登录
+        if user.get("role") == "admin":
+            if not b.password:
+                raise HTTPException(401, PASSWORD_REQUIRED)
+            if not accounts.verify_or_dummy(b.password, user.get("passwordHash")):
+                _login_record_failure(ip)
+                raise HTTPException(401, "Wrong email or password.")
+        if user.get("disabled"):
+            raise HTTPException(403, "This account is disabled. Ask the Sourcing admin to re-enable it.")
+        _login_failures.pop(ip, None)
         user["lastLoginAt"] = logic.fmt_when(logic.na_now())
         await service.save_user(session, user)
         token = await service.issue_session(session, email)
@@ -310,19 +317,20 @@ async def logout(x_session_token: str | None = Header(default=None)) -> dict:
 
 
 @app.post("/api/auth/password")
-async def change_password(b: PasswordChangeIn, x_session_token: str | None = Header(default=None),
-                          user: CurrentUser = None) -> dict:
+async def change_password(b: PasswordChangeIn, x_session_token: str | None = Header(default=None)) -> dict:
     """本人改密码（临时密码登录后必须先走这里）；别处登录的会话一并失效，当前这个保留。"""
-    if user is None:
-        raise HTTPException(401, "Please log in.")
-    if user.get("role") != "admin":
-        raise HTTPException(403, "Only Sourcing admins have a password — everyone else logs in with their email.")
-    if not accounts.verify_password(b.currentPassword, user.get("passwordHash", "")):
-        raise HTTPException(422, "The current password is not correct.")
-    problem = accounts.password_problem(b.newPassword, user["email"])
-    if problem or b.newPassword == b.currentPassword:
-        raise HTTPException(422, problem or "Choose a new password that differs from the current one.")
     async with _write_lock, SessionLocal() as session:
+        # 重新验证当前会话与账号，并在同一事务里改密码，不能复用依赖阶段可能已失效的账号副本。
+        user = await service.session_user(session, x_session_token or "")
+        if user is None:
+            raise HTTPException(401, "Please log in.")
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Only Sourcing admins have a password — everyone else logs in with their email.")
+        if not accounts.verify_password(b.currentPassword, user.get("passwordHash", "")):
+            raise HTTPException(422, "The current password is not correct.")
+        problem = accounts.password_problem(b.newPassword, user["email"])
+        if problem or b.newPassword == b.currentPassword:
+            raise HTTPException(422, problem or "Choose a new password that differs from the current one.")
         user.update(passwordHash=accounts.hash_password(b.newPassword), mustChangePassword=False)
         await service.save_user(session, user)
         await service.revoke_user_sessions(session, user["email"], keep_token=x_session_token or "")
@@ -825,6 +833,10 @@ async def export_week(kind: str, week: int = Query(ge=1, le=53), year: int = Que
     if kind not in ("agenda", "minutes"):
         raise HTTPException(404, "Unknown export. Use agenda or minutes.")
     year = year or logic.na_now().isocalendar().year
+    try:
+        date.fromisocalendar(year, week, 3)
+    except ValueError as exc:
+        raise HTTPException(422, "Choose a valid ISO week for the selected year.") from exc
     async with SessionLocal() as session, _write_lock:
         state = await service.load_state(session)
     cases = [c for c in state["cases"] if int(c.get("weekNum") or 0) == week
@@ -902,6 +914,8 @@ async def upload_submission_file(sub_id: str, request: Request, name: str = Quer
                                  x_upload_key: str | None = Header(default=None),
                                  user: CurrentUser = None) -> dict:
     """提交人（提交时拿到的 uploadKey，或本人账号）或 NPI 经理及以上，给待确认的登记加文件。"""
+    if user and user.get("mustChangePassword"):
+        raise HTTPException(403, "Please change your temporary password first.")
     clean = files.checked_name(name)
     is_manager = bool(user) and accounts.RANK.get(user.get("role", "user"), 0) >= accounts.RANK["npi_manager"]
     async with SessionLocal() as session, _write_lock:

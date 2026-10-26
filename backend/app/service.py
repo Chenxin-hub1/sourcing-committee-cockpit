@@ -149,6 +149,8 @@ async def _ensure_bootstrap_admin(session) -> None:
     doc.update(role="admin", disabled=False, mustChangePassword=False,
                passwordHash=accounts.hash_password(s.bootstrap_admin_password))
     await save_user(session, doc)
+    # 恢复管理员会重置密码；恢复前签发的令牌也应失效，不能随账号恢复重新获得管理员权限。
+    await revoke_user_sessions(session, email)
 
 
 async def _set_kv(session, key: str, doc) -> None:

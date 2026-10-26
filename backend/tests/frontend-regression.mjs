@@ -78,6 +78,96 @@ async function seed(page, overrides={}){
 }
 
 try{
+  await test('A comments save finishing on another page preserves that page\'s draft', async()=>{
+    let pending;
+    const {page, context} = await fixture({user:'manager', api:async(route,path)=>{
+      if(path!=='/api/cases/C-TEST/comments') return false;
+      pending = route;
+      return true;
+    }});
+    const c = await seed(page, {submitterComments:'Original background'});
+    await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    await page.locator('#caseCommentsEdit').click();
+    await page.locator('#caseCommentsIn').fill('Saved background');
+    await page.locator('#caseCommentsSave').click();
+    await page.waitForFunction(()=>API.pendingWrites===1);
+    await goTo(page, 'submit');
+    await page.locator('#fPresenter').fill('New registration draft');
+    await pending.fulfill({json:{snapshot:{cases:[{...c, submitterComments:'Saved background'}]}}});
+    await page.waitForFunction(()=>API.pendingWrites===0);
+    assert.equal(await page.locator('#fPresenter').inputValue(), 'New registration draft');
+    assert.equal(await page.evaluate(()=>state.commentsEditId), null);
+    await goTo(page, 'database');
+    assert.equal(await page.evaluate(()=>canRefresh()), true, 'Leaving comments must release the automatic-refresh guard');
+    await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    assert.match(await page.locator('#caseCommentsCard').innerText(), /Saved background/);
+    await context.close();
+  });
+
+  await test('Slow action-item extraction preserves newer edits and ignores an abandoned editor', async()=>{
+    let pending;
+    const {page, context} = await fixture({user:'manager', api:async(route,path)=>{
+      if(path!=='/api/action-items/extract') return false;
+      pending = route;
+      return true;
+    }});
+    await seed(page, {committeeDiscussion:'1. Original task'});
+    await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    await page.locator('#editCaseBtn').click();
+    await page.locator('#extractTasksBtn').click();
+    await page.waitForFunction(()=>API.pendingWrites===1);
+    await page.locator('#editDiscussion').fill('1. Original task\nAdditional committee notes');
+    await page.locator('#editPresenter').fill('Updated presenter');
+    await pending.fulfill({json:{items:[]}});
+    await page.locator('.action-drafts').waitFor();
+    assert.equal(await page.locator('#editDiscussion').inputValue(), '1. Original task\nAdditional committee notes');
+    assert.equal(await page.locator('#editPresenter').inputValue(), 'Updated presenter');
+    await page.locator('#discardDraftsBtn').click();
+    pending = null;
+    await page.locator('#extractTasksBtn').click();
+    await page.waitForFunction(()=>API.pendingWrites===1);
+    await page.locator('#editPresenter').fill('Edited while request failed');
+    await pending.fulfill({status:503, json:{detail:'Extraction temporarily unavailable'}});
+    await page.waitForFunction(()=>state.editError?.includes('Extraction temporarily unavailable'));
+    assert.equal(await page.locator('#editPresenter').inputValue(), 'Edited while request failed');
+    pending = null;
+    await page.locator('#extractTasksBtn').click();
+    await page.waitForFunction(()=>API.pendingWrites===1);
+    await goTo(page, 'submit');
+    await page.locator('#fPresenter').fill('New registration draft');
+    await pending.fulfill({json:{items:[]}});
+    await page.waitForFunction(()=>API.pendingWrites===0);
+    assert.equal(await page.locator('#fPresenter').inputValue(), 'New registration draft');
+    assert.equal(await page.evaluate(()=>state.actionDrafts), null);
+    await context.close();
+  });
+
+  await test('Database search keeps the cursor and active text composition while filtering', async()=>{
+    const {page, context} = await fixture();
+    await seed(page);
+    await goTo(page, 'database');
+    const search = page.locator('#dbSearch');
+    await search.fill('sulier');
+    await search.press('Home');
+    await search.press('ArrowRight');
+    await search.press('ArrowRight');
+    await page.keyboard.type('pp');
+    assert.equal(await search.inputValue(), 'supplier', 'Typing inside a query must keep the cursor in place');
+    assert.equal(await page.locator('tr[data-swat]').count(), 1);
+    // 输入法组合期间搜索框不能被替换，否则中文等尚未确认的输入会被打断。
+    const composing = await search.evaluate(input=>{
+      input.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+      input.value = '供应商';
+      input.dispatchEvent(new InputEvent('input', {bubbles:true, isComposing:true, data:'供应商'}));
+      const retained = input.isConnected && document.activeElement===input;
+      input.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:'供应商'}));
+      return retained;
+    });
+    assert.equal(composing, true, 'An active composition must retain its input element');
+    assert.equal(await page.evaluate(()=>state.searchQuery), '供应商');
+    await context.close();
+  });
+
   for(const timezoneId of ['Asia/Taipei','America/New_York','Europe/Berlin']){
     await test('Wednesday calendar values and next-year labels in '+timezoneId, async()=>{
       const {page, context} = await fixture({timezoneId, user:'user'});

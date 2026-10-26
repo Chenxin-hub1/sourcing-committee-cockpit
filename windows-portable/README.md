@@ -13,7 +13,11 @@ notepad .env        # 按 DEPLOY.md「上线前清单」填：SC_PUBLIC_URL、SC
 .\start.bat
 ```
 
-窗口里出现 `Application startup complete` 就好了，浏览器打开 http://localhost:8031/ 。数据库和上传文件在 `backend\data\`，备份就是复制这个文件夹。
+窗口里出现 `Application startup complete` 就好了，浏览器打开 http://localhost:8031/ 。数据库和上传文件在 `backend\data\`；完整备份这个文件夹前，先停止服务（数据库启用了 WAL，运行中直接复制可能遗漏尚未合并的事务）。需要不停机备份数据库时，在 `backend` 目录运行下面的命令，再复制生成的 `cockpit-backup.db`；本地附件还需备份 `data\uploads\`：
+
+```powershell
+..\windows-portable\python\python.exe -c "import sqlite3; s=sqlite3.connect('data/cockpit.db'); d=sqlite3.connect('data/cockpit-backup.db'); s.backup(d); d.close(); s.close()"
+```
 
 ## 关掉窗口服务就停：让它常驻
 
