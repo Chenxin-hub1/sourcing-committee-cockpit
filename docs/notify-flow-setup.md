@@ -6,7 +6,7 @@
 
 - 系统的 Graph 应用只有 **Sites.Selected + 站点 write** 权限，没有 Mail.Send。
 - 公司数据策略禁用了 Power Automate 的 "When a Teams webhook request is received" 触发器，所以系统不能直接调用流。默认环境和 PP-Dev-PU-GR-Amber 实测都报 `restricts use of these apis: TeamsWebhookRequestReceived`。
-- 变通办法是**用 SharePoint 列表当留言板**：系统要发通知时，在列表里写一行；流每隔一会儿检查一次，发现新行，就用流所有者自己的 Outlook 和 Teams 发出去。
+- 变通办法是**用 SharePoint 列表当留言板**：系统要发通知时，在列表里写一行；流每隔一会儿检查一次，发现新行，就用流所有者自己的 Outlook 和 Teams 连接发出去（邮件以公共邮箱 `Sourcing_reminder@zf-lifetec.com` 的名义发）。
 
 ## 现在已经建好的东西
 
@@ -40,6 +40,7 @@
      - Subject = `triggerBody()?['subject']`
      - Body = `triggerBody()?['html']`
      - CC = `if(empty(triggerBody()?['cc']), null, triggerBody()?['cc'])`（抄送为空时传 null，CC 框同样要先打开 "Use dynamic content"）
+     - From (Send as) = `Sourcing_reminder@zf-lifetec.com`（高级参数里勾选后手打，不用动态内容；见下文“发件人：公共邮箱”）
    - **False 分支**：Microsoft Teams "Post message in a chat or channel"
      - Post as = Flow bot
      - Post in = Chat with Flow bot
@@ -56,9 +57,18 @@
 
 剩余风险：其他同样对这个站点有写权限的 Graph 应用，写出的行创建者也是 `SharePoint App`。目前只有本系统的应用被授权到这个站点，以后 IT 再给别的应用授权时要记得这一点。
 
-## 把发件人换成 xiangwei.chen@zf-lifetec.com
+## 发件人：公共邮箱
 
-流里的每个连接都属于登录它的那个人。邮件的发件人，就是 "Send an email (V2)" 那一步所用 Outlook 连接的账号。
+2026-10-26 起，邮件以公共邮箱 `Sourcing_reminder@zf-lifetec.com` 的名义发出（"Send an email (V2)" 的 From (Send as)）。
+
+- 前提：Outlook 连接的账号（目前是 xin.chen.external）对这个公共邮箱有 **Send As** 权限，IT 2026-10-23 批的。只有 Send As，没有 Full Access：能用它的名义发信，但打不开这个邮箱，收件人的回信和退信没人看得到（用户 2026-10-23 确认可以接受）。
+- 收件人看到的发件人名字是这个邮箱在公司邮件系统里的显示名，流里改不了，要改找 IT。
+- 2026-10-26 实测：经通知列表发一封测试信，流运行 Succeeded，"Send an email (V2)" 输入里 From = 公共邮箱，返回 200。
+- 换连接的人也要有 Send As：谁的 Outlook 连接在发信，谁就得对公共邮箱有 Send As，否则发信失败。
+
+## 把流交接给 xiangwei.chen@zf-lifetec.com
+
+流里的每个连接都属于登录它的那个人。"Send an email (V2)" 实际用哪个账号登录发信，取决于这一步的 Outlook 连接；收件人看到的发件人仍是公共邮箱（见上一节），但接手的人要先向 IT 申请这个公共邮箱的 Send As。
 
 1. **（你）加共同所有者**：打开 [Power Automate](https://make.powerautomate.com)，确认右上角环境是 passivesafety (default) → My flows → 在 "Sourcing Cockpit - Notifications" 一行点 ⋮ → **Share** → 输入 `xiangwei.chen@zf-lifetec.com`。
 2. **（xiangwei.chen）换成自己的连接**：他登录后在 **Team flows**（团队流）页签里找到这个流 → **Edit** → 点 "Send an email (V2)" → 面板底部 "Connected to …" 旁边点 **Change connection** → 选他自己的账号，或 Add new connection 后登录 → **Save**。

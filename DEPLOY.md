@@ -116,7 +116,7 @@ SMTP 中继可在 `.env` 中配置后通过 `docker compose up -d` 生效。Team
 
 ### 通知列表（2026-10-13 起：不等 IT 的发信 / 发 Teams 路径）
 
-IT 只给应用批了 SharePoint 权限（Sites.Selected + 站点 write），没有 Mail.Send；公司数据策略又禁用了 Power Automate 的 Teams webhook 触发器（默认环境与 Dev 环境实测都报 `restricts use of these apis: TeamsWebhookRequestReceived`）。所以改用 **SharePoint 列表中转**：系统把每条通知写成站点里 `Cockpit Notifications` 列表的一行，Power Automate 流 **Sourcing Cockpit - Notifications**（passivesafety 默认环境）用 SharePoint "When an item is created" 触发，按 `channel` 分支用流所有者自己的 Outlook / Teams 连接发出。`.env` 填 `SC_NOTIFY_LIST_NAME=Cockpit Notifications`（站点沿用 `SC_SP_SITE_URL`）。建列表、加共同所有者、换连接的步骤见 [`docs/notify-flow-setup.md`](docs/notify-flow-setup.md)。
+IT 只给应用批了 SharePoint 权限（Sites.Selected + 站点 write），没有 Mail.Send；公司数据策略又禁用了 Power Automate 的 Teams webhook 触发器（默认环境与 Dev 环境实测都报 `restricts use of these apis: TeamsWebhookRequestReceived`）。所以改用 **SharePoint 列表中转**：系统把每条通知写成站点里 `Cockpit Notifications` 列表的一行，Power Automate 流 **Sourcing Cockpit - Notifications**（passivesafety 默认环境）用 SharePoint "When an item is created" 触发，按 `channel` 分支用流所有者自己的 Outlook / Teams 连接发出（邮件的发件人是公共邮箱 `Sourcing_reminder@zf-lifetec.com`，靠 Outlook 连接账号的 Send As 权限）。`.env` 填 `SC_NOTIFY_LIST_NAME=Cockpit Notifications`（站点沿用 `SC_SP_SITE_URL`）。建列表、加共同所有者、换连接的步骤见 [`docs/notify-flow-setup.md`](docs/notify-flow-setup.md)。
 
 | 通道 | 选择顺序 |
 | --- | --- |
