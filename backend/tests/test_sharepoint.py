@@ -94,6 +94,7 @@ async def test_configured_submission_creates_item_with_contract_fields(async_cli
     assert fields["Status"] == "Waiting for Registration Confirmation"
     assert fields["SubmitterEmail"] == "test.user@zf.com"  # 提交人 = 登录账号（v3 Phase-6）
     assert fields["CaseLink"].endswith("/#case/SWAT-30002")
+    assert fields["Screening"] == "Family case: No; CCB: No"
     assert kwargs["headers"]["Authorization"] == "Bearer fake-token"
 
 

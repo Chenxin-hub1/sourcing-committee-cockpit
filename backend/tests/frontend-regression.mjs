@@ -1651,7 +1651,7 @@ try{
     await page.locator('#submitCaseBtn').click();
     const items = await page.locator('#submitBanner .problem-list li').allTextContents();
     assert.ok(items.length >= 8, items.join(' | '));
-    for(const needle of ['Part Number and Part Description','Project, Sourcing Type','Region','bundle Peak Year Spend','SWAT Case #','Family Case','Engineering Change','Pc Price CQA','Tooling Payment (Lumpsum, MPC or No tooling involved)'])
+    for(const needle of ['Part Number and Part Description','Project, Sourcing Type','Region','bundle Peak Year Spend','SWAT Case #','Family Case','change management (CCB)','Pc Price CQA','Tooling Payment (Lumpsum, MPC or No tooling involved)'])
       assert.ok(items.some(t=>t.includes(needle)), needle+' missing in: '+items.join(' | '));
     assert.ok((await page.locator('#submitBanner').innerText()).startsWith(`⚠ Please fix these ${items.length} points before submitting:`));
     assert.equal(submitted, undefined);

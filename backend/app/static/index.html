@@ -3299,7 +3299,7 @@ function renderSubmit(){
       </div>
 
       <div class="form-grid" style="margin-top:16px;">
-        <div class="form-field"><label>Does this case involve an Engineering Change (ECM)? *</label>
+        <div class="form-field"><label>Does this case involve a change management (CCB)? *</label>
           <select id="qECM"><option value="">Select...</option><option>Yes</option><option>No</option></select>
         </div>
       </div>
@@ -3427,7 +3427,7 @@ function renderApprovals(){
         ${infoItem('Family Case?', s.isFamilyCase||'—')}
         ${infoItem('Family Alignment Done?', s.familyAligned||'—')}
         ${(s.familyEvidence && s.familyEvidence!=='—') ? infoItem('Family Alignment Evidence', s.familyEvidence) : ''}
-        ${infoItem('Involves ECM?', s.involvesECM||'—')}
+        ${infoItem('Involves CCB?', s.involvesECM||'—')}
         ${infoItem('Passed CCB2?', s.ccbApproved||'—')}
       </div>
       ${state.isAdmin ? `<div class="appr-actions">
@@ -4600,7 +4600,7 @@ function wireEvents(){
     const famAns = val('qFamily'), famAligned = val('qFamilyAligned');
     const ecmAns = val('qECM'), ccbAns = val('qCCB');
     if(!famAns) need('⚠ Please answer "Is this a Family Case?" before submitting.');
-    if(!ecmAns) need('⚠ Please answer "Does this case involve an Engineering Change (ECM)?" before submitting.');
+    if(!ecmAns) need('⚠ Please answer "Does this case involve a change management (CCB)?" before submitting.');
     if(famAns==='Yes'){
       if(!famAligned) need('⚠ Please answer whether Family Alignment has been completed.');
       else if(famAligned==='No') need('⚠ This case cannot be registered until Family Alignment is completed.');

@@ -293,3 +293,11 @@ Description: 用户 2026-10-23 让另一个工具（Codex）"整体检查一下�
 实现（2026-10-26 复核修复）：`excel_import.parse_amount` 先把紧跟在数字后面的连字符（`-` / `−` / `–`）换成区间记号，再把其余的当负号，带单位的区间取紧挨单位的那个数，无单位的 `5-6` 仍读不出、不会并成 56，警告里显示单元格原文；Currency 列按 `UNIT_CURRENCY` 认 RMB / ¥ / € / Euro / $ 等写法。验证：36 份历史 Excel 改动前后逐字段对比完全一致；pytest 611（审计新增 43 项 + 复核新增 17 项：区间写法 4 例、无单位区间 2 例、币种写法 10 例、未知币种 1 例）、前端回归 52、滚动回归 17、ruff 全过。`docs/project-audit-2026-10-23.md` 补了“2026-10-26 复核”一节。
 
 Spec: non-spec
+
+## Phase-34: 登记页 ECM 问题改问 CCB
+
+Status: `awaiting-acceptance`
+
+Description: 用户 2026-10-27 要求（截图）把登记页问题 "Does this case involve an Engineering Change (ECM)?" 改成 "Does this case involve a change management (CCB)?"（原话照用）。改了：登记页这个问题的文字、前端与后端"没答这题"的提示里引用的原句；同日用户定：案例详情里的 "Involves ECM?" 改成 "Involves CCB?"，SharePoint 登记列表 Screening 摘要里的 "ECM:" 改成 "CCB:"（DEPLOY.md 列说明同步）。答案字段 `involvesECM`、后续问题 "Has this case passed CCB2?" 与拦截逻辑不变；`_template.html` 与 `.design/demo` 旧演示快照按约定不动。验证（2026-10-27）：pytest 611（两处测试的查找文字改成新问题；SharePoint 建单测试补断言 Screening 为 "Family case: No; CCB: No"）、前端回归 52、ruff 全过。
+
+Spec: non-spec

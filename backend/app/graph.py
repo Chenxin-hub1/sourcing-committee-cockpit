@@ -281,7 +281,7 @@ def item_fields(sub: dict, base_url: str = "") -> dict:
     screening = "; ".join(filter(None, [
         f"Family case: {sub.get('isFamilyCase')}" if sub.get("isFamilyCase") else "",
         f"aligned: {sub.get('familyAligned')}" if sub.get("isFamilyCase") == "Yes" else "",
-        f"ECM: {sub.get('involvesECM')}" if sub.get("involvesECM") else "",
+        f"CCB: {sub.get('involvesECM')}" if sub.get("involvesECM") else "",
         f"CCB2: {sub.get('ccbApproved')}" if sub.get("involvesECM") == "Yes" else "",
     ]))
     return {

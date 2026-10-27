@@ -193,7 +193,7 @@ python -m app.migrations graph-check --write-test   # 另在文档库 Sourcing C
 | PeakYearSpend / LifetimeSpend | 数字 | 合计金额（EUR，按提交时的 OP 汇率折算，1 EUR = X 外币、做除法；原币与汇率只存在驾驶舱里） |
 | Status | 单行文本 | 提交时状态（后续不回写） |
 | Submitter / SubmitterEmail / SubmittedAt / MeetingDate | 单行文本 | 提交人与会议信息 |
-| Screening | 单行文本 | 家族案例 / ECM 筛选答案摘要 |
+| Screening | 单行文本 | 家族案例 / CCB 筛选答案摘要 |
 | Comments | **多行文本**（纯文本） | 提交人备注（可能超过 255 字；单行文本上限 255，超长会让建单失败） |
 | CaseLink | 单行文本 | 案例深链（确认登记后可打开） |
 

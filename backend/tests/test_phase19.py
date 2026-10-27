@@ -52,7 +52,7 @@ def test_submission_lists_every_missing_field_at_once(client):
     lines = r.json()["detail"].split("\n")
     assert len(lines) >= 6, lines
     for needle in ("Part Number and Part Description", "at least one Region", "bundle Peak Year Spend",
-                   '"Is this a Family Case?"', "Engineering Change (ECM)", "Pc Price CQA",
+                   '"Is this a Family Case?"', "change management (CCB)", "Pc Price CQA",
                    "Tooling Payment (Lumpsum, MPC or No tooling involved)"):
         assert any(needle in line for line in lines), (needle, lines)
 

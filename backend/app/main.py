@@ -446,7 +446,7 @@ def _submission_problems(cases: list[dict], submissions: list[dict], b: Submissi
     if not b.isFamilyCase:
         out.append('⚠ Please answer "Is this a Family Case?" before submitting.')
     if not b.involvesECM:
-        out.append('⚠ Please answer "Does this case involve an Engineering Change (ECM)?" before submitting.')
+        out.append('⚠ Please answer "Does this case involve a change management (CCB)?" before submitting.')
     if b.isFamilyCase == "Yes":
         if not b.familyAligned:
             out.append("⚠ Please answer whether Family Alignment has been completed.")
