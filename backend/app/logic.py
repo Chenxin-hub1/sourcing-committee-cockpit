@@ -528,6 +528,11 @@ def rollup_action_status(follow_ups: list[dict] | None) -> str | None:
     return "Closed"
 
 
+def closing_tasks_closes_case(decision: str | None) -> bool:
+    """待办全部关闭即结案、必须先有 Final PPT（规则 2）。v3 Phase-41：Pending 案例还没决议，待办全关不算结案。"""
+    return decision != "PENDING"
+
+
 def email_for(name: str | None) -> str:
     if not name:
         return ""
@@ -672,15 +677,6 @@ def mk_case(o: dict, all_cases: list[dict]) -> dict:
     return base
 
 
-def normalize_pending_cases(cases: list[dict]) -> None:
-    for c in cases:
-        if c.get("meetingDecision") == "PENDING":
-            c["actionStatus"] = None
-            c["followUps"] = []
-            if not c.get("committeeDiscussion") or re.search(r"deferred|pending", c.get("committeeDiscussion", ""), re.IGNORECASE):
-                c["committeeDiscussion"] = "Pending for Sourcing Committee Review"
-
-
 def seed_final_doc_links(cases: list[dict]) -> None:
     for c in cases:
         if c.get("actionStatus") == "Closed" and not c.get("finalDocLink"):
@@ -715,16 +711,13 @@ def case_edit_problems(b: dict, *, imported: bool = False, has_files: bool = Fal
     # 反馈 #2：区域至少一个（前端也拦，服务端是权威）。
     if not (b.get("region") or "").strip():
         out.append("Select at least one Region.")
-    # 规则 0（模板称 Rule 0）：Pending 案例尚未评审，不能携带会后待办。
-    if b.get("meetingDecision") == "PENDING" and follow_ups:
-        out.append("A case that is Pending for Sourcing Committee Review cannot have follow-up tasks. "
-                   "Record the Sourcing Decision first, or remove the tasks.")
+    # 模板原有的规则 0（Pending 案例不能带待办）v3 Phase-41 取消：领导 2026-10-29，上过会、批准前还有待办的案例保持 Pending。
     # 反馈 #8：未关闭的待办必须有收件邮箱，提醒才发得出去（系统不再按姓名猜测）。
     for i, task in enumerate(follow_ups, start=1):
         if task.get("status") != "Closed" and not (task.get("notifyEmail") or "").strip():
             out.append(f'Follow-up task {i}: enter a valid "Send reminder to" email, so the reminder reaches someone.')
-    # 规则 2：全部待办 Closed（案例闭环）必须有最终文件链接。
-    if rollup_action_status(follow_ups) == "Closed" and not final_doc:
+    # 规则 2：全部待办 Closed（案例闭环）必须有最终文件链接；Pending 案例不算结案（v3 Phase-41）。
+    if closing_tasks_closes_case(b.get("meetingDecision")) and rollup_action_status(follow_ups) == "Closed" and not final_doc:
         out.append("All follow-up actions are now Closed, which closes the case — "
                    "enter the Final PPT / Supporting Document Link first.")
     if final_doc and not valid_http_url(final_doc):
@@ -800,7 +793,8 @@ def task_edit_problems(case: dict, task_id: str, fields: dict) -> list[str]:
     if fields.get("status") != "Closed" and not (fields.get("notifyEmail") or "").strip():
         out.append('Enter a valid "Send reminder to" email, so the reminder reaches someone.')
     tasks = [fields if t.get("id") == task_id else t for t in case.get("followUps") or []]
-    if rollup_action_status(tasks) == "Closed" and not (case.get("finalDocLink") or "").strip():
+    if (closing_tasks_closes_case(case.get("meetingDecision")) and rollup_action_status(tasks) == "Closed"
+            and not (case.get("finalDocLink") or "").strip()):
         out.append("This closes the last open follow-up of the case — enter the Final PPT / Supporting Document Link "
                    "on the case page first (Edit Case), then close this task.")
     return out
@@ -813,7 +807,7 @@ def apply_task_edit(case: dict, task_id: str, fields: dict) -> dict:
     task.update({k: deepcopy(fields[k]) for k in TASK_EDIT_FIELDS if k in fields})
     task["notify"] = task.get("responsible") or ""  # 与编辑页一致：提醒称呼跟着负责人
     _settle_task(task, previous, today_iso())
-    case["actionStatus"] = None if case.get("meetingDecision") == "PENDING" else rollup_action_status(case["followUps"])
+    case["actionStatus"] = rollup_action_status(case["followUps"])
     return task
 
 
@@ -875,7 +869,8 @@ def apply_case_edit(c: dict, b: dict, commercial: dict | None = None) -> None:
     })
     apply_commodity_edit(c, b)
     sync_row_commercial(c, part_numbers)
-    c["actionStatus"] = None if c["meetingDecision"] == "PENDING" else rollup_action_status(c["followUps"])
+    # v3 Phase-41：Pending 案例也可能有待办，状态同样按待办汇总（没有待办时仍是 None）
+    c["actionStatus"] = rollup_action_status(c["followUps"])
 
 
 def commodity_problem(c: dict, commodity: str | None) -> str | None:
@@ -991,7 +986,7 @@ def run_daily_reminder_check(cases: list[dict], settings: dict, log: list[dict],
                              force: bool = False, base_url: str = "") -> dict:
     """对应模板 runDailyReminderCheck：逾期标记、按规则发送（v1 模拟——写日志不外发）。
 
-    log 为最新在前；每任务每日最多一次（lastAutoReminderDate 守卫）；PENDING 案例不参与。
+    log 为最新在前；每任务每日最多一次（lastAutoReminderDate 守卫）；v3 Phase-41 起 PENDING 案例的待办也参与。
     返回值 changed 为本次被修改的案例 id 列表 —— 持久层据此做按行增量写，不再全表重写。
     """
     now = na_now()
@@ -1001,8 +996,6 @@ def run_daily_reminder_check(cases: list[dict], settings: dict, log: list[dict],
     days_before = int(settings.get("daysBefore") or 0)
     overdue_every = int(settings.get("overdueEveryDays") or 0)
     for c in cases:
-        if c.get("meetingDecision") == "PENDING":
-            continue
         for t in c.get("followUps") or []:
             if t.get("status") not in ("Open", "Overdue"):
                 continue
@@ -1051,8 +1044,6 @@ def run_daily_reminder_check(cases: list[dict], settings: dict, log: list[dict],
             changed.add(c["id"])
     overdue_total = open_total = 0
     for c in cases:
-        if c.get("meetingDecision") == "PENDING":
-            continue
         for t in c.get("followUps") or []:
             if t.get("status") == "Overdue":
                 overdue_total += 1

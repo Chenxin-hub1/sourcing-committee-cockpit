@@ -59,14 +59,15 @@ def decide(case: dict, task: dict, fb: dict, user: dict, decision: str, remark: 
         if final_doc_link and not logic.valid_http_url(final_doc_link):
             return "The Final PPT / Supporting Document Link must be a full URL (starting with http:// or https://)."
         others_closed = all(t.get("status") == "Closed" for t in case.get("followUps") or [] if t is not task)
-        if others_closed and not (final_doc_link or (case.get("finalDocLink") or "").strip()):
+        if (logic.closing_tasks_closes_case(case.get("meetingDecision")) and others_closed
+                and not (final_doc_link or (case.get("finalDocLink") or "").strip())):
             return ("Approving this closes the last open follow-up, which closes the case — "
                     "enter the Final PPT / Supporting Document Link first.")
         if final_doc_link:
             case["finalDocLink"] = final_doc_link
         task["status"] = "Closed"
         task["closure"] = {"when": logic.fmt_when(logic.na_now()), "by": user["name"], "feedbackId": fb["id"]}
-        case["actionStatus"] = None if case.get("meetingDecision") == "PENDING" else logic.rollup_action_status(case["followUps"])
+        case["actionStatus"] = logic.rollup_action_status(case["followUps"])
     fb["status"] = decision
     fb["decision"] = {"when": logic.fmt_when(logic.na_now()), "by": user["name"], "byEmail": user["email"],
                       "remark": remark, "notify": None}

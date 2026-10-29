@@ -859,8 +859,8 @@ function wireOwnerFunction(ownerId, functionId){
     prev = owner.value;
   });
 }
-// 已决议案例的待办，一条一项（驾驶舱三格与 by function / by owner 图都数这个）
-function decidedTasks(cases){ return cases.filter(c=>c.meetingDecision!=='PENDING').flatMap(c=>(c.followUps||[]).map(t=>({c,t}))); }
+// 案例的待办，一条一项（驾驶舱三格与 by function / by owner 图都数这个；v3 Phase-41 起含 Pending 案例的待办）
+function caseTasks(cases){ return cases.flatMap(c=>(c.followUps||[]).map(t=>({c,t}))); }
 function countBy(items, keyFn){ const m = {}; items.forEach(x=>{ const k = keyFn(x) || '—'; m[k]=(m[k]||0)+1; }); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
 // 该日期所在周的周四：ISO 周号与周年份都按它算
 function isoThursday(d){ return new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()+3-((d.getDay()+6)%7))); }
@@ -1142,9 +1142,6 @@ function partTypeDescriptions(c){
 
 // Data now lives on the server — ALL_CASES is filled from GET /api/bootstrap at startup (see init at the bottom).
 let ALL_CASES = [];
-function normalizePendingCases(list){
-  list.forEach(c=>{ if(c.meetingDecision==='PENDING'){ c.actionStatus=null; c.followUps=[]; if(!c.committeeDiscussion || /deferred|pending/i.test(c.committeeDiscussion)) c.committeeDiscussion='Pending for Sourcing Committee Review'; } });
-}
 function seedPresentationLinks(list){
   list.forEach(c=>{ if(c.meetingDecision!=='PENDING' && !c.sourcingPresentationLink) c.sourcingPresentationLink = 'https://zf.sharepoint.com/sites/SourcingCommittee/'+wk(c.weekNum)+'/'+c.swatId+'_SourcingPresentation.pptx'; });
 }
@@ -1356,7 +1353,6 @@ function runDailyReminderCheck(force){
   const S = REMINDER_SETTINGS;
   let overdueMarked = 0, sent = 0;
   ALL_CASES.forEach(c=>{
-    if(c.meetingDecision==='PENDING') return;                     // not reviewed yet — no actions exist
     (c.followUps||[]).forEach(t=>{
       if(!(t.status==='Open' || t.status==='Overdue')) return;
       if(!/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate||'')) return;      // no usable due date
@@ -1382,7 +1378,7 @@ function runDailyReminderCheck(force){
     c.actionStatus = rollupActionStatus(c.followUps);
   });
   let overdueTotal=0, openTotal=0;
-  ALL_CASES.forEach(c=>{ if(c.meetingDecision==='PENDING') return; (c.followUps||[]).forEach(t=>{ if(t.status==='Overdue') overdueTotal++; if(t.status==='Open') openTotal++; }); });
+  ALL_CASES.forEach(c=>{ (c.followUps||[]).forEach(t=>{ if(t.status==='Overdue') overdueTotal++; if(t.status==='Open') openTotal++; }); });
   S.lastRunDate = today;
   S.lastRun = { when: new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}), auto: !force, overdueMarked, sent, overdueTotal, openTotal };
   saveReminderSettings();
@@ -1686,8 +1682,11 @@ function actionCell(a){
   if(a===null) return '<span class="no-action-txt">No action</span>';
   return `<span class="badge ${actionBadgeClass(a)}"><span class="rag ${ragForAction(a)}"></span>${a}</span>`;
 }
-// Pending cases have not been reviewed yet, so there is no action status to show (blank, not "No action").
-function actionCellFor(c){ return c.meetingDecision==='PENDING' ? '<span class="no-action-txt">—</span>' : actionCell(c.actionStatus); }
+// v3 Phase-41：Pending 案例也能挂待办（上过会、批准前还要办的事）。没有待办的 Pending 案例还没决议，行动状态留空（不是 "No action"）
+function noActionYet(c){ return c.meetingDecision==='PENDING' && !(c.followUps||[]).length; }
+// 待办全关即结案、须先填 Final PPT（规则 2）；Pending 案例还没决议，待办全关不算结案（同服务端 logic.closing_tasks_closes_case）
+function closingTasksClosesCase(decision){ return decision!=='PENDING'; }
+function actionCellFor(c){ return noActionYet(c) ? '<span class="no-action-txt">—</span>' : actionCell(c.actionStatus); }
 /* ===================== Follow-up feedback & closure approval (v3 Phase-14, feedback deck p.4 / p.11) =====================
    Any logged-in user reports progress on an open follow-up (text + evidence files, Outlook mails allowed);
    Managers / admins approve (the follow-up is closed) or reject with a remark. The server enforces all of it. */
@@ -1706,7 +1705,7 @@ function feedbackSectionHtml(c, t){
   const loggedIn = !!state.user && !state.user.mustChangePassword;
   const closed = t.status==='Closed';
   const decisionPanel = f => {
-    const fid = escapeAttr(f.id), lastOpen = isLastOpenTask(c, t);
+    const fid = escapeAttr(f.id), lastOpen = isLastOpenTask(c, t) && closingTasksClosesCase(c.meetingDecision);
     return `<div class="fb-panel" id="fbDecision_${fid}">
       <div class="form-field"><label>Remark (required when rejecting)</label><textarea class="edit-input" id="fbRemark_${fid}" placeholder="e.g. Further action: negotiate another 0.02 EUR/pc"></textarea></div>
       ${lastOpen ? `<div class="form-field" style="margin-top:8px;"><label>Final PPT / Supporting Document Link ${c.finalDocLink?'':'*'}${fieldTip('Approving closes the last open follow-up, which closes the case — the final document link is required.')}</label><input class="edit-input" id="fbFinal_${fid}" value="${escapeAttr(c.finalDocLink||'')}" placeholder="https://…"/></div>` : ''}
@@ -2369,7 +2368,7 @@ const DB_SORT_KEYS = {
   cluster: c=>(c.cluster||'')+' '+(c.commodity||''),
   supplier: c=>c.recommendedSupplier||'', presenter: c=>c.presenter||'', level: c=>c.decisionLevel||'',
   spend: c=>Number(c.peakYearSpend||0), decision: c=>c.meetingDecision||'',
-  action: c=>c.meetingDecision==='PENDING' ? '' : (c.actionStatus||'No action'),
+  action: c=>noActionYet(c) ? '' : (c.actionStatus||'No action'),
 };
 const levelRank = c => { const i = DECISION_LEVELS.indexOf(c.decisionLevel); return i<0 ? DECISION_LEVELS.length : i; };
 // 多区域案例（"EU + NA"）按勾选里最靠前的地区归组，与服务端 exports._region_rank 一致
@@ -2510,15 +2509,15 @@ async function saveBlobFile(blob, filename){
 }
 
 async function downloadCasesCsv(rows, filename){
-  const anyDecided = rows.some(c=>c.meetingDecision!=='PENDING');
+  const anyDecided = rows.some(c=>!noActionYet(c));
   const headers = ['Week','Case #','SWAT Case Number','Part Number(s)','Part Description(s)','Region','Project','Product Family','Cluster','Commodity',
     'Parent PF','Part Family Code','Sourcing Type','Recommended Supplier','Presenter','Decision Level',
     'Bundle Peak Year Spend','Bundle Lifetime Spend','Spend Currency','Pc Price CQA','Supplier Price (landed)','Tooling CQA','Supplier Tooling Cost','Average Volume','Lifetime Volume','Tooling Payment',
     'BPG available','FRA available','Sourcing Decision','Case Comments'].concat(anyDecided ? ['Action Status','Open Follow-up Tasks'] : []);
   const lines = [headers.map(csvEscape).join(',')];
   rows.forEach(c=>{
-    const pending = c.meetingDecision==='PENDING';
-    const tasksSummary = pending ? '' : ((c.followUps||[]).map(t=>`${t.task} [${ownerLabel(t)}, due ${t.dueDate}, ${t.status}]`).join(' | ') || 'No action');
+    const pending = noActionYet(c);
+    const tasksSummary = pending ? '' :((c.followUps||[]).map(t=>`${t.task} [${ownerLabel(t)}, due ${t.dueDate}, ${t.status}]`).join(' | ') || 'No action');
     const pnLines = partNumberLines(c);
     const pnSummary = pnLines.map(p=>p.partNumber).join(' | ');
     // 项目 / 类型 / 供应商按零件行（v3 Phase-15）；旧多零件案例的行上没有就用案例级值
@@ -2586,7 +2585,7 @@ function renderDashboard(){
   const conditional = periodCases.filter(c=>c.meetingDecision==='CONDITIONAL APPROVAL').length;
   const pending = periodCases.filter(c=>c.meetingDecision==='PENDING').length;
   // 行动状态数真实的待办（领导：没有待办就是 0，不把"已决议但没待办"的案例算成 Closed）
-  const tasks = decidedTasks(periodCases);
+  const tasks = caseTasks(periodCases);
   const openTasks = tasks.filter(x=>x.t.status==='Open'), overdueTasks = tasks.filter(x=>x.t.status==='Overdue');
   const openA = openTasks.length, overdueA = overdueTasks.length, closedA = tasks.filter(x=>x.t.status==='Closed').length;
   const ownerKey = x => ownerLabel(x.t) || '—';
@@ -2631,7 +2630,7 @@ function renderDashboard(){
     ${tile('Pending', pending, 'y', 'pending')}
   </div>
 
-  <div class="breakdown-row-title">Action Status · ${esc(label)} — ${tasks.length} follow-up action${tasks.length===1?'':'s'}${infoTip('Follow-up actions of the decided cases; Pending cases have no actions yet. Each action is counted once by its own status: an action past its due date is Overdue, not Open, so the three numbers add up to the total.')}</div>
+  <div class="breakdown-row-title">Action Status · ${esc(label)} — ${tasks.length} follow-up action${tasks.length===1?'':'s'}${infoTip('Follow-up actions of the cases, including cases still Pending. Each action is counted once by its own status: an action past its due date is Overdue, not Open, so the three numbers add up to the total.')}</div>
   <div class="tile-row three">
     ${tile('Open', openA, 'y', 'open')}
     ${tile('Overdue', overdueA, overdueA>0?'r':'g', 'overdue')}
@@ -3618,11 +3617,15 @@ function caseCommentsCardHtml(c){
       </div>`;
 }
 // v3 Phase-38：案例详情显示登记时的筛查答案 —— 现查这条登场记录的登记单（规则同服务端 logic.is_case_submitter：
-// 同一 SWAT 号、案例创建时间 = 提交时间），不在案例上另存一份；Excel 导入的案例没有登记单，显示 "—"
+// 同一 SWAT 号、案例创建时间 = 提交时间），不在案例上另存一份
 function caseRegistration(c){
   return SUBMISSIONS.find(s=>s.status==='Registration Confirmed' && s.approvedSwatId===c.swatId && s.submittedAt===c.createdDate) || null;
 }
-function screeningInfoItems(s){
+function screeningInfoItems(c){
+  const s = caseRegistration(c);
+  // Excel 导入的案例没有登记单，周会 Excel 里也没有这几列：写明没记录的原因，免得一排 "—" 看着像系统漏了（用户 2026-10-29 定）
+  if(!s && c.source && c.source.kind==='excel')
+    return `<div class="info-item" style="grid-column:1/-1;"><div class="k">Family Case? / Involves CCB?</div><div class="v" style="font-weight:400;color:var(--ink-faint);">Not recorded — imported from Excel</div></div>`;
   const v = key => (s && s[key]) || '—';
   return infoItem('Family Case?', v('isFamilyCase')) + infoItem('Family Alignment Done?', v('familyAligned'))
     + infoItem('Involves CCB?', v('involvesECM')) + infoItem('Passed CCB2?', v('ccbApproved'));
@@ -3683,7 +3686,7 @@ function renderDetail(){
     ${editing ? `
     <div class="status-tile"><div class="k">Sourcing Decision</div><select class="edit-input" id="editDecision">${DECISION_OPTIONS.map(o=>`<option value="${o.v}" ${b.meetingDecision===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
     <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation Link ${(b.meetingDecision!=='PENDING' && b.decisionLevel!=='Level 4' && !(c.files&&c.files.length))?'*':''}${fieldTip('A decision other than Pending needs this link, or a presentation file added under Sourcing Presentation Files below. Not required for Level 4 cases.')}</div>${ef('editPresentationLink', b.sourcingPresentationLink||'')}${(c.files&&c.files.length) ? `<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">Optional — ${c.files.length} file${c.files.length===1?'':'s'} attached below</div>` : ''}</div>
-    <div class="status-tile"><div class="k">Action Status${fieldTip(b.meetingDecision==='PENDING' ? 'Blank until a Sourcing Decision is recorded.' : 'Computed from the task statuses below.')}</div>${b.meetingDecision==='PENDING' ? '<span class="no-action-txt">—</span>' : actionCell(rolledUpStatus)}</div>
+    <div class="status-tile"><div class="k">Action Status${fieldTip(noActionYet(b) ? 'Blank until a Sourcing Decision is recorded or a follow-up task is added.' : 'Computed from the task statuses below.')}</div>${noActionYet(b) ? '<span class="no-action-txt">—</span>' : actionCell(rolledUpStatus)}</div>
     ` : `
     <div class="status-tile"><div class="k">Sourcing Decision</div><span class="badge ${decisionBadgeClass(c.meetingDecision)}">${esc(c.meetingDecision)}</span>${c.decisionText ? `<div style="font-size:11px;color:var(--ink-soft);margin-top:5px;white-space:pre-line;">Excel: ${esc(c.decisionText)}</div>` : ''}</div>
     <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation</div><div style="font-size:12px;word-break:break-all;">${c.sourcingPresentationLink ? documentLink(c.sourcingPresentationLink) : (c.files&&c.files.length) ? `<span>📎 ${c.files.length} file${c.files.length===1?'':'s'} under Sourcing Presentation Files</span>` : `<span style="color:var(--ink-faint);">Not yet provided — required when a decision is recorded</span>`}</div></div>
@@ -3743,7 +3746,7 @@ function renderDetail(){
           <div class="form-field"><label>Presenter</label>${ef('editPresenter', b.presenter)}</div>
           <div class="form-field"><label>Decision Level</label>${esel('editDecisionLevel', b.decisionLevel, DECISION_LEVELS)}</div>
           <div class="form-field span2">
-            <label>Final PPT / Supporting Document Link ${rollupActionStatus(b.followUps)==='Closed'?'*':''}${fieldTip('Required once every follow-up action is Closed (that closes the case). Paste the SharePoint / OneDrive link — the file itself stays there.')}</label>
+            <label>Final PPT / Supporting Document Link ${closingTasksClosesCase(b.meetingDecision) && rollupActionStatus(b.followUps)==='Closed'?'*':''}${fieldTip('Required once every follow-up action is Closed (that closes the case). Paste the SharePoint / OneDrive link — the file itself stays there.')}</label>
             ${ef('editFinalDocLink', b.finalDocLink||'')}
           </div>
         </div>
@@ -3764,7 +3767,7 @@ function renderDetail(){
           ${infoItem('Recommended Supplier', c.recommendedSupplier)}
           ${infoItem('Presenter', c.presenter)}
           ${infoItem('Decision Level', c.decisionLevel)}
-          ${screeningInfoItems(caseRegistration(c))}
+          ${screeningInfoItems(c)}
           <div class="info-item" style="grid-column:1/-1;"><div class="k">Final PPT / Supporting Document</div>
             <div class="v" style="font-weight:400;word-break:break-all;">${c.finalDocLink ? documentLink(c.finalDocLink) : `<span style="color:var(--ink-faint);">Not yet provided${c.actionStatus==='Closed'?'':' — required before the case can be closed'}</span>`}</div>
           </div>
@@ -3826,7 +3829,7 @@ function renderDetail(){
       <div class="card section-card" style="margin-bottom:0;">
         <h3>Follow-up Tasks</h3>
         ${editing ? `
-          ${b.followUps.length===0 ? `<div style="color:var(--ink-faint);font-size:12.5px;margin-bottom:10px;">${b.meetingDecision==='PENDING' ? 'Case is Pending for Sourcing Committee Review — follow-up tasks can be added once a Sourcing Decision is recorded.' : 'No tasks yet.'}</div>` : ''}
+          ${b.followUps.length===0 ? `<div style="color:var(--ink-faint);font-size:12.5px;margin-bottom:10px;">No tasks yet.</div>` : ''}
           ${b.followUps.map((t,i)=>`
             <div class="pn-editor" style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;position:relative;">
               <button data-remove-task="${i}" class="btn-danger" style="position:absolute;top:10px;right:10px;padding:4px 9px;font-size:11px;">Remove</button>
@@ -4566,12 +4569,11 @@ function wireEvents(){
       problems.push('A Sourcing Decision cannot be saved without the Sourcing Presentation — enter the Sourcing Presentation Link, or add the presentation file under Sourcing Presentation Files.');
     if(b.sourcingPresentationLink && !isUrl(b.sourcingPresentationLink)) problems.push('The Sourcing Presentation Link must be a full URL (starting with http:// or https://).');
     if(!regionList(b).length) problems.push('Select at least one Region.');
-    // Rule 0: a Pending case has not been reviewed — it cannot carry post-decision follow-up tasks.
-    if(b.meetingDecision==='PENDING' && b.followUps.length>0) problems.push('A case that is Pending for Sourcing Committee Review cannot have follow-up tasks. Record the Sourcing Decision first, or remove the tasks.');
+    // 模板原有的 Rule 0（Pending 案例不能带待办）v3 Phase-41 取消（与服务端 logic.case_edit_problems 一致）
     // 未关闭的待办要能收到提醒：必须填写收件邮箱（系统不再按姓名猜测）。
     b.followUps.forEach((t,i)=>{ if(t.status!=='Closed' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(t.notifyEmail||'')) problems.push(`Follow-up task ${i+1}: enter a valid "Send reminder to" email, so the reminder reaches someone.`); });
     // Rule 2: closing the case (every follow-up action closed) requires the Final PPT / Supporting Document Link.
-    if(rollupActionStatus(b.followUps)==='Closed' && !b.finalDocLink) problems.push('All follow-up actions are now Closed, which closes the case — enter the Final PPT / Supporting Document Link first.');
+    if(closingTasksClosesCase(b.meetingDecision) && rollupActionStatus(b.followUps)==='Closed' && !b.finalDocLink) problems.push('All follow-up actions are now Closed, which closes the case — enter the Final PPT / Supporting Document Link first.');
     if(b.finalDocLink && !isUrl(b.finalDocLink)) problems.push('The Final PPT / Supporting Document Link must be a full URL (starting with http:// or https://).');
     if(problems.length){ state.editError = problems.join('\n'); render(); return; }
     if(!state.isSysAdmin) delete b.meetingDate;  // 改周只给 Sourcing admin（服务端同样强制）

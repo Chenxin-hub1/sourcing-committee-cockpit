@@ -111,14 +111,15 @@ def _notes(c: dict) -> str:
     discussion = (c.get("committeeDiscussion") or "").strip()
     if discussion and not discussion.startswith("Pending for Sourcing Committee Review"):
         parts.append(discussion)
-    if c.get("meetingDecision") != "PENDING":
-        for i, t in enumerate(c.get("followUps") or [], start=1):
-            parts.append(f"{i}. {t.get('task', '')} — {owners.task_owner(t) or '—'}, due {t.get('dueDate') or '—'} [{t.get('status') or ''}]")
+    # v3 Phase-41：Pending 案例也可能有待办（上过会、批准前还要办的事），一样列出
+    for i, t in enumerate(c.get("followUps") or [], start=1):
+        parts.append(f"{i}. {t.get('task', '')} — {owners.task_owner(t) or '—'}, due {t.get('dueDate') or '—'} [{t.get('status') or ''}]")
     return "\n".join(parts)
 
 
 def _action_status(c: dict) -> str:
-    if c.get("meetingDecision") == "PENDING":
+    # 没有待办的 Pending 案例还没决议，留空（不写 "No action"）
+    if c.get("meetingDecision") == "PENDING" and not c.get("followUps"):
         return ""
     return "No action" if c.get("actionStatus") is None else str(c.get("actionStatus"))
 
@@ -303,14 +304,12 @@ ACTION_HEADERS = ["#", "SWAT Case Number", "Part Description", "Sourcing Decisio
 
 
 def _actions_sheet(ws, cases: list[dict], label: str) -> None:
-    """纪要第二个表：已有决议案例的每个待办一行。"""
+    """纪要第二个表：每个待办一行（v3 Phase-41 起含 Pending 案例的待办）。"""
     _header(ws, "minutes", f"Follow-up Actions — {label}",
-            "One row per follow-up task of the decided cases; Pending cases carry no actions yet.", ACTION_HEADERS)
+            "One row per follow-up task, including tasks of cases still Pending.", ACTION_HEADERS)
     widths = {i: len(h) + 2 for i, h in enumerate(ACTION_HEADERS, start=1)}
     r, n = HEADER_ROW + 1, 0
     for c in _sorted(cases):
-        if c.get("meetingDecision") == "PENDING":
-            continue
         for t in c.get("followUps") or []:
             n += 1
             recipient = logic.task_recipient(t)

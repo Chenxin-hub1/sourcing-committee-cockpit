@@ -1814,8 +1814,9 @@ try{
     await page.evaluate(opts=>applySnapshot({commodityOptions:opts}), COMMODITY_OPTIONS);
     await page.evaluate(()=>goToDetail('SWAT-TEST'));
     const info = ()=>page.locator('.info-grid', {hasText:'SWAT Case Number'}).innerText();
-    // Excel 导入的案例没有登记单：四项筛查答案都是 —
-    assert.ok(/Family Case\?\s*—/.test(await info()) && /Passed CCB2\?\s*—/.test(await info()), await info());
+    // Excel 导入的案例没有登记单：合成一项写明没记录的原因，不显示四个 —
+    assert.ok((await info()).includes('Family Case? / Involves CCB?\nNot recorded — imported from Excel'), await info());
+    assert.ok(!/Passed CCB2\?/.test(await info()), await info());
 
     await page.locator('#editCaseBtn').click();
     assert.equal(await page.locator('#editCommodity').inputValue(), 'Yajun Zhao');
@@ -2293,6 +2294,63 @@ try{
       return {inner: wrap.scrollWidth<=wrap.clientWidth, page: document.documentElement.scrollWidth<=window.innerWidth, below: due.top>=title.bottom};
     });
     assert.deepEqual(fit, {inner:true, page:true, below:true});
+    await context.close();
+  });
+
+  // v3 Phase-41（领导 2026-10-29：上过会、批准前还有待办的案例保持 Pending，也要能存待办）
+  await test('A Pending case saves follow-up tasks, shows and counts them, and closing them all needs no Final PPT', async()=>{
+    const saves = [];
+    const {page, context} = await fixture({user:'admin', api:async(route,path)=>{
+      if(path==='/api/presentation-library'){ await route.fulfill({json:{ok:true, folder:'', files:[]}}); return true; }
+      if(path==='/api/cases/C-TEST' && route.request().method()==='PUT'){
+        const body = route.request().postDataJSON();
+        saves.push(body);
+        const updated = await page.evaluate(b=>({...ALL_CASES[0], meetingDecision:b.meetingDecision, followUps:b.followUps,
+          finalDocLink:b.finalDocLink, actionStatus:rollupActionStatus(b.followUps)}), body);
+        await route.fulfill({json:{ok:true, case:updated, snapshot:{cases:[updated]}}});
+        return true;
+      }
+      return false;
+    }});
+    await seed(page, {meetingYear:2026, committeeDiscussion:'Presented; capacity to be confirmed before approval.'});
+    await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    const statusTile = ()=>page.locator('.status-tile', {hasText:'Action Status'}).innerText();
+    assert.ok((await statusTile()).includes('—'), await statusTile());  // 还没有待办：留空
+    await page.locator('#editCaseBtn').click();
+    assert.ok((await page.locator('#app').innerText()).includes('No tasks yet.'));
+    await page.locator('#addTaskBtn').click();
+    await page.locator('#editFuTask_0').fill('Confirm capacity with supplier');
+    await page.locator('#editFuResp_0').fill('Melisa Bouzo');
+    await page.locator('#editFuDue_0').fill('2027-01-15');
+    await page.locator('#editFuEmail_0').fill('m.bouzo@example.com');
+    await page.locator('#saveCaseBtn').click();
+    await page.waitForFunction(()=>!state.detailEditMode);
+    assert.equal(saves[0].meetingDecision, 'PENDING');
+    assert.deepEqual(saves[0].followUps.map(t=>t.task), ['Confirm capacity with supplier']);
+    assert.ok((await statusTile()).includes('Open'), await statusTile());
+    assert.equal(await page.locator('tr.task-row .task-title').textContent(), 'Confirm capacity with supplier');
+
+    await goTo(page, 'database');
+    const row = await page.locator('tr[data-swat="SWAT-TEST"]').innerText();
+    assert.ok(row.includes('PENDING') && row.includes('Open'), row);
+    await goTo(page, 'dashboard');
+    const actionTitle = await page.locator('.breakdown-row-title', {hasText:'Action Status'}).textContent();  // innerText 被 CSS 转成大写
+    assert.ok(actionTitle.includes('1 follow-up action'), actionTitle);
+
+    // 待办全关：Pending 案例不算结案，不要求 Final PPT；记录决议时规则 2 照旧
+    await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    await page.locator('#editCaseBtn').click();
+    await page.locator('#editFuStatus_0').selectOption('Closed');
+    await page.locator('#saveCaseBtn').click();
+    await page.waitForFunction(()=>!state.detailEditMode);
+    assert.equal(saves[1].followUps[0].status, 'Closed');
+    assert.equal(saves[1].finalDocLink, '');
+    await page.locator('#editCaseBtn').click();
+    await page.locator('#editDecision').selectOption('APPROVED');
+    await page.locator('#editPresentationLink').fill('https://example.com/deck.pptx');
+    await page.locator('#saveCaseBtn').click();
+    assert.ok((await page.locator('.block-warning').first().textContent()).includes('Final PPT / Supporting Document Link'));
+    assert.equal(saves.length, 2);
     await context.close();
   });
 

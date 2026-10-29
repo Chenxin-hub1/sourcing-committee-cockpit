@@ -29,6 +29,7 @@
 - 领导反馈（2026-10-28～29）：纪要开头带 Excel 单引号（`'1.`）时编辑页仍能识别出编号任务；登记页 BPG 选 No 时只有换算后超过 3 Mio EUR 才出红字；案例编辑页能从规范清单改 Commodity，Cluster 跟着变，手改的以后词表更新不会被覆盖；案例详情显示登记时的 Family Case / CCB 答案（Excel 导入的显示 "—"）；Level 4 案例不放演示文稿也能记录 Approved。
 
 - 领导反馈（2026-10-29，待办版式）：案例详情页的 Follow-up Tasks 一行一条（任务加粗、负责人、截止日、状态），按纪要编号顺序；收起时不显示邮箱，点一行才展开收件人、备注和反馈审批；7、8 条待办一屏看得完，手机上不用左右滑。
+- 领导反馈（2026-10-29，Pending 案例的待办）：上过会但批准前还有待办的案例保持 Pending 也能保存待办；这些待办和其他待办一样进 Follow-ups、驾驶舱统计、提醒和纪要 Excel；Pending 案例的待办全关不算结案、不要求 Final PPT。
 
 ## Phase-1: 表单简化（反馈第一批）
 
@@ -334,7 +335,7 @@ Spec: non-spec
 
 Status: `awaiting-acceptance`
 
-Description: 领导 2026-10-28 反馈 "最新的页面也不显示这些问题了，is it a family case, Does this case involve a change management (CCB)"。登记页一直有这两题；git 历史里案例详情从来没显示过答案，只有 Approval 页显示，确认登记后就哪里都看不到了。用户 2026-10-29 要求先改：详情页按 Phase-31 的规则现查这条登场记录的登记单（`caseRegistration`：同一 SWAT 号、创建时间 = 提交时间，不在案例上另存一份），Case Information 卡片 Decision Level 之后显示 Family Case? / Family Alignment Done? / Involves CCB? / Passed CCB2? 四项（`screeningInfoItems`，文字同 Approval 页）；Excel 导入的案例没有登记单显示 "—"。纯前端改动。待领导确认（不在本 Phase）：说的是不是详情页、要不要进 Database 表格与导出、答案要不要能在编辑页改。验证（2026-10-29）：前端回归新增用例里覆盖（导入案例四项 "—"；同一 SWAT 有两张已确认登记单时取创建时间对得上的那张）；临时实例 8063 截图核对布局（`.playwright-mcp/phase38-detail-screening.png`）。
+Description: 领导 2026-10-28 反馈 "最新的页面也不显示这些问题了，is it a family case, Does this case involve a change management (CCB)"。登记页一直有这两题；git 历史里案例详情从来没显示过答案，只有 Approval 页显示，确认登记后就哪里都看不到了。用户 2026-10-29 要求先改：详情页按 Phase-31 的规则现查这条登场记录的登记单（`caseRegistration`：同一 SWAT 号、创建时间 = 提交时间，不在案例上另存一份），Case Information 卡片 Decision Level 之后显示 Family Case? / Family Alignment Done? / Involves CCB? / Passed CCB2? 四项（`screeningInfoItems`，文字同 Approval 页）；Excel 导入的案例没有登记单显示 "—"。纯前端改动。待领导确认（不在本 Phase）：说的是不是详情页、要不要进 Database 表格与导出、答案要不要能在编辑页改。验证（2026-10-29）：前端回归新增用例里覆盖（导入案例四项 "—"；同一 SWAT 有两张已确认登记单时取创建时间对得上的那张）；临时实例 8063 截图核对布局（`.playwright-mcp/phase38-detail-screening.png`）。领导 2026-10-29 答："这个需要显示的，因为 family case 就需要 family alignment；避免一个 case 上会了，family team not aware, no alignment before；需要保留"——登记页四问一直在（git 历史从没删过），Family = Yes 且 Alignment = No 本来就拦登记，详情页显示即本 Phase。领导说这话时看的是两条 Excel 导入案例（110000034978、110000032915），36 份历史周 Excel 都没有 Family / CCB 列，导入案例无从显示答案；用户 2026-10-29 定：导入案例把四个 "—" 合成一项 "Family Case? / Involves CCB?: Not recorded — imported from Excel"，写明原因（不在编辑页补填）；没有登记单的非导入案例仍显示四个 "—"。前端回归同步改断言（55 项全过）。要不要进 Database 表格与导出，领导没答。
 
 Spec: non-spec
 
@@ -353,5 +354,17 @@ Status: `awaiting-acceptance`
 Description: 领导 2026-10-29 反馈（截图）："还有这个follow up actions可不可以更突出task, 也表格化一下, 目前的layout一个task就能占满一大版面，要是有7，8个task看起来特别累"，"大部分都是显示邮箱地址去了"。现状：详情页每条待办是一张卡片（Task / Categories / Owner / Tags / Due Date / Status / Reminder to 邮箱 / Notes / 反馈区），一条约占 420px 高。用户 2026-10-29 看了三种原型（精简表格点行展开 / 两行一组全显示 / 按状态分组）后选 A：精简表格、点一行展开。范围：只改详情页查看状态；编辑状态的待办表单、Follow-ups 页不动。
 
 实现（2026-10-29）：`caseTasksTableHtml`（index.html）把详情页待办改成表格，按案例上的顺序（即纪要编号顺序）一行一条：Task（加粗，下面是自动分类标签和反馈小标签："N to approve" 琥珀色、"N update(s)" 灰框）/ Owner（下面一行 Function）/ Due（超期标红）/ Status 徽章 / 行尾展开箭头。收起时不显示任何邮箱。点一行（或用键盘按行尾箭头）展开 `taskDetailHtml`：Reminder to（收件人 · CC · 通道，未关闭又没邮箱的标红）、Tags、Notes，以及原来的反馈与关闭审批区（`feedbackSectionHtml` 原样复用，Report progress / Approve / Reject 都在里面）。可以同时展开几行（`state.taskOpenIds`），每小时刷新后保持；收起一行时，如果里面开着汇报或审批面板就一并关掉，免得一直挡着自动刷新。点到按钮、链接或正在选中文字时不切换。宽度 ≤ 560px 时改为任务占一整行，负责人 / 截止日 / 状态排在下一行，不用左右滑。验证：前端回归 55（新增 1 条：顺序、收起时无邮箱、分类与反馈标签、超期标红、点行展开的收件人 / 抄送 / 标签 / 备注 / 审批按钮、同时展开两行、展开区按钮不收起行、键盘收起后关掉汇报表单且焦点留在箭头上、390px 宽不横滚且截止日在任务下面；改了 2 条旧用例：标签改在展开区里查，经理审批前先点开行）、滚动回归 17、pytest 622、ruff 全过；原型那份 Kimball 模拟数据（8 条待办）在本机临时实例 8063 上看了实物：1440px 宽 8 条加 1 条展开共约 900px（原来一条约 420px），390px 宽无横向滚动（截图 `.playwright-mcp/phase40-detail-tasks.png`、`phase40-detail-tasks-phone.png`）。原型代码与数据库副本已删，三种方案的截图留在 `.playwright-mcp/proto-followups-A/B/C.png`。
+
+Spec: non-spec
+
+## Phase-41: Pending 案例也能加待办
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-10-29（截图）："有的case presented了但是暂时还是pending一些action，before we can approve"；"但是case改回pending，我就无法save follow up actions"；"能不能允许pending的case也可以加follow up actions"。用户 2026-10-29 同意方案：去掉规则 0（模板原有：Pending 案例不能带待办），前后端都改；Pending 案例的待办与其他案例一样进驾驶舱统计、自动提醒、纪要 Excel 的 Notes 与 Actions 表，Database 显示行动状态；唯一例外：Pending 案例待办全关不算结案，规则 2（全关须填 Final PPT）不适用，案例照旧 Pending，等记录决议。
+
+实现（2026-10-29）：服务端 `logic.case_edit_problems` 删规则 0；新增 `logic.closing_tasks_closes_case`（Pending 返回 False），规则 2、单条编辑（`task_edit_problems`）、反馈批准关最后一条（`feedback.decide`）三处共用；`actionStatus` 不再对 Pending 强制为 None，一律按待办汇总（没有待办仍是 None）；`run_daily_reminder_check` 不再跳过 Pending 案例（标逾期、发提醒、Open / Overdue 计数）；纪要 Excel（`exports`）Notes 列与 Actions 表列出 Pending 案例的待办，没有待办的 Pending 案例 Action Status 仍留空；删掉没人调用、会清空 Pending 待办的 `normalize_pending_cases`。前端同一套：saveCaseBtn 删规则 0、规则 2 加例外，编辑页 Final PPT 星号与反馈审批面板的 Final PPT 输入框按 `closingTasksClosesCase`；`noActionYet`（Pending 且没有待办）决定行动状态显示 "—"（详情、编辑页、Database 列与排序、CSV）；驾驶舱待办统计 `decidedTasks` 改为 `caseTasks`（含 Pending），说明文字同步；编辑页 Pending 案例的空待办提示改成 "No tasks yet."；删掉没人调用的 `normalizePendingCases`，没在用的前端提醒函数里两处 Pending 跳过一并去掉。
+
+验证（2026-10-29）：pytest 626（新增 tests/test_phase41.py 4 项：Pending 存待办 200、全关不要求 Final PPT、改 Approved 后规则 2 照旧 422；单条编辑与反馈批准关最后一条；提醒与计数；纪要 Notes / Actions）、前端回归 56（新增 1 条：Pending 案例加待办保存、详情 / Database / 驾驶舱显示与计数、全关不要求 Final PPT、改 Approved 被规则 2 拦）、滚动回归 17、ruff。
 
 Spec: non-spec

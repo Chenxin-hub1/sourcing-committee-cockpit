@@ -187,11 +187,9 @@ def test_edit_three_rules(client, admin):
     # 规则 1：链接不是完整 URL
     r = client.put(f"/api/cases/{case['id']}", headers=admin, json=_edit_payload(case, meetingDecision="APPROVED", sourcingPresentationLink="sharepoint/x.pptx"))
     assert "full URL" in r.json()["detail"]
-    # 规则 0：Pending 案例不能带待办
+    # 模板的规则 0（Pending 案例不能带待办）v3 Phase-41 已取消，见 tests/test_phase41.py
     task = {"id": "FU-T1", "task": "t", "responsible": "T. Ester", "dueDate": "2026-10-01",
             "status": "Open", "notes": "", "tags": ["Cost"]}
-    r = client.put(f"/api/cases/{case['id']}", headers=admin, json=_edit_payload(case, meetingDecision="PENDING", followUps=[task]))
-    assert "cannot have follow-up tasks" in r.json()["detail"]
     # 规则 3：全部待办 Closed 必须有最终文件链接
     r = client.put(f"/api/cases/{case['id']}", headers=admin, json=_edit_payload(
         case, meetingDecision="APPROVED", sourcingPresentationLink="https://zf.sharepoint.com/x.pptx",
