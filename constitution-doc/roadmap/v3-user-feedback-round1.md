@@ -26,6 +26,10 @@
 
 - 领导反馈（2026-09-29）：提交页 Peak Year Spend / Lifetime Spend 只在案例级各填一个 bundle 金额（必填、须大于 0），零件行不再填；Project / Sourcing Type / Recommended Supplier 按零件行填写，案例级显示去重汇总；议程 / 纪要 Excel 的 Type / Project / Supplier 列按零件行、Peak Year Spend / LT Spend 列按案例合并；上传的演示文件在系统里改名为 `YYYY.MM.DD 项目 零件描述 零件号, 供应商.ext`，原文件名保留可见；角色 "NPI manager" 页面上显示为 "Manager"。
 
+- 领导反馈（2026-10-28～29）：纪要开头带 Excel 单引号（`'1.`）时编辑页仍能识别出编号任务；登记页 BPG 选 No 时只有换算后超过 3 Mio EUR 才出红字；案例编辑页能从规范清单改 Commodity，Cluster 跟着变，手改的以后词表更新不会被覆盖；案例详情显示登记时的 Family Case / CCB 答案（Excel 导入的显示 "—"）；Level 4 案例不放演示文稿也能记录 Approved。
+
+- 领导反馈（2026-10-29，待办版式）：案例详情页的 Follow-up Tasks 一行一条（任务加粗、负责人、截止日、状态），按纪要编号顺序；收起时不显示邮箱，点一行才展开收件人、备注和反馈审批；7、8 条待办一屏看得完，手机上不用左右滑。
+
 ## Phase-1: 表单简化（反馈第一批）
 
 Status: `closed`
@@ -299,5 +303,55 @@ Spec: non-spec
 Status: `awaiting-acceptance`
 
 Description: 用户 2026-10-27 要求（截图）把登记页问题 "Does this case involve an Engineering Change (ECM)?" 改成 "Does this case involve a change management (CCB)?"（原话照用）。改了：登记页这个问题的文字、前端与后端"没答这题"的提示里引用的原句；同日用户定：案例详情里的 "Involves ECM?" 改成 "Involves CCB?"，SharePoint 登记列表 Screening 摘要里的 "ECM:" 改成 "CCB:"（DEPLOY.md 列说明同步）。答案字段 `involvesECM`、后续问题 "Has this case passed CCB2?" 与拦截逻辑不变；`_template.html` 与 `.design/demo` 旧演示快照按约定不动。验证（2026-10-27）：pytest 611（两处测试的查找文字改成新问题；SharePoint 建单测试补断言 Screening 为 "Family case: No; CCB: No"）、前端回归 52、ruff 全过。
+
+Spec: non-spec
+
+## Phase-35: 纪要开头带 Excel 单引号时也能识别编号任务
+
+Status: `awaiting-acceptance`
+
+Description: 用户 2026-10-28 转来截图：Kimball 案例的委员会 Excel Notes 格子开头是 `'1.`（Excel 文本前缀的单引号），编辑页 "Extract action items from discussion" 一条都识别不出来（第 1 条认不出，按顺序认编号的规则让 2～6 也全部落空），案例上只有手动加的 1 条待办。用户 2026-10-29 要求直接改代码。改了：`app/action_items.py` 的主编号规则允许编号前带一个单引号（`'`、`‘`、`’`，复制出来常变成弯引号），单引号算进编号、不留在上一条任务文字里；按行与挤在一行两种写法都适用。只改识别，不改库里的纪要原文（已存的纪要不用迁移，详情页照原文显示）。验证（2026-10-29）：pytest 614（tests/test_phase23.py 新增 1 组 × 3 种引号：领导截图纪要开头加单引号仍识别出 1～6 + 6a～6f 共 12 条、每行都带单引号、挤在一行的纪要）、ruff check 全过；纯后端改动，前端回归未跑。
+
+Spec: non-spec
+
+## Phase-36: 登记页 BPG 红字只在超过 3 Mio EUR 时出现
+
+Status: `awaiting-acceptance`
+
+Description: 北美同事 Patricia 2026-10-28 反馈（领导转来截图）：Bundle Lifetime Spend 312,698 USD、BPG 选 No，页面出红字 "This case cannot be registered: Lifetime Spend above 3 Mio EUR requires an available BPG."。原因是登记页 BPG 选 No 就显示红字、不看金额（提交时的检查是对的，不会真拦）。用户 2026-10-29 要求先改。改了：`bundleLifeOverBpg` / `syncBpgWarning`（index.html），红字只在 BPG = No 且 bundle Lifetime Spend 换算后超过 3 Mio EUR 时显示，改金额、换币种、改 BPG 答案都会重算；BPG 提示行用同一个判断。提交时的前后端检查没动。验证（2026-10-29）：前端回归新增 1 条（1 EUR = 1.17 USD：312,698 USD + No 不出红字；改成 3.6 Mio USD 出、3.4 Mio USD 消失、换成 EUR 3.4 Mio 出、改答 Yes 消失），改前跑过确认失败。
+
+Spec: non-spec
+
+## Phase-37: 案例编辑页可以改 Commodity
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-10-28 反馈：旧案例的 Commodity 有错（"SO02"；KW47 19.11.2025 那份周会 Excel 的 Commodity 格子里本来就写成了 "Yajun Zhao"），编辑页没有地方改，只改 Cluster 没用。领导 2026-10-29 答复："案例上有些是错的，需要增加 edit 功能，让 admin 能手动去编辑修改" —— 错值由管理员在编辑页手改，不按推测批量改。改了：`commodities.options()` / `cluster_of()` 规范清单（按 Cluster 分组：Chemical = CH Chemical、CH01 Functional Plastics、Textiles；Metal = SC、FF、CA、Powder Metal；Electronics, EA and Pyro = EL、EA、Pyro），随快照下发 `commodityOptions`；编辑页 Cluster 旁加 Commodity 下拉（Not specified / 清单 / 导入时认不出的原值标 "not in the list"，不改就照存），选了清单里的 Cluster 自动跟着变并锁定；`CaseEditIn.commodity`（None = 旧页面没带，原值不动），`logic.commodity_problem` 拒绝清单外的新值（"Choose the Commodity from the list."），`logic.apply_commodity_edit` 合并 Cluster / Commodity，改动过的标 `commodityEdited`，`service.normalize_commodities` 跳过它；启动时一次性（`commodity_hand_edits`，只在库里词表版本 = 当前 VERSION 时做）给 Phase-37 之前在编辑页改过 Cluster 的导入案例补标记，以后词表升级不会把手改冲掉。权限同 Edit Case（Manager 与 Sourcing admin）。待领导答（不在本 Phase）：规范清单是否完整、登记页要不要加 Commodity 必选。验证（2026-10-29）：pytest 新增 tests/test_phase37.py（清单顺序与自洽、快照下发、选 Commodity 定 Cluster 并标记、清单外拒绝 / 原值保留、旧页面不带不动、词表重算跳过手改、补标记只标与词表不一致的导入案例），前端回归新增 1 条（原值 "Yajun Zhao" 显示 not in the list、选 Pyro / FF 时 Cluster 跟着变并锁定、保存载荷、详情显示 "FF Forging, Forming & Tubes (Excel: Yajun Zhao)"）；本机库副本起临时实例 8063：启动无报错、快照带 10 项清单、补标记 0 条（本机没人手改过）。
+
+Spec: non-spec
+
+## Phase-38: 案例详情页显示 Family Case / CCB 的登记答案
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-10-28 反馈 "最新的页面也不显示这些问题了，is it a family case, Does this case involve a change management (CCB)"。登记页一直有这两题；git 历史里案例详情从来没显示过答案，只有 Approval 页显示，确认登记后就哪里都看不到了。用户 2026-10-29 要求先改：详情页按 Phase-31 的规则现查这条登场记录的登记单（`caseRegistration`：同一 SWAT 号、创建时间 = 提交时间，不在案例上另存一份），Case Information 卡片 Decision Level 之后显示 Family Case? / Family Alignment Done? / Involves CCB? / Passed CCB2? 四项（`screeningInfoItems`，文字同 Approval 页）；Excel 导入的案例没有登记单显示 "—"。纯前端改动。待领导确认（不在本 Phase）：说的是不是详情页、要不要进 Database 表格与导出、答案要不要能在编辑页改。验证（2026-10-29）：前端回归新增用例里覆盖（导入案例四项 "—"；同一 SWAT 有两张已确认登记单时取创建时间对得上的那张）；临时实例 8063 截图核对布局（`.playwright-mcp/phase38-detail-screening.png`）。
+
+Spec: non-spec
+
+## Phase-39: Level 4 案例记录决议不强制演示文稿
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-10-29："能不能 L4 的 case 不强制要求上传 presentation，不然我们很多 case 就无法点成 approved"（后半句是 2026-10-28 截图里的那句）。规则 1（记录非 Pending 决议必须有演示文稿链接或文件）对 Decision Level = Level 4 的案例不再要求：服务端 `logic.case_edit_problems` 与前端 saveCaseBtn 同一条件（按这次保存的级别判断），编辑页 Sourcing Presentation Link 的星号与说明同步。链接填了仍须是完整网址；全部待办关闭时的 Final PPT 规则不变（没有待办的案例本来就不要求）。验证（2026-10-29）：pytest（Level 2 无演示文稿 422、改 Level 4 后 200；Level 4 填了不完整的链接仍拒绝）、前端回归（在线登记案例 Level 2 记录 Approved 被拦、改 Level 4 可保存）。
+
+Spec: non-spec
+
+## Phase-40: 案例详情页的 Follow-up Tasks 改成表格
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-10-29 反馈（截图）："还有这个follow up actions可不可以更突出task, 也表格化一下, 目前的layout一个task就能占满一大版面，要是有7，8个task看起来特别累"，"大部分都是显示邮箱地址去了"。现状：详情页每条待办是一张卡片（Task / Categories / Owner / Tags / Due Date / Status / Reminder to 邮箱 / Notes / 反馈区），一条约占 420px 高。用户 2026-10-29 看了三种原型（精简表格点行展开 / 两行一组全显示 / 按状态分组）后选 A：精简表格、点一行展开。范围：只改详情页查看状态；编辑状态的待办表单、Follow-ups 页不动。
+
+实现（2026-10-29）：`caseTasksTableHtml`（index.html）把详情页待办改成表格，按案例上的顺序（即纪要编号顺序）一行一条：Task（加粗，下面是自动分类标签和反馈小标签："N to approve" 琥珀色、"N update(s)" 灰框）/ Owner（下面一行 Function）/ Due（超期标红）/ Status 徽章 / 行尾展开箭头。收起时不显示任何邮箱。点一行（或用键盘按行尾箭头）展开 `taskDetailHtml`：Reminder to（收件人 · CC · 通道，未关闭又没邮箱的标红）、Tags、Notes，以及原来的反馈与关闭审批区（`feedbackSectionHtml` 原样复用，Report progress / Approve / Reject 都在里面）。可以同时展开几行（`state.taskOpenIds`），每小时刷新后保持；收起一行时，如果里面开着汇报或审批面板就一并关掉，免得一直挡着自动刷新。点到按钮、链接或正在选中文字时不切换。宽度 ≤ 560px 时改为任务占一整行，负责人 / 截止日 / 状态排在下一行，不用左右滑。验证：前端回归 55（新增 1 条：顺序、收起时无邮箱、分类与反馈标签、超期标红、点行展开的收件人 / 抄送 / 标签 / 备注 / 审批按钮、同时展开两行、展开区按钮不收起行、键盘收起后关掉汇报表单且焦点留在箭头上、390px 宽不横滚且截止日在任务下面；改了 2 条旧用例：标签改在展开区里查，经理审批前先点开行）、滚动回归 17、pytest 622、ruff 全过；原型那份 Kimball 模拟数据（8 条待办）在本机临时实例 8063 上看了实物：1440px 宽 8 条加 1 条展开共约 900px（原来一条约 420px），390px 宽无横向滚动（截图 `.playwright-mcp/phase40-detail-tasks.png`、`phase40-detail-tasks-phone.png`）。原型代码与数据库副本已删，三种方案的截图留在 `.playwright-mcp/proto-followups-A/B/C.png`。
 
 Spec: non-spec

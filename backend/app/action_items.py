@@ -21,8 +21,11 @@ from . import logic
 RESPONSIBLE_MAX = 500  # 与 schemas.Text 的上限一致
 
 # 主编号 "1." 后面要跟空白，"08.10.2026"、"2026.--" 这类不会被当成编号
-_MAIN = re.compile(r"(?:^|(?<=\s))(\d{1,2})\.(?=\s+\S)")
-_MAIN_AT_LINE_START = re.compile(r"^[ \t]*(\d{1,2})\.(?=\s+\S)", re.MULTILINE)
+# v3 Phase-35：编号前可带一个单引号——委员会 Excel 格子的文本前缀（"'1. …"），复制出来常变成弯引号；
+# 单引号算进编号本身，不会留在上一条任务的文字里
+_QUOTE = "['‘’]?"
+_MAIN = re.compile(r"(?:^|(?<=\s))" + _QUOTE + r"(\d{1,2})\.(?=\s+\S)")
+_MAIN_AT_LINE_START = re.compile(r"^[ \t]*" + _QUOTE + r"(\d{1,2})\.(?=\s+\S)", re.MULTILINE)
 _LETTER_SUB = re.compile(r"^[ \t]*([a-z])[.)](?=\s+\S)", re.MULTILINE)
 _PAREN_SUB = re.compile(r"(?:^|(?<=\s))(\d{1,2})\)(?=\s+\S)")
 _OWNER_SEPARATOR = re.compile(r"\s*(?:-{2,}|\s[–—])\s*")

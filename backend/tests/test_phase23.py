@@ -132,6 +132,19 @@ def test_single_spaced_dash_separates_the_owner_when_there_is_no_double_dash():
 # ---------- 边界 ----------
 
 
+@pytest.mark.parametrize("quote", ["'", "‘", "’"])
+def test_excel_text_prefix_quote_before_a_number_is_ignored(quote):
+    # v3 Phase-35：委员会 Excel 的 Notes 格子开头常带文本前缀单引号（"'1. …"），之前一条都认不出来
+    items = action_items.extract(quote + EXCEL_NOTES, MEETING)
+    assert [i["ref"] for i in items] == ["1", "2", "3", "4", "5", "6", "6a", "6b", "6c", "6d", "6e", "6f"]
+    assert items[0]["task"] == "To share updated sourcing presentation"
+    # 每行都带前缀（多个格子一起粘贴）、编号挤在一行里，同样识别，单引号不留在上一条的文字里
+    lines = action_items.extract(f"{quote}1. Send LOI -- Anna\n{quote}2. Kick off -- Ben", MEETING)
+    assert [(i["ref"], i["task"], i["responsible"]) for i in lines] == [("1", "Send LOI", "Anna"), ("2", "Kick off", "Ben")]
+    inline = action_items.extract(f"{quote}{ONE_LINE}", MEETING)
+    assert [i["ref"] for i in inline] == ["1", "2", "2.1", "2.2", "3", "4", "5"]
+
+
 @pytest.mark.parametrize("text", ["", "Pending for Sourcing Committee Review", "Approved. No open points."])
 def test_text_without_numbered_items_gives_no_drafts(text):
     assert action_items.extract(text, MEETING) == []

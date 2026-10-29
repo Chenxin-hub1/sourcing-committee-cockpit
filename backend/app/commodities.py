@@ -112,6 +112,25 @@ def classify(raw: str | None) -> dict:
     return {"cluster": text, "commodity": text, "known": False}
 
 
+def options() -> list[dict]:
+    """编辑页 Commodity 下拉的规范清单（v3 Phase-37）：[{"cluster", "commodity"}]，按 CLUSTERS 分组、组内按词表顺序，
+    每个名只出现一次（FP 与 CH01 同名）；Cluster 未定的代码族（MI、SO）不在清单里。"""
+    named = [*CODE_FAMILIES.values(), *STANDALONE.values()]
+    seen: set[str] = set()
+    out: list[dict] = []
+    for cluster in CLUSTERS:
+        for name, of in named:
+            if of == cluster and name not in seen:
+                seen.add(name)
+                out.append({"cluster": cluster, "commodity": name})
+    return out
+
+
+def cluster_of(commodity: str | None) -> str | None:
+    """规范 Commodity 名 → 它的 Cluster；不在规范清单里返回 None。"""
+    return next((o["cluster"] for o in options() if o["commodity"] == commodity), None)
+
+
 def apply(case: dict, raw: str | None = None) -> dict:
     """把归一结果写到案例上（cluster / commodity / commodityRaw），返回归一结果。raw 缺省取案例已有的原文。"""
     source = raw if raw is not None else (case.get("commodityRaw") or case.get("cluster") or "")

@@ -253,6 +253,8 @@ class CaseEditIn(CommercialIn):
     family: Text = ""
     # 编辑页放宽为文本（v3 Phase-18）：从 Excel 导入、词表还认不出的 Commodity（如 "MI01"）编辑时原样保留；提交页仍限三个 Cluster
     cluster: Annotated[str, AfterValidator(_single_line), StringConstraints(strip_whitespace=True, max_length=120)] = ""
+    # v3 Phase-37：规范清单里的 Commodity（定 Cluster）、空 = Not specified，或案例原值；None = 旧页面没带，原值不动
+    commodity: Annotated[str, AfterValidator(_single_line), StringConstraints(strip_whitespace=True, max_length=120)] | None = None
     parentPF: Text = ""
     partFamilyCode: Text = ""
     sourcingType: SourcingType = ""

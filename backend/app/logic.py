@@ -17,7 +17,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 from zoneinfo import ZoneInfo
 
-from . import owners
+from . import commodities, owners
 from .config import get_settings
 
 # ============================= 常量（与模板 DATA MODEL 一致） =============================
@@ -705,7 +705,9 @@ def case_edit_problems(b: dict, *, imported: bool = False, has_files: bool = Fal
     final_doc = (b.get("finalDocLink") or "").strip()
     follow_ups = b.get("followUps") or []
     # 规则 1：记录任何非 Pending 决议必须有寻源演示文稿（链接或上传的文件）。
-    if b.get("meetingDecision") != "PENDING" and not presentation and not imported and not has_files:
+    # v3 Phase-39：Level 4 案例不强制（领导 2026-10-29：L4 很多没有演示文稿，否则点不成 Approved）
+    if (b.get("meetingDecision") != "PENDING" and b.get("decisionLevel") != "Level 4"
+            and not presentation and not imported and not has_files):
         out.append("A Sourcing Decision cannot be saved without the Sourcing Presentation — "
                    "enter the Sourcing Presentation Link, or add the presentation file under Sourcing Presentation Files.")
     if presentation and not valid_http_url(presentation):
@@ -856,7 +858,7 @@ def apply_case_edit(c: dict, b: dict, commercial: dict | None = None) -> None:
         "partDescription": part_numbers[0].get("partDescription", ""),
         "partNumbers": part_numbers if len(part_numbers) > 1 else None,
         "region": b.get("region", c["region"]), "project": summary["project"],
-        "family": b.get("family", c["family"]), "cluster": b.get("cluster", c["cluster"]),
+        "family": b.get("family", c["family"]),
         "parentPF": b.get("parentPF", c.get("parentPF", "")),
         "partFamilyCode": b.get("partFamilyCode", c.get("partFamilyCode", "")),
         "sourcingType": summary["sourcingType"],
@@ -871,8 +873,29 @@ def apply_case_edit(c: dict, b: dict, commercial: dict | None = None) -> None:
         "finalDocLink": (b.get("finalDocLink") or "").strip(),
         "followUps": follow_ups,
     })
+    apply_commodity_edit(c, b)
     sync_row_commercial(c, part_numbers)
     c["actionStatus"] = None if c["meetingDecision"] == "PENDING" else rollup_action_status(c["followUps"])
+
+
+def commodity_problem(c: dict, commodity: str | None) -> str | None:
+    """v3 Phase-37：编辑页只能选规范清单里的 Commodity、留空，或保留案例原来的值（导入时认不出的 "SO02" 之类）。"""
+    if commodity is None or commodity in ("", c.get("commodity") or "") or commodities.cluster_of(commodity):
+        return None
+    return "Choose the Commodity from the list."
+
+
+def apply_commodity_edit(c: dict, b: dict) -> None:
+    """v3 Phase-37：Cluster / Commodity 一起合并。规范 Commodity 决定 Cluster；请求不带 commodity（旧页面）时原值不动。
+    改动过就标 commodityEdited，以后词表重算（service.normalize_commodities）以手改为准。"""
+    before = (c.get("cluster") or "", c.get("commodity") or "")
+    commodity = b.get("commodity")
+    if commodity is None:
+        commodity = c.get("commodity") or ""
+    cluster = commodities.cluster_of(commodity) or b.get("cluster", c.get("cluster", "")) or ""
+    c["cluster"], c["commodity"] = cluster, commodity
+    if (cluster, commodity) != before:
+        c["commodityEdited"] = True
 
 # ============================= 登记：确认 / 退回 / 删除 =============================
 

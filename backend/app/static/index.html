@@ -540,6 +540,41 @@
   .remind-btn:hover{border-color:var(--accent);color:var(--accent);background:#FFFBF8;}
   .remind-btn.sent{background:var(--green-tint);border-color:#BEE3D0;color:var(--green);cursor:default;}
   .due-overdue{color:var(--red);font-weight:700;}
+  /* v3 Phase-40（领导：待办表格化、突出任务、邮箱别占版面）：详情页一行一条待办，点一行展开提醒、备注与反馈 */
+  .task-table-wrap{overflow-x:auto;}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+  .task-table tbody td{vertical-align:top;}
+  .task-table .task-title{font-weight:600;color:var(--ink);font-size:13px;line-height:1.35;overflow-wrap:anywhere;}
+  .task-table .task-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;}
+  .task-table .task-chips:empty{display:none;}
+  .task-table .task-due{white-space:nowrap;}
+  .task-table .task-chev{width:28px;text-align:center;padding-left:4px;padding-right:4px;}
+  .task-fb{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:4px;border:1px solid var(--border-strong);background:#fff;color:var(--ink-soft);white-space:nowrap;}
+  .task-fb.warn{background:var(--amber-tint);border-color:#EAD3A0;color:var(--amber);}
+  .task-toggle{background:none;border:none;border-radius:4px;padding:2px 5px;color:var(--ink-faint);font-size:12px;line-height:1;cursor:pointer;}
+  .task-toggle:hover{color:var(--accent);}
+  .task-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+  .task-table tr.task-row.open,.task-table tr.task-row.open > td{background:#FAFAFB;}
+  .task-table tr.task-detail{cursor:default;}
+  .task-table tr.task-detail > td{background:#FAFAFB;padding:2px 14px 14px;}
+  .task-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;padding-top:6px;}
+  .task-detail-grid > div{min-width:0;}
+  .task-detail-grid .v{font-weight:400;font-size:12px;overflow-wrap:anywhere;}
+  .task-detail-grid .wide{grid-column:1 / -1;}
+  /* 手机宽度：任务占一整行，负责人 / 截止日 / 状态排在下面一行，不用左右滑 */
+  @media(max-width:560px){
+    .task-table,.task-table tbody{display:block;}
+    .task-table thead{display:none;}
+    .task-table tr.task-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;grid-template-areas:"main main main chev" "owner due status .";column-gap:10px;border-bottom:1px solid var(--border);}
+    .task-table tr.task-row > td{border-bottom:none;}
+    .task-table tr.task-row > td.task-main{grid-area:main;padding-bottom:4px;}
+    .task-table tr.task-row > td.task-chev{grid-area:chev;width:auto;}
+    .task-table tr.task-row > td.task-owner{grid-area:owner;padding-top:2px;min-width:0;overflow-wrap:anywhere;}
+    .task-table tr.task-row > td.task-due{grid-area:due;padding-top:2px;}
+    .task-table tr.task-row > td.task-status{grid-area:status;padding-top:2px;}
+    .task-table tr.task-detail,.task-table tr.task-detail > td{display:block;}
+    .task-detail-grid{grid-template-columns:1fr;}
+  }
 
   /* 窄窗口与缩放：导航独占一行，账号按钮跟在标题后面。去掉顶部搜索后一行放得下的宽度更小，门槛从 1100 降到 980 */
   @media(max-width:980px){
@@ -768,6 +803,19 @@ function weekDateOf(w, year){
 function yearsPresent(){ return uniq(ALL_CASES.map(caseYear)).sort((a,b)=>a-b); }
 // 待办分类规则由服务端随 bootstrap 下发（logic.task_rules）：编辑页实时预览与保存结果一致
 let TASK_RULES = {categories: ACTION_CATEGORIES, keywords: {}, tagSynonyms: {}, functions: []};
+// v3 Phase-37：编辑页 Commodity 下拉的规范清单 [{cluster, commodity}]，服务端 commodities.options() 下发
+let COMMODITY_OPTIONS = [];
+function clusterOfCommodity(name){ const o = COMMODITY_OPTIONS.find(x=>x.commodity===name); return o ? o.cluster : null; }
+// 编辑页下拉按 Cluster 分组；导入时认不出的原值（如 "SO02"）单独列一项，不改就照存
+function commoditySelectHtml(current){
+  const opt = (value, label) => `<option value="${escapeAttr(value)}" ${current===value?'selected':''}>${esc(label)}</option>`;
+  const groups = CLUSTERS.map(cluster=>{
+    const items = COMMODITY_OPTIONS.filter(o=>o.cluster===cluster);
+    return items.length ? `<optgroup label="${escapeAttr(cluster)}">${items.map(o=>opt(o.commodity, o.commodity)).join('')}</optgroup>` : '';
+  }).join('');
+  const legacy = current && !clusterOfCommodity(current) ? opt(current, current+' (not in the list)') : '';
+  return `<select class="edit-input" id="editCommodity">${opt('', 'Not specified')}${legacy}${groups}</select>`;
+}
 function keywordRe(k){
   const escaped = k.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
   return new RegExp(k.length<=4 ? `(?<![a-z0-9])${escaped}(?![a-z])` : `(?<![a-z0-9])${escaped}`);
@@ -1152,6 +1200,7 @@ const state = {
   feedbackRowId:null,    // v3 Phase-14: follow-up whose feedback row is expanded on the tracker
   feedbackOpenId:null,   // follow-up whose "report progress" form is open
   decisionOpenId:null,   // feedback entry whose approve / reject panel is open
+  taskOpenIds:new Set(), // v3 Phase-40: follow-ups expanded in the case detail table
   flash:null,            // one-time confirmation message shown on the next case detail render
   editError:null,        // validation message shown in the case editor (e.g. closing without a final document link)
   dashPeriod:'year', // 'year' | 'week'（v3 Phase-18：YTD 改为按年选择）
@@ -1264,6 +1313,7 @@ function applySnapshot(j){
   if(j.autoLog){ AUTO_LOG.length = 0; AUTO_LOG.push(...j.autoLog); }
   if(j.serverTimezone) SERVER_TZ = j.serverTimezone; // "today" follows the server's SC_TIMEZONE
   if(j.taskRules) TASK_RULES = j.taskRules;
+  if(Array.isArray(j.commodityOptions)) COMMODITY_OPTIONS = j.commodityOptions;
 }
 let SERVER_TZ = null; // server reference timezone from the bootstrap snapshot (null = ET default below)
 /* Global error feedback + server-reachability banner. */
@@ -1698,6 +1748,42 @@ function feedbackSectionHtml(c, t){
     ${entries || (closed ? '' : '<div class="fb-hint">No feedback yet.</div>')}
     ${cta}
   </div>`;
+}
+/* ===================== Case detail follow-up table (v3 Phase-40) =====================
+   领导 2026-10-29：待办要表格化、突出任务，邮箱别占版面。一行一条（保持纪要编号顺序），
+   点一行展开提醒收件人、标签、备注和反馈审批区。 */
+function taskFeedbackChip(t){
+  const fb = t.feedback || [], pending = fb.filter(f=>f.status==='pending').length;
+  if(pending) return `<span class="task-fb warn">${pending} to approve</span>`;
+  if(fb.length) return `<span class="task-fb">${fb.length} update${fb.length===1?'':'s'}</span>`;
+  return '';
+}
+function taskDetailHtml(c, t){
+  const rc = taskRecipient(t);
+  const to = rc.email ? esc(rc.email) : (t.status==='Closed' ? 'no email on file' : '<span style="color:var(--red);">no email on file</span>');
+  return `<div class="task-detail-grid">
+      <div class="info-item wide"><div class="k">Reminder to</div><div class="v">${to}${rc.cc ? ` · CC ${esc(rc.cc)}` : ''} · ${esc(rc.channel)}</div></div>
+      ${(t.tags||[]).length ? infoItem('Tags', t.tags.join(', ')) : ''}
+      ${t.notes ? `<div class="info-item wide"><div class="k">Notes</div><div class="v">${esc(t.notes)}</div></div>` : ''}
+    </div>
+    ${feedbackSectionHtml(c,t)}`;
+}
+function caseTasksTableHtml(c){
+  const rows = c.followUps.map(t=>{
+    const open = state.taskOpenIds.has(t.id), tid = escapeAttr(t.id);
+    return `<tr class="task-row${open?' open':''}" data-task-expand="${tid}">
+        <td class="task-main"><div class="task-title">${esc(t.task)}</div><div class="task-chips">${taskCategories(t).map(x=>`<span class="cat-tag">${esc(x)}</span>`).join('')}${taskFeedbackChip(t)}</div></td>
+        <td class="task-owner">${esc(ownerLabel(t)||'—')}${t.ownerFunction ? `<span class="fn-sub">${esc(t.ownerFunction)}</span>` : ''}</td>
+        <td class="task-due${t.status==='Overdue'?' due-overdue':''}">${esc(t.dueDate||'—')}</td>
+        <td class="task-status">${actionCell(t.status)}</td>
+        <td class="task-chev"><button type="button" class="task-toggle" data-task-toggle="${tid}" aria-expanded="${open}" ${open?`aria-controls="taskDetail_${tid}"`:''} aria-label="${open?'Hide':'Show'} details: ${escapeAttr(t.task)}">${open?'▾':'▸'}</button></td>
+      </tr>
+      ${open ? `<tr class="task-detail" id="taskDetail_${tid}"><td colspan="5">${taskDetailHtml(c,t)}</td></tr>` : ''}`;
+  }).join('');
+  return `<div class="task-table-wrap"><table class="data-table task-table">
+      <thead><tr><th>Task</th><th>Owner</th><th>Due</th><th>Status</th><th><span class="sr-only">Details</span></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
 }
 function rollupActionStatus(list){
   if(!list || list.length===0) return null;
@@ -2798,6 +2884,17 @@ function renderFollowups(){
 
 
 function submitCurrency(){ const el = document.getElementById('fCurrency'); return (el && el.value) || 'EUR'; }
+// 登记页 bundle Lifetime Spend 换算成欧元后是否超过 BPG 门槛（没有汇率时按录入金额估）
+function bundleLifeOverBpg(){
+  const cur = submitCurrency(), rate = fxRate(cur);
+  const life = Number((document.getElementById('fBundleLife')||{}).value)||0;
+  return (rate ? eurPreview(life, cur) : life) > BPG_THRESHOLD_EUR;
+}
+// v3 Phase-36：BPG 选 No 且超过 3 Mio EUR 才出红字（之前选 No 就出，不看金额；提交时的检查一直是对的）
+function syncBpgWarning(){
+  const q = document.getElementById('qBPG'), w = document.getElementById('bpgWarning');
+  if(q && w) w.style.display = (q.value==='No' && bundleLifeOverBpg()) ? 'block' : 'none';
+}
 function fxHintText(cur){
   if(cur==='EUR') return {text:'Amounts are stored in EUR.', missing:false};
   const perEur = (FX_SETTINGS.perEur||{})[cur];
@@ -3520,6 +3617,16 @@ function caseCommentsCardHtml(c){
         ${body}
       </div>`;
 }
+// v3 Phase-38：案例详情显示登记时的筛查答案 —— 现查这条登场记录的登记单（规则同服务端 logic.is_case_submitter：
+// 同一 SWAT 号、案例创建时间 = 提交时间），不在案例上另存一份；Excel 导入的案例没有登记单，显示 "—"
+function caseRegistration(c){
+  return SUBMISSIONS.find(s=>s.status==='Registration Confirmed' && s.approvedSwatId===c.swatId && s.submittedAt===c.createdDate) || null;
+}
+function screeningInfoItems(s){
+  const v = key => (s && s[key]) || '—';
+  return infoItem('Family Case?', v('isFamilyCase')) + infoItem('Family Alignment Done?', v('familyAligned'))
+    + infoItem('Involves CCB?', v('involvesECM')) + infoItem('Passed CCB2?', v('ccbApproved'));
+}
 function renderDetail(){
   const hist = historyFor(state.selectedSwatId);
   if(hist.length===0){ state.view='database'; return renderDatabase(); }
@@ -3575,7 +3682,7 @@ function renderDetail(){
   <div class="status-row">
     ${editing ? `
     <div class="status-tile"><div class="k">Sourcing Decision</div><select class="edit-input" id="editDecision">${DECISION_OPTIONS.map(o=>`<option value="${o.v}" ${b.meetingDecision===o.v?'selected':''}>${o.l}</option>`).join('')}</select></div>
-    <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation Link ${(b.meetingDecision!=='PENDING' && !(c.files&&c.files.length))?'*':''}${fieldTip('A decision other than Pending needs this link, or a presentation file added under Sourcing Presentation Files below.')}</div>${ef('editPresentationLink', b.sourcingPresentationLink||'')}${(c.files&&c.files.length) ? `<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">Optional — ${c.files.length} file${c.files.length===1?'':'s'} attached below</div>` : ''}</div>
+    <div class="status-tile" style="flex:2;"><div class="k">Sourcing Presentation Link ${(b.meetingDecision!=='PENDING' && b.decisionLevel!=='Level 4' && !(c.files&&c.files.length))?'*':''}${fieldTip('A decision other than Pending needs this link, or a presentation file added under Sourcing Presentation Files below. Not required for Level 4 cases.')}</div>${ef('editPresentationLink', b.sourcingPresentationLink||'')}${(c.files&&c.files.length) ? `<div style="font-size:10px;color:var(--ink-faint);margin-top:4px;">Optional — ${c.files.length} file${c.files.length===1?'':'s'} attached below</div>` : ''}</div>
     <div class="status-tile"><div class="k">Action Status${fieldTip(b.meetingDecision==='PENDING' ? 'Blank until a Sourcing Decision is recorded.' : 'Computed from the task statuses below.')}</div>${b.meetingDecision==='PENDING' ? '<span class="no-action-txt">—</span>' : actionCell(rolledUpStatus)}</div>
     ` : `
     <div class="status-tile"><div class="k">Sourcing Decision</div><span class="badge ${decisionBadgeClass(c.meetingDecision)}">${esc(c.meetingDecision)}</span>${c.decisionText ? `<div style="font-size:11px;color:var(--ink-soft);margin-top:5px;white-space:pre-line;">Excel: ${esc(c.decisionText)}</div>` : ''}</div>
@@ -3629,7 +3736,8 @@ function renderDetail(){
         <div class="form-grid">
           <div class="form-field"><label>Region (select all that apply)</label>${regionChecks('editRegion', b.region)}</div>
           <div class="form-field"><label>Product Family</label>${esel('editFamily', b.family, uniq([...FAMILY_OPTIONS, b.family].filter(Boolean)))}</div>
-          <div class="form-field"><label>Cluster</label>${esel('editCluster', b.cluster, uniq([...CLUSTERS, b.cluster]))}</div>
+          <div class="form-field"><label>Commodity${fieldTip('Choose from the list; the Cluster follows the Commodity. A value from an imported Excel that is not in the list stays until you choose another one.')}</label>${commoditySelectHtml(b.commodity)}</div>
+          <div class="form-field"><label>Cluster</label><select class="edit-input" id="editCluster" ${clusterOfCommodity(b.commodity)?'disabled':''}>${uniq([...CLUSTERS, b.cluster]).map(o=>`<option ${b.cluster===o?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
           <div class="form-field"><label>Parent PF</label>${ef('editParentPF', b.parentPF)}</div>
           <div class="form-field"><label>Part Family Code</label>${ef('editPartFamilyCode', b.partFamilyCode)}</div>
           <div class="form-field"><label>Presenter</label>${ef('editPresenter', b.presenter)}</div>
@@ -3656,6 +3764,7 @@ function renderDetail(){
           ${infoItem('Recommended Supplier', c.recommendedSupplier)}
           ${infoItem('Presenter', c.presenter)}
           ${infoItem('Decision Level', c.decisionLevel)}
+          ${screeningInfoItems(caseRegistration(c))}
           <div class="info-item" style="grid-column:1/-1;"><div class="k">Final PPT / Supporting Document</div>
             <div class="v" style="font-weight:400;word-break:break-all;">${c.finalDocLink ? documentLink(c.finalDocLink) : `<span style="color:var(--ink-faint);">Not yet provided${c.actionStatus==='Closed'?'':' — required before the case can be closed'}</span>`}</div>
           </div>
@@ -3747,21 +3856,7 @@ function renderDetail(){
             <button class="btn-secondary" id="cancelEditBtn">Cancel</button>
           </div>
         ` : `
-          ${(!c.followUps || c.followUps.length===0) ? `<div style="color:var(--ink-faint);font-size:12.5px;">${c.meetingDecision==='PENDING' ? 'Pending for Sourcing Committee Review — no follow-up actions yet.' : 'No follow-up tasks.'}</div>` : c.followUps.map(t=>`
-            <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;">
-              <div class="followup-grid">
-                ${infoItem('Task', t.task)}
-                ${infoItem('Categories (auto)', taskCategories(t).length ? taskCategories(t).join(', ') : '—')}
-                ${infoItem('Owner', t.ownerFunction ? `${ownerLabel(t)} (${t.ownerFunction})` : ownerLabel(t))}
-                ${infoItem('Tags', (t.tags && t.tags.length) ? t.tags.join(', ') : '—')}
-                ${infoItem('Due Date', t.dueDate)}
-                ${infoItem('Status', t.status===null ? 'No action required' : t.status)}
-                ${infoItem('Reminder to', (()=>{ const rc=taskRecipient(t); return `${rc.email||'no email on file'}${rc.cc?' · cc: '+rc.cc:''} · ${rc.channel}`; })())}
-              </div>
-              <div class="info-item" style="margin-top:8px;"><div class="k">Notes</div><div class="v" style="font-weight:400;">${esc(t.notes)}</div></div>
-              ${feedbackSectionHtml(c,t)}
-            </div>
-          `).join('')}
+          ${(!c.followUps || c.followUps.length===0) ? `<div style="color:var(--ink-faint);font-size:12.5px;">${c.meetingDecision==='PENDING' ? 'Pending for Sourcing Committee Review — no follow-up actions yet.' : 'No follow-up tasks.'}</div>` : caseTasksTableHtml(c)}
         `}
       </div>
     </div>
@@ -4257,6 +4352,25 @@ function wireEvents(){
     };
   });
 
+  // v3 Phase-40：详情页待办表，点一行或行尾箭头展开 / 收起；收起时一并关掉里面打开的汇报 / 审批面板，免得挡住每小时刷新
+  const toggleTask = (id, refocus)=>{
+    if(state.taskOpenIds.has(id)){
+      const detail = document.getElementById('taskDetail_'+id);
+      if(detail && detail.querySelector('.fb-panel')){ state.feedbackOpenId = null; state.decisionOpenId = null; }
+      state.taskOpenIds.delete(id);
+    } else state.taskOpenIds.add(id);
+    render();
+    if(refocus) document.querySelector(`[data-task-toggle="${CSS.escape(id)}"]`)?.focus();
+  };
+  document.querySelectorAll('[data-task-toggle]').forEach(el=>{ el.onclick = ()=>toggleTask(el.dataset.taskToggle, true); });
+  document.querySelectorAll('tr[data-task-expand]').forEach(el=>{
+    el.onclick = e=>{
+      // 点到按钮、链接上不算；选中文字（比如复制任务内容）时也不展开
+      if(e.target.closest('button, a, input, select, textarea, label') || String(window.getSelection()||'')) return;
+      toggleTask(el.dataset.taskExpand, false);
+    };
+  });
+
   // Detail view
   const back = document.getElementById('backToDb');
   if(back) back.onclick = ()=>{ state.view='database'; render(); window.scrollTo(0,0); };
@@ -4285,7 +4399,7 @@ function wireEvents(){
       peakYearSpend: isConverted(c) && c.peakYearSpendEntered!==undefined ? c.peakYearSpendEntered : (c.peakYearSpend||0),
       lifetimeSpend: isConverted(c) && c.lifetimeSpendEntered!==undefined ? c.lifetimeSpendEntered : (c.lifetimeSpend||0),
       region:c.region, family:c.family,
-      cluster:c.cluster, parentPF:c.parentPF, partFamilyCode:c.partFamilyCode,
+      cluster:c.cluster, commodity:c.commodity||'', parentPF:c.parentPF, partFamilyCode:c.partFamilyCode,
       presenter:c.presenter, decisionLevel:c.decisionLevel,
       leadTime:c.leadTime,
       committeeDiscussion:c.committeeDiscussion, meetingDecision:c.meetingDecision,
@@ -4312,6 +4426,7 @@ function wireEvents(){
     const setIf = (key, id) => { const v = val(id); if(v!==undefined) b[key]=v; };
     if(document.getElementById('editRegion')) b.region = checkedRegions('editRegion').join(' + ');
     setIf('family','editFamily');
+    setIf('commodity','editCommodity');
     setIf('cluster','editCluster'); setIf('parentPF','editParentPF'); setIf('partFamilyCode','editPartFamilyCode');
     setIf('presenter','editPresenter');
     const bp = val('editBundlePeak'); if(bp!==undefined) b.peakYearSpend = Number(bp)||0;
@@ -4360,6 +4475,14 @@ function wireEvents(){
   if(editMeetingDate) editMeetingDate.oninput = ()=>{
     const hist = historyFor(state.selectedSwatId), cur = hist[Math.min(state.selectedEntryIndex, hist.length-1)];
     const out = document.getElementById('editMeetingWeek'); if(out) out.textContent = meetingWeekPreview(editMeetingDate.value, cur);
+  };
+  // v3 Phase-37：选了清单里的 Commodity，Cluster 跟着变且锁定；Not specified / 原值时 Cluster 可选
+  const editCommodity = document.getElementById('editCommodity');
+  if(editCommodity) editCommodity.onchange = ()=>{
+    const cluster = clusterOfCommodity(editCommodity.value), clusterEl = document.getElementById('editCluster');
+    if(!clusterEl) return;
+    if(cluster) clusterEl.value = cluster;
+    clusterEl.disabled = !!cluster;
   };
   const extractTasksBtn = document.getElementById('extractTasksBtn');
   if(extractTasksBtn) extractTasksBtn.onclick = async ()=>{
@@ -4438,7 +4561,8 @@ function wireEvents(){
     const hasFiles = !!(c.files && c.files.length);
     // Rule 1: recording a Sourcing Decision (anything other than Pending) requires the Sourcing Presentation (link or file).
     // A newly registered case sits at Pending and is exempt until an admin records a decision.
-    if(b.meetingDecision!=='PENDING' && !b.sourcingPresentationLink && !hasFiles && !(c.source && c.source.kind==='excel'))
+    // v3 Phase-39：Level 4 案例不强制（与服务端 logic.case_edit_problems 一致）
+    if(b.meetingDecision!=='PENDING' && b.decisionLevel!=='Level 4' && !b.sourcingPresentationLink && !hasFiles && !(c.source && c.source.kind==='excel'))
       problems.push('A Sourcing Decision cannot be saved without the Sourcing Presentation — enter the Sourcing Presentation Link, or add the presentation file under Sourcing Presentation Files.');
     if(b.sourcingPresentationLink && !isUrl(b.sourcingPresentationLink)) problems.push('The Sourcing Presentation Link must be a full URL (starting with http:// or https://).');
     if(!regionList(b).length) problems.push('Select at least one Region.');
@@ -4497,10 +4621,11 @@ function wireEvents(){
       // 超过 3 Mio EUR：BPG 问题从"可不答"变成"必答"
       const bpgHint = document.getElementById('bpgHint');
       if(bpgHint){
-        const over = (rate ? eurLife : totalLife) > BPG_THRESHOLD_EUR;
+        const over = bundleLifeOverBpg();
         bpgHint.textContent = over ? 'Lifetime Spend is above 3 Mio EUR — a BPG must be available to register this case.' : '';
         bpgHint.classList.toggle('missing', over);
       }
+      syncBpgWarning();
     }
     ['fBundlePeak','fBundleLife'].forEach(id=>{ const el = document.getElementById(id); if(el) el.oninput = recomputePnTotals; });
     const currencyEl = document.getElementById('fCurrency');
@@ -4531,7 +4656,7 @@ function wireEvents(){
     if(reason) reason.style.display = lateBox.checked ? 'block' : 'none';
   };
   const qBPG = document.getElementById('qBPG');
-  if(qBPG) qBPG.onchange = ()=>{ document.getElementById('bpgWarning').style.display = qBPG.value==='No' ? 'block' : 'none'; };
+  if(qBPG) qBPG.onchange = syncBpgWarning;
   const qFRA = document.getElementById('qFRA');
   if(qFRA) qFRA.onchange = ()=>{ document.getElementById('fraWarning').style.display = (qFRA.value==='No' && val0('fDecisionLevelIn')==='Level 2') ? 'block' : 'none'; };
   const fDecisionLevelIn = document.getElementById('fDecisionLevelIn');

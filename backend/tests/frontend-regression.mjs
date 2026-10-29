@@ -535,6 +535,34 @@ try{
     await view.context.close();
   });
 
+  await test('BPG "No" only shows the red warning when the bundle Lifetime Spend converts to more than 3 Mio EUR', async()=>{
+    // v3 Phase-36：北美同事 312,698 USD、BPG 选 No 就出红字（之前选 No 不看金额）
+    const fxSettings = {basis:'OP 2026', perEur:{USD:'1.17'}, updatedAt:'Oct 28, 9:00 AM'};
+    const {page, context} = await fixture({user:'user', api:async(route,path)=>{
+      if(path!=='/api/bootstrap') return false;
+      await route.fulfill({json:{...empty, fxSettings, currentUser:USER}});
+      return true;
+    }});
+    await goTo(page, 'submit');
+    const warning = ()=>page.locator('#bpgWarning').evaluate(el=>getComputedStyle(el).display);
+    await page.locator('#fCurrency').selectOption('USD');
+    await page.locator('#fBundlePeak').fill('44671');
+    await page.locator('#fBundleLife').fill('312698');
+    await page.locator('#qBPG').selectOption('No');
+    assert.equal(await warning(), 'none');
+    // 金额改到超线（3.6 Mio USD ≈ 3.08 Mio EUR）：不用重新选 BPG，红字跟着出现；改回去又消失
+    await page.locator('#fBundleLife').fill('3600000');
+    assert.equal(await warning(), 'block');
+    await page.locator('#fBundleLife').fill('3400000');
+    assert.equal(await warning(), 'none');
+    // 换成 EUR：3.4 Mio EUR 超线
+    await page.locator('#fCurrency').selectOption('EUR');
+    assert.equal(await warning(), 'block');
+    await page.locator('#qBPG').selectOption('Yes');
+    assert.equal(await warning(), 'none');
+    await context.close();
+  });
+
   await test('Registration deadline follows admin settings and late registrations need an exception with a reason', async()=>{
     // 固定时间 2026-12-20（周日）12:00Z。默认规则：周一 23:59 —— 本周三 12/23 仍开放，没有例外入口
     const plain = await fixture({user:'user'});
@@ -625,8 +653,10 @@ try{
     await seed(page,{meetingDecision:'APPROVED', sourcingPresentationLink:'https://example.com/deck.pptx', actionStatus:'Open',
       followUps:[{id:'FU-T1', task:'Negotiate consignment', responsible:'SP ABC', dueDate:'2027-02-18', notes:'', status:'Open', tags:['Cost'], notify:'SP ABC', notifyEmail:'sp@example.com', cc:''}]});
     await page.evaluate(()=>{ state.isAdmin=true; goToDetail('SWAT-TEST'); });
-    let text = await page.locator('#app').innerText();
-    assert.ok(text.includes('Categories (auto)\nSaving') && text.includes('Tags\nCost'), text);  // 旧标签 Cost 按同义词归到 Saving
+    let text = '';
+    assert.deepEqual(await page.locator('tr[data-task-expand="FU-T1"] .cat-tag').allTextContents(), ['Saving']);  // 旧标签 Cost 按同义词归到 Saving
+    await page.locator('[data-task-toggle="FU-T1"]').click();  // v3 Phase-40：标签在展开后的详情里
+    assert.ok((await page.locator('#taskDetail_FU-T1').innerText()).includes('Tags\nCost'));
     await page.locator('#editCaseBtn').click();
     assert.equal(await page.locator('#editFuCat_0').count(), 0);  // 没有勾选框了
     assert.equal(await page.locator('#editFuTags_0').inputValue(), 'Cost');
@@ -1206,6 +1236,7 @@ try{
     }});
     const seedCase = await seed(page,{meetingDecision:'APPROVED', actionStatus:'Open', finalDocLink:'', followUps:[{...task, feedback:[fb]}]});
     await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    await page.locator('tr[data-task-expand="FU-R1"] .task-title').click();  // v3 Phase-40：反馈区在展开后的行里
     await page.locator('[data-decision-open="FB-1"]').click();
     assert.equal(await page.locator('#fbFinal_FB-1').count(),1);  // 最后一条开放待办：要最终文件链接
     await page.locator('[data-decision-send="FB-1"][data-decision="rejected"]').click();
@@ -1761,6 +1792,73 @@ try{
     await mgr.context.close();
   });
 
+  // ===== v3 Phase-37 / 38 / 39：领导 2026-10-28 反馈 =====
+  await test('Edit Case picks a Commodity (Cluster follows), the detail page shows the registration screening answers, and Level 4 needs no presentation', async()=>{
+    const COMMODITY_OPTIONS = [{cluster:'Chemical', commodity:'Textiles'}, {cluster:'Metal', commodity:'FF Forging, Forming & Tubes'},
+      {cluster:'Electronics, EA and Pyro', commodity:'Pyro'}];
+    let saved;
+    const {page, context} = await fixture({user:'admin', api:async(route,path)=>{
+      if(path==='/api/presentation-library'){ await route.fulfill({json:{ok:true, folder:'', files:[]}}); return true; }
+      if(path==='/api/cases/C-TEST' && route.request().method()==='PUT'){
+        saved = route.request().postDataJSON();
+        const after = await page.evaluate(()=>ALL_CASES[0]);
+        const updated = {...after, meetingDecision:saved.meetingDecision, decisionLevel:saved.decisionLevel, cluster:'Metal', commodity:saved.commodity};
+        await route.fulfill({json:{ok:true, case:updated, snapshot:{cases:[updated]}}});
+        return true;
+      }
+      return false;
+    }});
+    // 导入时认不出的 Commodity（Excel 里写成了人名），已在编辑页改过 Cluster
+    await seed(page, {source:{kind:'excel', file:'KW47.xlsx', row:4}, cluster:'Metal', commodity:'Yajun Zhao', commodityRaw:'Yajun Zhao',
+      decisionLevel:'Level 2', createdDate:'Nov 19, 9:00 AM'});
+    await page.evaluate(opts=>applySnapshot({commodityOptions:opts}), COMMODITY_OPTIONS);
+    await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    const info = ()=>page.locator('.info-grid', {hasText:'SWAT Case Number'}).innerText();
+    // Excel 导入的案例没有登记单：四项筛查答案都是 —
+    assert.ok(/Family Case\?\s*—/.test(await info()) && /Passed CCB2\?\s*—/.test(await info()), await info());
+
+    await page.locator('#editCaseBtn').click();
+    assert.equal(await page.locator('#editCommodity').inputValue(), 'Yajun Zhao');
+    assert.ok((await page.locator('#editCommodity option:checked').textContent()).includes('not in the list'));
+    assert.equal(await page.locator('#editCluster').isDisabled(), false);
+    await page.locator('#editCommodity').selectOption('Pyro');
+    assert.equal(await page.locator('#editCluster').inputValue(), 'Electronics, EA and Pyro');
+    assert.equal(await page.locator('#editCluster').isDisabled(), true);
+    await page.locator('#editCommodity').selectOption('FF Forging, Forming & Tubes');
+    assert.equal(await page.locator('#editCluster').inputValue(), 'Metal');
+    await page.locator('#saveCaseBtn').click();
+    await page.waitForFunction(()=>!state.detailEditMode);
+    assert.equal(saved.commodity, 'FF Forging, Forming & Tubes');
+    assert.equal(saved.cluster, 'Metal');
+    assert.ok((await info()).includes('FF Forging, Forming & Tubes (Excel: Yajun Zhao)'), await info());
+
+    // 在线登记确认的案例：从这条登场记录的登记单读出答案（同一 SWAT、创建时间 = 提交时间）
+    await page.evaluate(()=>{
+      const c = {...ALL_CASES[0], source:null, commodityRaw:'', createdDate:'Oct 20, 10:00 AM'};
+      applySnapshot({cases:[c], submissions:[
+        {subId:'SUB-OLD', status:'Registration Confirmed', approvedSwatId:'SWAT-TEST', submittedAt:'Sep 1, 8:00 AM', isFamilyCase:'No', involvesECM:'No'},
+        {subId:'SUB-1', status:'Registration Confirmed', approvedSwatId:'SWAT-TEST', submittedAt:'Oct 20, 10:00 AM',
+          isFamilyCase:'Yes', familyAligned:'Yes', involvesECM:'Yes', ccbApproved:'Yes'}]});
+      render();
+    });
+    const text = await info();
+    assert.ok(/Family Case\?\s*Yes/.test(text) && /Family Alignment Done\?\s*Yes/.test(text)
+      && /Involves CCB\?\s*Yes/.test(text) && /Passed CCB2\?\s*Yes/.test(text), text);
+
+    // Level 4：记录 Approved 不要求演示文稿；Level 2 照旧要求（在线登记的案例才有这条规则）
+    await page.locator('#editCaseBtn').click();
+    await page.locator('#editDecisionLevel').selectOption('Level 2');
+    await page.locator('#editDecision').selectOption('APPROVED');
+    await page.locator('#saveCaseBtn').click();
+    assert.ok((await page.locator('.block-warning').first().textContent()).includes('Sourcing Presentation'));
+    await page.locator('#editDecisionLevel').selectOption('Level 4');
+    await page.locator('#saveCaseBtn').click();
+    await page.waitForFunction(()=>!state.detailEditMode);
+    assert.equal(saved.decisionLevel, 'Level 4');
+    assert.equal(saved.meetingDecision, 'APPROVED');
+    await context.close();
+  });
+
   // ===== v3 Phase-20：上传区分 Meeting minutes 与 Presentations =====
   await test('Home upload card separates meeting minutes from presentations, attaches matched presentations and uploads new ones', async()=>{
     const SAMPLE = '1. 110000034978 SPR8 Tube_34235239A_ NA_CO_L2_Iron Force Huzhou_Tube_Haojie.pdf';
@@ -2143,6 +2241,59 @@ try{
     assert.equal(await admin.page.evaluate(()=>state.detailEditMode), true);
     assert.deepEqual(asked, []);
     await admin.context.close();
+  });
+
+  // ===== v3 Phase-40：领导 2026-10-29 "follow up actions 可不可以更突出 task，也表格化一下"，"大部分都是显示邮箱地址去了" =====
+  await test('Case detail lists follow-ups as a compact table in minutes order; a row expands to the reminder, notes and feedback', async()=>{
+    const fb = {id:'FB-1', when:'Oct 28, 9:00 AM', by:'Test owner', text:'QAF received for EU and NA', files:[], status:'pending', notify:{to:'npi@zf.com', result:'sent'}, decision:null};
+    const {page, context} = await fixture({user:'manager'});
+    await seed(page,{meetingDecision:'CONDITIONAL APPROVAL', actionStatus:'Overdue', followUps:[
+      {id:'FU-1', task:'1. Check PPAP samples', responsible:'SP ABC', ownerFunction:'Purchasing', dueDate:'2026-10-09', status:'Closed', tags:[], notifyEmail:'sp@example.com',
+        closure:{when:'Oct 9, 9:05 AM', by:'NPI Person', feedbackId:'FB-0'}, feedback:[{...fb, id:'FB-0', status:'approved'}]},
+      {id:'FU-2', task:'2. Get QAF and CAPA from the supplier', responsible:'Q Lee', dueDate:'2026-10-20', status:'Overdue', tags:['Quality'], notes:'All three locations',
+        notifyEmail:'q.lee@example.com', cc:'cc.one@example.com, cc.two@example.com', channel:'Email', feedback:[fb]},
+      {id:'FU-3', task:'3. Negotiate the price', responsible:'R Wu', dueDate:'2027-01-15', status:'Open', tags:[], notifyEmail:''}]});
+    await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    // 一行一条、按纪要编号顺序；收起时不显示任何邮箱
+    assert.deepEqual(await page.locator('tr.task-row .task-title').allTextContents(), ['1. Check PPAP samples','2. Get QAF and CAPA from the supplier','3. Negotiate the price']);
+    assert.equal(await page.locator('tr.task-detail').count(), 0);
+    assert.ok(!(await page.locator('#app').innerText()).includes('@example.com'));
+    const row = id => page.locator(`tr[data-task-expand="${id}"]`);
+    assert.equal(await row('FU-1').locator('.task-owner').innerText(), 'SP ABC\nPurchasing');
+    assert.deepEqual(await row('FU-1').locator('.task-chips > *').allTextContents(), ['CQA','1 update']);
+    assert.deepEqual(await row('FU-2').locator('.task-chips > *').allTextContents(), ['CQA','1 to approve']);
+    assert.deepEqual(await row('FU-3').locator('.task-chips > *').allTextContents(), ['Saving']);
+    assert.equal(await row('FU-2').locator('td.task-due.due-overdue').innerText(), '2026-10-20');
+    assert.deepEqual(await page.locator('tr.task-row .task-status').allInnerTexts(), ['Closed','Overdue','Open']);
+    // 点行展开：收件人、抄送、通道、标签、备注、反馈审批都在里面；可以同时展开几行
+    await row('FU-2').locator('.task-owner').click();
+    const detail2 = await page.locator('#taskDetail_FU-2').innerText();
+    assert.ok(detail2.includes('Reminder to\nq.lee@example.com · CC cc.one@example.com, cc.two@example.com · Email'), detail2);
+    assert.ok(detail2.includes('Tags\nQuality') && detail2.includes('Notes\nAll three locations') && detail2.includes('Awaiting approval'), detail2);
+    assert.equal(await page.locator('#taskDetail_FU-2 [data-decision-open="FB-1"]').count(), 1);
+    assert.equal(await page.locator('[data-task-toggle="FU-2"]').getAttribute('aria-expanded'), 'true');
+    await page.locator('[data-task-toggle="FU-3"]').click();
+    assert.equal(await page.locator('tr.task-detail').count(), 2);
+    assert.ok((await page.locator('#taskDetail_FU-3').innerText()).includes('no email on file'));
+    // 展开区里的按钮不会把行收起来；用键盘收起时一并关掉打开的汇报表单，焦点留在箭头上
+    await page.locator('[data-feedback-open="FU-3"]').click();
+    assert.equal(await page.locator('#taskDetail_FU-3 #fbText_FU-3').count(), 1);
+    await page.locator('[data-task-toggle="FU-3"]').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#taskDetail_FU-3').count(), 0);
+    assert.equal(await page.evaluate(()=>state.feedbackOpenId), null);
+    assert.equal(await page.evaluate(()=>document.activeElement?.dataset.taskToggle), 'FU-3');
+    assert.equal(await page.locator('[data-task-toggle="FU-3"]').getAttribute('aria-expanded'), 'false');
+    // 手机宽度：不左右滑，负责人 / 截止日 / 状态排在任务下面
+    await page.setViewportSize({width:390, height:800});
+    const fit = await page.evaluate(()=>{
+      const wrap = document.querySelector('.task-table-wrap');
+      const title = document.querySelector('tr[data-task-expand="FU-2"] .task-title').getBoundingClientRect();
+      const due = document.querySelector('tr[data-task-expand="FU-2"] .task-due').getBoundingClientRect();
+      return {inner: wrap.scrollWidth<=wrap.clientWidth, page: document.documentElement.scrollWidth<=window.innerWidth, below: due.top>=title.bottom};
+    });
+    assert.deepEqual(fit, {inner:true, page:true, below:true});
+    await context.close();
   });
 
   console.log(`${passed} frontend regression checks passed.`);

@@ -34,6 +34,7 @@ SESSIONS_KEY = "sessions"
 INITIALIZED_KEY = "database_initialized"
 CASE_SEQUENCE_KEY = "case_row_sequence"
 COMMODITY_KEY = "commodity_vocabulary"  # {"version": N}：已按 commodities.VERSION 归一过术语（v3 Phase-18）
+COMMODITY_EDITS_KEY = "commodity_hand_edits"  # {"done": true}：已给 Phase-37 之前手改过的案例补上标记
 WEEK_NUMBERING_KEY = "week_numbering"  # {"scheme": "iso"}：已换成 ISO 周（v3 Phase-13）
 CASE_NUMBERING_KEY = "case_numbering"  # {"scheme": "per-year-week"}：已按年份 + 周整理过案例号（v3 Phase-21）
 SESSION_TTL_SECONDS = 7 * 24 * 3600  # 登录 7 天过期：泄露窗口有界，列表不无限增长
@@ -203,6 +204,8 @@ def snapshot(state: dict[str, Any]) -> dict[str, Any]:
         "serverTimezone": get_settings().timezone,
         # v3 Phase-18：待办分类关键词与职能建议，编辑页实时预览用同一套规则
         "taskRules": logic.task_rules(),
+        # v3 Phase-37：编辑页 Commodity 下拉的规范清单（选了 Commodity，Cluster 跟着变）
+        "commodityOptions": commodities.options(),
     }
 
 
@@ -379,6 +382,7 @@ async def init_db(session) -> None:
                 await upsert_submission(session, sub)
         await _set_kv(session, INITIALIZED_KEY, {"seeded": seeded})
     await _migrate_iso_weeks(session)
+    await _mark_commodity_edits(session)
     await _migrate_commodities(session)
     await _migrate_case_numbers(session)
     await _ensure_bootstrap_admin(session)
@@ -437,11 +441,43 @@ def normalize_commodities(cases: list[dict]) -> list[dict]:
         imported = (c.get("source") or {}).get("kind") == "excel"
         if not imported and c.get("cluster") in commodities.CLUSTERS and not c.get("commodityRaw"):
             continue  # 在线登记的案例：Cluster 本来就是固定项
+        if c.get("commodityEdited"):
+            continue  # v3 Phase-37：编辑页手改过 Cluster / Commodity，以手改为准
         before = (c.get("cluster"), c.get("commodity"), c.get("commodityRaw"))
         commodities.apply(c)
         if before != (c.get("cluster"), c.get("commodity"), c.get("commodityRaw")):
             changed.append(c)
     return changed
+
+
+def mark_hand_edited_commodities(cases: list[dict]) -> list[dict]:
+    """v3 Phase-37：Phase-37 之前在编辑页改过 Cluster 的导入案例补上 commodityEdited（以后词表重算不覆盖）。
+
+    判断依据：与当前词表按 commodityRaw 算出的结果不一致 —— 只有在词表自上次归一后没变时才成立，
+    所以 _mark_commodity_edits 只在库里的词表版本等于当前 VERSION 时跑一次。返回新标上的案例。"""
+    marked: list[dict] = []
+    for c in cases:
+        imported = (c.get("source") or {}).get("kind") == "excel"
+        if c.get("commodityEdited") or not (imported or c.get("commodityRaw")):
+            continue
+        expected = commodities.classify(c.get("commodityRaw") or c.get("cluster") or "")
+        if (c.get("cluster") or "", c.get("commodity") or "") != (expected["cluster"], expected["commodity"]):
+            c["commodityEdited"] = True
+            marked.append(c)
+    return marked
+
+
+async def _mark_commodity_edits(session) -> None:
+    """只做一次；词表刚升级（库里版本 != VERSION）的这次启动不做，避免把词表的变化误当成手改。"""
+    if await _kv_doc(session, COMMODITY_EDITS_KEY) is not None:
+        return
+    if (await _kv_doc(session, COMMODITY_KEY) or {}).get("version") != commodities.VERSION:
+        return
+    for row in (await session.execute(select(CaseRow))).scalars():
+        doc = deepcopy(row.doc)
+        if mark_hand_edited_commodities([doc]):
+            row.doc = doc
+    await _set_kv(session, COMMODITY_EDITS_KEY, {"done": True})
 
 
 async def _migrate_commodities(session) -> None:

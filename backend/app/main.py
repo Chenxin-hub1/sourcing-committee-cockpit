@@ -654,6 +654,8 @@ async def save_case(row_id: str, b: CaseEditIn, user: Manager) -> dict:
             raise HTTPException(403, "Only the Sourcing admin can move a case to another week.")
         # v3 Phase-19：全部问题一次返回；案例上已有演示文件即满足"演示文稿"规则
         problems = logic.case_edit_problems(edit, imported=excel_import.is_imported(case), has_files=bool(case.get("files")))
+        if commodity_problem := logic.commodity_problem(case, edit["commodity"]):
+            problems.append(commodity_problem)
         # 只有请求真的带了商务字段才覆盖（model_fields_set），旧客户端 / 只改决议的保存不动它们
         commercial = (b.model_dump(include=set(COMMERCIAL_INPUT_FIELDS))
                       if b.model_fields_set & set(COMMERCIAL_INPUT_FIELDS) else None)
