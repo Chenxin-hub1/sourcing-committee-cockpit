@@ -11,14 +11,14 @@
 - 待办编辑与手动提醒只填收件邮箱、抄送、通道，不再有 "Reminder to (name)"；未填邮箱的未关闭待办不能保存；系统不再按姓名猜测邮箱。
 - 提交时填写的 Case Comments 出现在案例详情、审批页、CSV 与议程导出中。
 - 提交页填写 Pc Price CQA、Supplier Price (landed)、Tooling CQA、Supplier Tooling Cost 与 Tooling Payment 后才能提交；Lifetime Spend 折算超过 3 Mio EUR 而 BPG 不可用、或 Level 2 案例 FRA 不可用，前后端都拒绝（422）；可选字段留空可提交，填了就出现在审批页、案例详情与 CSV。
-- 管理员在 Dashboard 设置登记截止（会前第几天、几点、时区）后，提交页的可选会议日期随之变化；截止后提交本周日期被服务端拒绝，勾选例外并填理由则接受并在审批页标出。
+- 管理员设置登记截止（会前第几天、几点、时区；Phase-44 起在提交页的截止卡上点 Edit）后，提交页的可选会议日期随之变化；截止后提交本周日期被服务端拒绝，勾选例外并填理由则接受并在审批页标出。
 - 待办编辑只提供八个固定分类（CQA / Volume / Technical / Timing / Supplier strategy / BPG / Saving / Further VAVE），Follow-ups 页可按分类筛选；旧任务上的自由标签仍显示。
 - 汇率卡片按财务 OP 记法录入（1 EUR = X 外币），提交按除法折算；旧美元案例一次性换算成欧元并保留原美元金额。
 - 页面、导出文件名与标题、案例周号统一为 ISO 周（KW）；2026-09-30 显示 2026-KW40。
 - 提交时可上传 PPT / PDF / Excel / Word（单个 ≤ 100 MB）到 SharePoint 文档库；案例详情列出文件，所有人可下载。
 - 用公司邮箱自注册账号；新账号默认普通用户，Sourcing 管理员在页面上提升为 NPI 经理或管理员；NPI 经理能审批、编辑、删除案例和发提醒，不能改系统设置和账号；共享管理员口令下线。
 - 问题 4（2026-09-24 答复）：Excel 导出与驾驶舱在线查看同时保留——议程 / 纪要按 MM 模板导出（Phase-4），大家也可直接打开驾驶舱链接看登记与议程。
-- 问题 7（2026-09-24 答复）：登记截止用默认值——会前周一 23:59、服务器时区；管理员仍可在 Dashboard 调整（Phase-8）。
+- 问题 7（2026-09-24 答复）：登记截止用默认值——会前周一 23:59、服务器时区；管理员仍可调整（Phase-8；Phase-44 起在提交页的截止卡上）。
 
 - 领导反馈（2026-10-12）：新案例按"年份 + 周"从 1 号编起，删除或改走案例后该周补成连续号；截止后只有 Sourcing admin 能补登记进本周（普通用户与 Manager 看不到例外选项、服务端拒绝且不提例外）；编辑页一键从 Committee Discussion 列出编号任务（负责人、日期能识别的先填好），勾选后加入待办，邮箱由人填；详情页纪要保留换行。
 
@@ -30,6 +30,7 @@
 
 - 领导反馈（2026-10-29，待办版式）：案例详情页的 Follow-up Tasks 一行一条（任务加粗、负责人、截止日、状态），按纪要编号顺序；收起时不显示邮箱，点一行才展开收件人、备注和反馈审批；7、8 条待办一屏看得完，手机上不用左右滑。
 - 领导反馈（2026-10-29，Pending 案例的待办）：上过会但批准前还有待办的案例保持 Pending 也能保存待办；这些待办和其他待办一样进 Follow-ups、驾驶舱统计、提醒和纪要 Excel；Pending 案例的待办全关不算结案、不要求 Final PPT。
+- Teams 评论（2026-11-02 收到截图）：Follow-ups 顶部的 "N overdue" / "N feedback to approve" 可点，Database 只列这些待办所在的案例（Follow-ups 的筛选一起带过去），点进案例对应待办自动展开；Follow-ups 页不再有 "Reminders sent automatically" 日志表，日志也不再下发给浏览器；Dashboard 不再有汇率与登记截止卡，Sourcing admin 在提交页这两张卡上点 Edit 修改，保存不丢正在填的登记。
 
 ## Phase-1: 表单简化（反馈第一批）
 
@@ -366,5 +367,41 @@ Description: 领导 2026-10-29（截图）："有的case presented了但是暂�
 实现（2026-10-29）：服务端 `logic.case_edit_problems` 删规则 0；新增 `logic.closing_tasks_closes_case`（Pending 返回 False），规则 2、单条编辑（`task_edit_problems`）、反馈批准关最后一条（`feedback.decide`）三处共用；`actionStatus` 不再对 Pending 强制为 None，一律按待办汇总（没有待办仍是 None）；`run_daily_reminder_check` 不再跳过 Pending 案例（标逾期、发提醒、Open / Overdue 计数）；纪要 Excel（`exports`）Notes 列与 Actions 表列出 Pending 案例的待办，没有待办的 Pending 案例 Action Status 仍留空；删掉没人调用、会清空 Pending 待办的 `normalize_pending_cases`。前端同一套：saveCaseBtn 删规则 0、规则 2 加例外，编辑页 Final PPT 星号与反馈审批面板的 Final PPT 输入框按 `closingTasksClosesCase`；`noActionYet`（Pending 且没有待办）决定行动状态显示 "—"（详情、编辑页、Database 列与排序、CSV）；驾驶舱待办统计 `decidedTasks` 改为 `caseTasks`（含 Pending），说明文字同步；编辑页 Pending 案例的空待办提示改成 "No tasks yet."；删掉没人调用的 `normalizePendingCases`，没在用的前端提醒函数里两处 Pending 跳过一并去掉。
 
 验证（2026-10-29）：pytest 626（新增 tests/test_phase41.py 4 项：Pending 存待办 200、全关不要求 Final PPT、改 Approved 后规则 2 照旧 422；单条编辑与反馈批准关最后一条；提醒与计数；纪要 Notes / Actions）、前端回归 56（新增 1 条：Pending 案例加待办保存、详情 / Database / 驾驶舱显示与计数、全关不要求 Final PPT、改 Approved 被规则 2 拦）、滚动回归 17、ruff。
+
+Spec: non-spec
+
+## Phase-42: Follow-ups 的超期 / 待审反馈数字可点，跳到 Database 只看这些案例
+
+Status: `awaiting-acceptance`
+
+Description: Teams 评论（2026-11-02 收到截图）："I like the summary here for follow-ups. How can I quickly locate the overdue cases and feedback case? Can I click it, we can see the specific case list?"——指 Follow-ups 页顶部 "180 open tasks · 7 overdue · 1 feedback to approve"。用户 2026-11-02 定：点了跳到 Database，并加三处改进：① Database 只列这个数字背后的案例（Follow-ups 上的年份、分类、负责人、职能筛选一并带过去，实时计算，审批完自动消失），顶上一个可点掉的标签写明"几个案例（几条待办）"；② 从这份列表点进案例，详情页里超期 / 待审反馈的那几条待办自动展开并滚到待办区；③ Back to Database 回到同一份筛选（现状已是）。
+
+实现（2026-11-02，index.html）：Follow-ups 的筛选抽成 `followupItems(f)` + `followupFiltersNow()`（状态、年份、分类、负责人、职能；取每个案例最新一条记录），Follow-ups 列表与 Database 共用。顶部两个数字改成按钮（虚下划线，`data-fu-jump`），点了清空 Database 原有筛选、记下 `state.dbTaskFilter = {kind, ...Follow-ups 筛选}` 并跳到 Database。`dbRows` 按 `dbTaskFilterMatch()` 实时只留这些待办所在的案例记录（对象比对，旧周的记录不进），CSV / Agenda / Minutes 导出也按这份列表；页头下一个红 / 琥珀色标签写 "Overdue follow-ups · N cases (M overdue tasks) · 带过去的筛选"，✕、Clear filters、Dashboard 磁贴、首页搜索都会清掉它。Database 点行走 `openCaseFromDb`：把这个案例里对应的待办加进 `state.taskOpenIds`（Phase-40 的展开状态）再进详情，滚到待办表（`scroll-margin-top` 避开顶栏）。
+
+验证（2026-11-02）：前端回归 57（新增 1 条：数字跳转、标签文字与案例数、旧周记录不进、点进案例只展开超期的两条并滚到待办区、Back 保留、✕ 复原 4 行、带负责人筛选、Clear filters 清标签、待审反馈那条展开且有 Approve / Reject、反馈审批后案例实时掉出）、滚动回归 17、pytest 628、ruff；种子库临时实例 8063（通知全关）看了实物：1440px 宽 Follow-ups "4 overdue" → Database 4 个案例 → SWAT-10711 详情待办展开到审批按钮，390px 宽无横向滚动（截图 `.playwright-mcp/phase42-*.png`）。
+
+Spec: non-spec
+
+## Phase-43: 去掉 Follow-ups 页的自动提醒日志表
+
+Status: `awaiting-acceptance`
+
+Description: Teams 评论（2026-11-02 收到截图）："@Xiangwei Chen We don't need the list showing reminders sent automatically. Update them, move up or delete if not needed @Xin Chen"。用户 2026-11-02 定：只删 Automatic Reminders 卡片里的 "Reminders sent automatically" 日志表（连同 Phase-29 加在日志行上的 Edit）；提醒设置与待办行上的 "Auto reminder: 日期" 保留；服务器照样记发送记录。后半句 "Update them, move up or delete if not needed" 理解为请 Xiangwei 处理那些超期很久的待办（数据，不改代码），待用户向评论人确认；确认前服务器自动提醒保持 OFF。
+
+实现（2026-11-02）：`renderAutoReminderCard` 去掉日志表，卡片说明去掉 "and in the log below"；删掉 Phase-29 的 `logTask` 与 `data-log-edit` 处理、`.reminder-log-table` 样式、前端读 `autoLog` 那一行。服务端 `service.snapshot` 不再带 `autoLog`——页面用不到，日志里又有收件 / 抄送邮箱，不再发给每个浏览器；提醒检查照样写库里的日志（`persist_log` 未动）。DEPLOY.md 提醒一节、manager-quick-start 同步。
+
+验证（2026-11-02）：pytest 628（新增 tests/test_phase43.py 2 项：快照不含 `autoLog` 也不含日志里的邮箱；强制重跑提醒后 bootstrap 与设置接口的快照都没有日志、库里日志有记录）、前端回归（Phase-29 那条改为确认日志表与 "Reminders sent automatically" 不在、Automatic Reminders 设置卡还在、行上 Edit 照常）；临时实例 bootstrap 无 `autoLog`。
+
+Spec: non-spec
+
+## Phase-44: 汇率与登记截止从 Dashboard 挪到提交页卡片上编辑
+
+Status: `awaiting-acceptance`
+
+Description: Carrie Wang（2026-10-30 周五）指着 Dashboard 底部 Sourcing admin 才看得到的 Exchange Rates to EUR 与 Registration Deadline 两张卡："We don't need the those info in the dashboard page. Delete it"。这两张卡是唯一能改汇率与截止的地方，不能直接删。用户 2026-11-02 在四个方案（Accounts 页 / 提交页直接可编辑 / 提交页卡片加 Edit / 新开 Settings 页）里选 C：Dashboard 不再显示；提交页顶上的两张只读卡对 Sourcing admin 多一个 Edit，点了才变成输入框，Save / Cancel 后回到只读。
+
+实现（2026-11-02，index.html）：Dashboard 去掉两张卡。`renderFxCard` / `renderRegistrationCard` 不再分 readonly 参数，按 `state.fxEditOpen` / `regEditOpen` 显示只读或输入框；卡头 `settingsHead` 对 Sourcing admin 多一个 Edit 和保存提示，编辑态下面是 Save + Cancel（Cancel 不发请求，焦点回到 Edit）。保存 / 取消只重画 `#submitSettings` 里的两张卡（`refreshSettingsCards` + `wireSettingsCards`），不整页 render，正在填的登记不丢；存汇率后调一次币种 onchange，提示与 EUR 预览按新汇率；存截止后 `refreshMeetingDateField` 重画会议日期一格（抽成 `meetingDateFieldHtml` / `wireMeetingDateField`，原选日期还在就保留，admin 例外选项按新截止出现或消失，字段说明同步）。离开提交页时编辑态复位。汇率卡在半宽卡里口径一栏占两份。Accounts 页说明、README、DEPLOY、manager-quick-start 改成"在提交页点 Edit"；Acceptance 里两条 "在 Dashboard 调整" 同步。
+
+验证（2026-11-02）：前端回归（汇率用例改到提交页：Dashboard 无卡、只读无输入框、Edit 聚焦口径、保存发原文、回到只读显示新值、已填金额保留且提示与 €100 预览更新、Cancel 不发请求、离开再回来是只读；截止用例改到提交页：保存后已填零件号保留、会议日期改从 12-23 起、例外选项消失、字段说明同步；User / Manager 看不到 Edit）；临时实例 8063 实物：1440px 只读 / 编辑 / 保存后三态（截图 `.playwright-mcp/phase44-*.png`），390px 无横向滚动。
 
 Spec: non-spec

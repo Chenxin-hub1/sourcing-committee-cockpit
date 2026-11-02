@@ -190,9 +190,10 @@ def public_submission(sub: dict) -> dict:
 
 
 def snapshot(state: dict[str, Any]) -> dict[str, Any]:
-    """给前端的完整快照：整体替换 ALL_CASES / SUBMISSIONS / AUTO_LOG / REMINDER_SETTINGS。
+    """给前端的完整快照：整体替换 ALL_CASES / SUBMISSIONS / REMINDER_SETTINGS。
 
     serverTimezone：前端 getNATime 跟随服务器 SC_TIMEZONE，保证"今天"的判断两端一致。
+    v3 Phase-43：页面不再显示自动提醒日志，日志（含收件邮箱）只留在服务器库里，不再下发。
     """
     return {
         "cases": state["cases"],
@@ -200,7 +201,6 @@ def snapshot(state: dict[str, Any]) -> dict[str, Any]:
         "reminderSettings": state["settings"],
         "fxSettings": state.get("fx", logic.FX_DEFAULTS),
         "registrationSettings": state.get("registration", logic.REGISTRATION_DEFAULTS),
-        "autoLog": [{k: v for k, v in e.items() if k != "_seq"} for e in state["log"]],
         "serverTimezone": get_settings().timezone,
         # v3 Phase-18：待办分类关键词与职能建议，编辑页实时预览用同一套规则
         "taskRules": logic.task_rules(),

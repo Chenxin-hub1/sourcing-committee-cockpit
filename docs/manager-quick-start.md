@@ -52,7 +52,8 @@ Viewing does not require login. Submitting does.
 **Follow-ups page**
 - Open and overdue tasks across all cases. Filter by status, year, category, function or owner.
 - Owners are shown by full name: the account name when the owner is a registered email, otherwise the name read from the email (andreas.huber1@… → Andreas Huber). Reminders still go to the email.
-- **Edit** on a row (also next to each entry of *Reminders sent automatically*) changes that one task in place — no need to open the case.
+- Click **n overdue** or **n feedback to approve** in the summary line at the top: the Database lists just those cases (your Follow-ups filters carry over; ✕ on the label shows all cases again). Opening a case from that list shows those tasks expanded, with **Approve / Reject** right there.
+- **Edit** on a row changes that one task in place — no need to open the case.
 - Anyone can post progress on a task (text + attachment, e.g. an Outlook .msg). You get "n feedback to approve": **Approve** closes the task, **Reject** needs a remark and keeps it open.
 - Closing the last open task closes the case and asks for the **Final PPT / Supporting Document Link**.
 - **Send reminder** sends a manual reminder to the owner. Until IT connects the mail relay, reminders are logged as "skipped" and nothing is sent — chase by email meanwhile.
@@ -81,7 +82,7 @@ Viewing does not require login. Submitting does.
 
 - Login stays valid for 7 days; logging out ends it. Only Sourcing admins have a password; promoting someone to admin issues a temporary password shown once on the Accounts page.
 - Uploaded files are renamed automatically to `YYYY.MM.DD Project Part-description PN, Supplier.ext`; the original name is still shown ("uploaded as …").
-- Amounts are stored in EUR. USD / CNY entries are converted with the OP rate maintained by the Sourcing admin on the Dashboard; the entered amount stays visible.
+- Amounts are stored in EUR. USD / CNY entries are converted with the OP rate shown at the top of the Submit page (the Sourcing admin changes it there with **Edit**); the entered amount stays visible. The registration deadline card next to it works the same way.
 - Week numbers are ISO calendar weeks (KW).
 - **Case Comments** on the case page hold the background for the committee (e.g. "No tooling budget available. CO current supplier Getac."), apart from the Sourcing Decision and the Committee Discussion. The person who registered the case, Managers and the Sourcing admin can edit them at any time with "Edit comments"; they are saved on their own, not with Edit Case.
 - **Import weekly committee Excel** (Home page, Sourcing admin only): drop the week's Agenda or Meeting Minutes files, or pick a stored historical file from the "Stored weekly files" dropdown ("Add all not yet imported" loads the whole 2025–2026 history in one go), tick the ones to import, press Import. The meeting date comes from the file name (KW39 23.09.2026); a file without a date asks for it. Importing the same week again replaces what was imported before. Imported cases show "Imported from …" and the original decision wording on the case page.

@@ -174,10 +174,15 @@
   .page.wide .data-table{font-size:12px;}
   .page.wide .data-table thead th{padding:9px 7px;white-space:normal;line-height:1.2;}
   .page.wide .data-table tbody td{padding:8px 7px;}
-  /* 提交页顶部的只读信息卡：两张并排，窄屏叠放 */
-  .submit-info{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;}
+  /* 提交页顶部的汇率 / 截止卡：两张并排，窄屏叠放；Sourcing admin 在卡片右上角点 Edit 改（v3 Phase-44） */
+  .submit-info{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;align-items:start;}
   .submit-info .section-card{margin:0 !important;}
   @media(max-width:1000px){.submit-info{grid-template-columns:1fr;}}
+  .settings-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;}
+  .section-card .settings-head h3{margin:0;}
+  .settings-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+  .settings-msg{font-size:12px;color:var(--green);font-weight:600;}
+  .settings-msg:empty{display:none;}
   .pagehead{margin-bottom:18px;}
   .pagehead h1{font-size:19px;margin:0 0 4px;font-weight:600;}
   .pagehead p{margin:0;color:var(--ink-soft);font-size:13px;}
@@ -296,6 +301,18 @@
   .filters-bar .searchbox{flex:1;min-width:180px;position:relative;}
   .filters-bar .searchbox input{border:none;outline:none;width:100%;font-size:12.5px;}
   .filters-bar .resultcount{color:var(--ink-soft);font-size:12px;margin-left:auto;white-space:nowrap;}
+  /* v3 Phase-42：Follow-ups 顶部的超期 / 待审反馈数字可点（虚下划线提示能点），跳到 Database 后顶上一个可点掉的标签 */
+  .summary-link{background:none;border:none;padding:0;font:inherit;font-weight:600;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;}
+  .summary-link:hover,.summary-link:focus-visible{text-decoration-style:solid;}
+  .summary-link.red{color:var(--red);}
+  .summary-link.amber{color:var(--amber);}
+  .db-task-filter{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;margin:-4px 0 14px;}
+  .task-filter-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:5px 6px 5px 12px;border-radius:999px;border:1px solid;font-size:12.5px;line-height:1.4;}
+  .task-filter-chip.overdue{color:var(--red);background:var(--red-tint);border-color:var(--red);}
+  .task-filter-chip.feedback{color:var(--amber);background:var(--amber-tint);border-color:var(--amber);}
+  .task-filter-chip .chip-x{flex:none;background:none;border:none;color:inherit;cursor:pointer;font-size:13px;line-height:1;padding:4px 7px;border-radius:999px;}
+  .task-filter-chip .chip-x:hover,.task-filter-chip .chip-x:focus-visible{background:rgba(0,0,0,.08);}
+  .db-task-hint{font-size:11.5px;color:var(--ink-faint);}
   .filters-bar .clearbtn{background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;padding:6px 4px;border-radius:4px;}
   .filters-bar .clearbtn:hover{text-decoration:underline;}
 
@@ -541,7 +558,7 @@
   .remind-btn.sent{background:var(--green-tint);border-color:#BEE3D0;color:var(--green);cursor:default;}
   .due-overdue{color:var(--red);font-weight:700;}
   /* v3 Phase-40（领导：待办表格化、突出任务、邮箱别占版面）：详情页一行一条待办，点一行展开提醒、备注与反馈 */
-  .task-table-wrap{overflow-x:auto;}
+  .task-table-wrap{overflow-x:auto;scroll-margin-top:calc(var(--topbar-height) + 16px);}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
   .task-table tbody td{vertical-align:top;}
   .task-table .task-title{font-weight:600;color:var(--ink);font-size:13px;line-height:1.35;overflow-wrap:anywhere;}
@@ -611,7 +628,9 @@
 .form-field .region-check:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:1px;}
 .breakdown-note{font-size:11px;color:var(--ink-faint);margin-top:8px;}
 .fx-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
-@media(max-width:700px){.fx-grid{grid-template-columns:1fr;}}
+/* 汇率卡在提交页只有半宽：口径（如 "OP 2025 plan rates 2026"）占两份，两个汇率各一份 */
+#fxCard .fx-grid{grid-template-columns:minmax(0,2fr) repeat(2,minmax(0,1fr));}
+@media(max-width:700px){.fx-grid,#fxCard .fx-grid{grid-template-columns:1fr;}}
 .fx-hint{font-size:11px;color:var(--ink-faint);margin-top:4px;}
 .fx-hint.missing{color:var(--red);font-weight:600;}
 .page{overflow-wrap:anywhere;}
@@ -620,7 +639,6 @@
 .table-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent;-webkit-overflow-scrolling:touch;}
 .table-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 .table-scroll .data-table{overflow-wrap:normal;}
-.reminder-log-table{min-width:840px;}
 /* v3 Phase-30：零件号表格（像 Excel）：格子紧凑、表头固定、行号列横滚时固定；红 = 要改，黄 = 重复零件号（只提示） */
 .pn-grid .table-scroll{border:1px solid var(--border);border-radius:var(--radius);max-height:min(70vh,640px);overflow:auto;}
 .pn-table{border-collapse:separate;border-spacing:0;table-layout:fixed;width:100%;min-width:1240px;font-size:12.5px;background:#fff;}
@@ -921,6 +939,28 @@ function meetingOptionsHtml(includeBlocked){
   if(blocked) opts.unshift(`<option value="${localDateISO(blocked)}" data-late="1">${wk(dateToWeekNum(blocked), isoWeekYear(blocked))} — ${formatDateLong(blocked)} (deadline passed — exception)</option>`);
   return opts.join('');
 }
+// 提交页 "Requested Committee Meeting Date" 一整格；admin 改了截止规则后单独重画这一格（v3 Phase-44）
+function meetingDateFieldHtml(){
+  const blocked = state.isSysAdmin ? blockedWednesday() : null;
+  return `
+        <label>Requested Committee Meeting Date *${fieldTip(`The committee meets every Wednesday. Registrations close ${esc(cutoffRuleLabel())} — after that, the earliest available date is automatically the following Wednesday.`)}</label>
+        <select id="fMeetingDate">${meetingOptionsHtml(false)}</select>
+        ${blocked ? `
+        <label class="region-check" style="margin-top:8px;display:inline-flex;"><input type="checkbox" id="fLateException"/> Request an exception for this week's meeting (${esc(formatDateLong(blocked))}) — the deadline has passed (only the Sourcing admin sees this option)</label>
+        <div id="lateReasonField" style="display:none;margin-top:8px;">
+          <label style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">Reason for the late registration *</label>
+          <textarea id="fLateReason" placeholder="e.g. customer escalation, SOP at risk — the Sourcing admin approves the exception when confirming the registration"></textarea>
+        </div>` : ''}`;
+}
+function wireMeetingDateField(){
+  const lateBox = document.getElementById('fLateException');
+  if(lateBox) lateBox.onchange = ()=>{
+    const sel = document.getElementById('fMeetingDate');
+    const reason = document.getElementById('lateReasonField');
+    if(sel) sel.innerHTML = meetingOptionsHtml(lateBox.checked);
+    if(reason) reason.style.display = lateBox.checked ? 'block' : 'none';
+  };
+}
 function upcomingWednesdays(count){
   const first = getEarliestSelectableWednesday();
   const out = [];
@@ -1178,6 +1218,8 @@ const state = {
   searchQuery:'',
   selectedSwatId:null,
   selectedEntryIndex:0,
+  fxEditOpen:false, regEditOpen:false, // v3 Phase-44：提交页汇率 / 截止卡是否在编辑
+  dbTaskFilter:null, // v3 Phase-42：从 Follow-ups 点数字跳来时 {kind:'overdue'|'feedback', status, year, tag, owner, fn}
   dashFilter:null,
   uploaded:false,
   // v3 Phase-6 个人账号：user = 当前登录账号（未登录为 null），由 bootstrap 快照的 currentUser 恢复；
@@ -1307,7 +1349,6 @@ function applySnapshot(j){
   if(j.reminderSettings) Object.assign(REMINDER_SETTINGS, j.reminderSettings);
   if(j.fxSettings) FX_SETTINGS = j.fxSettings;
   if(j.registrationSettings) REGISTRATION_SETTINGS = j.registrationSettings;
-  if(j.autoLog){ AUTO_LOG.length = 0; AUTO_LOG.push(...j.autoLog); }
   if(j.serverTimezone) SERVER_TZ = j.serverTimezone; // "today" follows the server's SC_TIMEZONE
   if(j.taskRules) TASK_RULES = j.taskRules;
   if(Array.isArray(j.commodityOptions)) COMMODITY_OPTIONS = j.commodityOptions;
@@ -2387,7 +2428,42 @@ function sortDbRows(rows){
     return sign*cmp || (weekKey(b)-weekKey(a)) || (b.caseNumber-a.caseNumber);
   });
 }
-function dbRows(){ return sortDbRows(ALL_CASES.filter(c=>matchesQuery(c,state.searchQuery) && matchesFilters(c,state.filters))); }
+// v3 Phase-42：从 Follow-ups 点数字跳来时（state.dbTaskFilter），只留那些待办所在的案例。
+// 用和 Follow-ups 同一个 followupItems 实时算（每个案例取最新那条记录），反馈审批完、待办改了日期，案例自己掉出列表。
+function dbTaskFilterMatch(){
+  const f = state.dbTaskFilter; if(!f) return null;
+  const items = followupItems(f).filter(x=>taskMatchesKind(x.t, f.kind));
+  return {items, cases:new Set(items.map(x=>x.c))};
+}
+function dbTaskFilterChip(tf){
+  const f = state.dbTaskFilter, n = tf.cases.size;
+  const count = f.kind==='overdue'
+    ? `${tf.items.length} overdue task${tf.items.length===1?'':'s'}`
+    : `${tf.items.reduce((s,x)=>s+pendingFeedbackCount(x.t),0)} feedback to approve`;
+  const statusLabel = {active:'Open + Overdue', all:'All'}[f.status] || f.status;
+  const scope = [f.year, f.tag && 'Category: '+f.tag, f.fn && 'Function: '+f.fn, f.owner && 'Owner: '+f.owner,
+    f.kind==='feedback' && f.status!=='active' && 'Status: '+statusLabel].filter(Boolean);
+  return `<div class="db-task-filter">
+    <span class="task-filter-chip ${f.kind}"><span><b>${f.kind==='overdue'?'Overdue follow-ups':'Feedback to approve'}</b> · ${n} case${n===1?'':'s'} (${count})${scope.length?` · ${esc(scope.join(' · '))}`:''}</span><button type="button" class="chip-x" id="dbTaskFilterClear" aria-label="Show all cases" title="Show all cases">✕</button></span>
+    <span class="db-task-hint">${f.kind==='overdue' ? 'Open a case — its overdue follow-ups are shown expanded.' : 'Open a case — the follow-up waiting for approval is shown expanded.'}</span>
+  </div>`;
+}
+function dbRows(){
+  const tf = dbTaskFilterMatch();
+  return sortDbRows(ALL_CASES.filter(c=>(!tf || tf.cases.has(c)) && matchesQuery(c,state.searchQuery) && matchesFilters(c,state.filters)));
+}
+// Database 点一行进案例；从 Follow-ups 跳来的列表，进去后把对应待办展开并滚到待办区（v3 Phase-42）
+function openCaseFromDb(swatId){
+  const f = state.dbTaskFilter;
+  const ids = f ? followupItems(f).filter(x=>x.c.swatId===swatId && taskMatchesKind(x.t, f.kind)).map(x=>x.t.id) : [];
+  ids.forEach(id=>state.taskOpenIds.add(id));
+  goToDetail(swatId);
+  if(ids.length) document.querySelector('.task-table-wrap')?.scrollIntoView({block:'start'});
+}
+function clearDbFilters(){
+  state.filters = {year:'',weekFrom:'',weekTo:'',region:'',cluster:'',commodity:'',supplier:'',decision:'',status:''};
+  state.searchQuery = ''; state.dbTaskFilter = null;
+}
 function sortTh(key, label){
   const on = state.dbSort.key===key;
   return `<th class="sortable-th ${on?'active':''}" data-sort="${key}" title="Click to sort">${label} <span class="arrow">${on ? (state.dbSort.dir==='asc'?'▲':'▼') : '↕'}</span></th>`;
@@ -2395,6 +2471,7 @@ function sortTh(key, label){
 function renderDatabase(){
   const f = state.filters;
   const rows = dbRows();
+  const tf = dbTaskFilterMatch();
 
   const regionOpts = REGIONS;
   const clusterOpts = uniq(ALL_CASES.map(c=>c.cluster)).sort();
@@ -2409,6 +2486,7 @@ function renderDatabase(){
   <div class="pagehead">
     <h1>Consolidated Case Database</h1>${infoTip(`All sourcing committee cases, consolidated automatically from every weekly Excel upload.`)}
   </div>
+  ${tf ? dbTaskFilterChip(tf) : ''}
 
   <div class="filters-bar">
     <div class="searchbox"><input id="dbSearch" placeholder="Search PN, SWAT ID, supplier, project..." value="${escapeAttr(state.searchQuery)}"/></div>
@@ -2658,43 +2736,108 @@ function renderDashboard(){
       <div class="commodity-grid">${Object.entries(byCommodity).sort((a,b)=>b[1]-a[1]).map(([k,v])=>barRow(k,v,maxCo)).join('')}</div>
     </div>
   </div>
-  ${state.isSysAdmin ? renderFxCard() + renderRegistrationCard() : ''}
   `;
 }
-// readonly=true：提交页上的只读展示（领导 2026-09-30：汇率与截止规则要让 buyer 在填表的地方看到）
-function renderRegistrationCard(readonly){
-  const R = REGISTRATION_SETTINGS, admin = state.isSysAdmin && !readonly;
+/* ===================== 提交页的汇率 / 登记截止卡（v3 Phase-44） =====================
+   领导 2026-09-30：buyer 在填表的地方要看到汇率与截止规则；Carrie 2026-10-30：Dashboard 上不要这两张卡。
+   所以只放提交页：平时只读，Sourcing admin 多一个 Edit，点了才变输入框（state.fxEditOpen / regEditOpen）。
+   保存或取消只重画这两张卡（refreshSettingsCards），不整页 render——管理员正在填的登记不能丢。 */
+function settingsHead(title, tip, key){
+  const editing = state[key+'EditOpen'];
+  return `<div class="settings-head"><h3>${title}${infoTip(tip)}</h3>${state.isSysAdmin ? `<div class="settings-actions">
+      <span id="${key}Msg" class="settings-msg" role="status"></span>
+      ${editing ? '' : `<button type="button" class="remind-btn" data-settings-edit="${key}" aria-label="Edit ${escapeAttr(title)}">Edit</button>`}
+    </div>` : ''}</div>`;
+}
+function settingsButtons(key, saveLabel){
+  return `<div class="form-actions"><button class="btn-primary" id="${key}Save">${saveLabel}</button><button type="button" class="btn-secondary" data-settings-cancel="${key}">Cancel</button></div>`;
+}
+function renderRegistrationCard(){
+  const R = REGISTRATION_SETTINGS, admin = state.isSysAdmin && state.regEditOpen;
   const dayName = n => ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][(3 - n + 7) % 7];
   return `
-  <div class="card section-card" style="margin-top:18px;">
-    <h3>Registration Deadline${infoTip(`The committee meets every Wednesday. Registrations for a meeting close <b>${esc(cutoffRuleLabel())}</b>. After that, the Submit page only offers the following Wednesdays.`)}</h3>
+  <div class="card section-card" id="regCard">
+    ${settingsHead('Registration Deadline', `The committee meets every Wednesday. Registrations for a meeting close <b>${esc(cutoffRuleLabel())}</b>. After that, the Submit page only offers the following Wednesdays.`, 'reg')}
     <div class="form-grid fx-grid">
       <div class="form-field"><label>Closes</label>${admin?`<select class="edit-input" id="regDaysBefore">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${Number(R.daysBefore)===n?'selected':''}>${n} day${n>1?'s':''} before (${dayName(n)})</option>`).join('')}</select>`:`<div class="v">${esc(dayName(Number(R.daysBefore)||2))}</div>`}</div>
       <div class="form-field"><label>At (24h)</label>${admin?`<input class="edit-input" id="regCutoffTime" type="time" value="${escapeAttr(R.cutoffTime||'23:59')}"/>`:`<div class="v">${esc(R.cutoffTime||'23:59')}</div>`}</div>
-      <div class="form-field"><label>${readonly ? 'Timezone' : 'Timezone (IANA, blank = server)'}</label>${admin?`<input class="edit-input" id="regTimezone" value="${escapeAttr(R.timezone||'')}" placeholder="e.g. Europe/Berlin"/>`:`<div class="v">${esc(cutoffZone())}</div>`}</div>
+      <div class="form-field"><label>${admin ? 'Timezone (IANA, blank = server)' : 'Timezone'}</label>${admin?`<input class="edit-input" id="regTimezone" value="${escapeAttr(R.timezone||'')}" placeholder="e.g. Europe/Berlin"/>`:`<div class="v">${esc(cutoffZone())}</div>`}</div>
     </div>
-    ${admin?`<div class="form-actions"><button class="btn-primary" id="regSave">Save deadline</button><span id="regMsg" style="font-size:12px;color:var(--green);font-weight:600;"></span></div>`:''}
-    ${readonly ? '' : `<div class="footer-note" style="text-align:left;margin-top:10px;">${R.updatedAt ? 'Last updated '+esc(R.updatedAt)+'.' : 'Default from the original template: Monday 23:59, server time.'}</div>`}
+    ${admin ? settingsButtons('reg', 'Save deadline') + `<div class="footer-note" style="text-align:left;margin-top:10px;">${R.updatedAt ? 'Last updated '+esc(R.updatedAt)+'.' : 'Default from the original template: Monday 23:59, server time.'}</div>` : ''}
   </div>`;
 }
-function renderFxCard(readonly){
-  const F = FX_SETTINGS, rates = F.perEur || {}, admin = state.isSysAdmin && !readonly;
+function renderFxCard(){
+  const F = FX_SETTINGS, rates = F.perEur || {}, admin = state.isSysAdmin && state.fxEditOpen;
   const rateField = cur => admin
     ? `<input class="edit-input" id="fxRate${cur}" type="number" min="0" step="any" value="${escapeAttr(rates[cur]||'')}" placeholder="not set"/>`
     : `<div class="v">${rates[cur] ? esc(rates[cur]) : '—'}</div>`;
   return `
-  <div class="card section-card" style="margin-top:18px;">
-    <h3>Exchange Rates to EUR${infoTip(readonly
-      ? 'Finance OP rates (1 EUR = X foreign currency). You can enter spend in EUR, USD or CNY; it is converted to EUR with these rates when you submit, and the rate is kept with the case.'
-      : 'Enter the rates as in the finance OP table (1 EUR = X foreign currency). Buyers can enter spend in EUR, USD or CNY; the Cockpit converts it to EUR with these rates when the case is submitted, and keeps that rate with the case — changing a rate here only affects new submissions. Cases registered before the EUR switch show USD until they are converted to EUR.')}</h3>
+  <div class="card section-card" id="fxCard">
+    ${settingsHead('Exchange Rates to EUR', admin
+      ? 'Enter the rates as in the finance OP table (1 EUR = X foreign currency). Buyers can enter spend in EUR, USD or CNY; the Cockpit converts it to EUR with these rates when the case is submitted, and keeps that rate with the case — changing a rate here only affects new submissions. Cases registered before the EUR switch show USD until they are converted to EUR.'
+      : 'Finance OP rates (1 EUR = X foreign currency). You can enter spend in EUR, USD or CNY; it is converted to EUR with these rates when you submit, and the rate is kept with the case.', 'fx')}
     <div class="form-grid fx-grid">
       <div class="form-field"><label>Rate basis</label>${admin?`<input class="edit-input" id="fxBasis" maxlength="60" value="${escapeAttr(F.basis||'')}" placeholder="e.g. OP 2025 plan rates 2026"/>`:`<div class="v">${esc(F.basis||'—')}</div>`}</div>
       <div class="form-field"><label>1 EUR = ? USD</label>${rateField('USD')}</div>
       <div class="form-field"><label>1 EUR = ? CNY</label>${rateField('CNY')}</div>
     </div>
-    ${admin?`<div class="form-actions"><button class="btn-primary" id="fxSave">Save rates</button><span id="fxMsg" style="font-size:12px;color:var(--green);font-weight:600;"></span></div>`:''}
+    ${admin ? settingsButtons('fx', 'Save rates') : ''}
     <div class="footer-note" style="text-align:left;margin-top:10px;">${F.updatedAt ? 'Last updated '+esc(F.updatedAt)+'.' : 'No rates set yet — for now only EUR amounts can be submitted.'}</div>
   </div>`;
+}
+function refreshSettingsCards(){
+  const box = document.getElementById('submitSettings'); if(!box) return;
+  box.innerHTML = renderFxCard() + renderRegistrationCard();
+  wireSettingsCards();
+}
+function setSettingsEdit(key, open){
+  state[key+'EditOpen'] = open;
+  refreshSettingsCards();
+  if(open) document.getElementById(key==='fx' ? 'fxBasis' : 'regDaysBefore')?.focus();
+  else document.querySelector(`[data-settings-edit="${key}"]`)?.focus();
+}
+// 新截止规则下，提交表单里的会议日期（及 admin 的例外选项）重画；原来选的日期还在就保留
+function refreshMeetingDateField(){
+  const field = document.getElementById('meetingDateField'); if(!field) return;
+  const prev = (document.getElementById('fMeetingDate')||{}).value;
+  field.innerHTML = meetingDateFieldHtml();
+  const sel = document.getElementById('fMeetingDate');
+  if(sel && prev && [...sel.options].some(o=>o.value===prev)) sel.value = prev;
+  wireMeetingDateField();
+}
+function wireSettingsCards(){
+  document.querySelectorAll('[data-settings-edit]').forEach(b=>{ b.onclick = ()=> setSettingsEdit(b.dataset.settingsEdit, true); });
+  document.querySelectorAll('[data-settings-cancel]').forEach(b=>{ b.onclick = ()=> setSettingsEdit(b.dataset.settingsCancel, false); });
+  const g = id => ((document.getElementById(id)||{}).value||'').trim();
+  const saved = (key, msg)=>{
+    setSettingsEdit(key, false);
+    const m = document.getElementById(key+'Msg'); if(m) m.textContent = msg;
+  };
+  const fxSave = document.getElementById('fxSave');
+  if(fxSave) fxSave.onclick = async ()=>{
+    if(!state.isSysAdmin || fxSave.disabled) return;
+    // 汇率按输入的文本原样发送，服务端用 Decimal 精确解析；空 = 清除该币种汇率
+    const rate = id => g(id) || null;
+    fxSave.disabled = true;
+    try{
+      const resp = await API.put('/api/fx-settings', {basis:g('fxBasis'), perEur:{USD:rate('fxRateUSD'), CNY:rate('fxRateCNY')}});
+      applySnapshot(resp.snapshot);
+    }catch(err){ fxSave.disabled = false; toast('⚠ '+(err.detail||err.message)); return; }
+    saved('fx', 'Saved — new submissions use these rates.');
+    // 表单里的汇率提示、金额折算预览按新汇率重算（等于重新选一次币种）
+    const cur = document.getElementById('fCurrency'); if(cur && cur.onchange) cur.onchange();
+  };
+  const regSave = document.getElementById('regSave');
+  if(regSave) regSave.onclick = async ()=>{
+    if(!state.isSysAdmin || regSave.disabled) return;
+    regSave.disabled = true;
+    try{
+      const resp = await API.put('/api/registration-settings', {daysBefore:Number(g('regDaysBefore'))||2, cutoffTime:g('regCutoffTime')||'23:59', timezone:g('regTimezone')});
+      applySnapshot(resp.snapshot);
+    }catch(err){ regSave.disabled = false; toast('⚠ '+(err.detail||err.message)); return; }
+    saved('reg', 'Saved — the meeting dates below follow the new deadline.');
+    refreshMeetingDateField();
+  };
 }
 function tile(label,num,rag,filterKey){
   return `<div class="tile" data-kpi="${filterKey}"><div class="num">${num}</div><div class="lbl"><span class="rag ${rag}"></span>${label}</div></div>`;
@@ -2730,7 +2873,7 @@ function renderAutoReminderCard(){
   const S = REMINDER_SETTINGS; const admin = state.isSysAdmin;
   return `
   <div class="card section-card" style="margin-top:18px;">
-    <h3>Automatic Reminders ${S.enabled?'<span class="badge approved">ON</span>':'<span class="badge noaction">OFF</span>'}${infoTip(`Every task is reminded automatically on its due date, and then every ${Number(S.overdueEveryDays)===1?'day':S.overdueEveryDays+' days'} while it stays Overdue — nothing to click. Each reminder appears in the table above ("Auto-reminded" under the due date) and in the log below. If you want to nudge someone in between, use "Send reminder" on that row.`)}</h3>
+    <h3>Automatic Reminders ${S.enabled?'<span class="badge approved">ON</span>':'<span class="badge noaction">OFF</span>'}${infoTip(`Every task is reminded automatically on its due date, and then every ${Number(S.overdueEveryDays)===1?'day':S.overdueEveryDays+' days'} while it stays Overdue — nothing to click. Each reminder shows in the table above ("Auto-reminded" under the due date). If you want to nudge someone in between, use "Send reminder" on that row.`)}</h3>
     <div class="form-grid reminder-settings-grid">
       <div class="form-field"><label>Automatic reminders</label>${admin?`<select class="edit-input" id="rsEnabled"><option value="1" ${S.enabled?'selected':''}>ON</option><option value="0" ${!S.enabled?'selected':''}>OFF</option></select>`:`<div class="v">${S.enabled?'ON':'OFF'}</div>`}</div>
       <div class="form-field"><label>While overdue, remind every N days</label>${admin?`<input class="edit-input" id="rsOverdueEvery" type="number" min="1" max="60" value="${escapeAttr(S.overdueEveryDays)}"/>`:`<div class="v">${S.overdueEveryDays}</div>`}</div>
@@ -2738,13 +2881,6 @@ function renderAutoReminderCard(){
       <div class="form-field"><label>Always CC</label>${admin?`<input class="edit-input" id="rsAlwaysCc" value="${escapeAttr(S.alwaysCc||'')}" placeholder="e.g. your own address"/>`:`<div class="v">${esc(S.alwaysCc||'—')}</div>`}</div>
     </div>
     ${admin?`<div class="form-actions"><button class="btn-primary" id="rsSave">Save</button><span id="rsMsg" style="font-size:12px;color:var(--green);font-weight:600;"></span></div>`:''}
-    <div style="margin-top:16px;"><div class="k" style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;">Reminders sent automatically (${AUTO_LOG.length})${infoTip('The server runs this check around the clock — no page needs to be open — and sends email and Teams through its configured channels. The Delivery column shows the result per channel; "skipped" means that channel is not configured on the server yet.')}</div>
-    ${AUTO_LOG.length===0 ? `<div style="font-size:12.5px;color:var(--ink-faint);">None yet — no task was due or overdue today.</div>` : `
-      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-      <table class="data-table reminder-log-table" style="font-size:12px;"><thead><tr><th>When</th><th>Why</th><th>SWAT Case</th><th>Task</th><th>To / CC</th><th>Channel</th><th>Delivery</th></tr></thead>
-      <tbody>${AUTO_LOG.slice(0,25).map(e=>`<tr><td style="white-space:nowrap;">${esc(e.when)}</td><td>${esc(e.trigger)}</td><td class="mono swat" style="cursor:pointer;" data-swat-link="${escapeAttr(e.swatId)}">${esc(e.swatId)}</td><td>${esc(e.task)}${(()=>{ const t = state.isAdmin && logTask(e); return t ? ` <button type="button" class="link-btn" data-log-edit="${escapeAttr(t.id)}">Edit</button>` : ''; })()}</td><td class="mono" style="font-size:11px;">${esc(e.to)}${e.cc?'<br/>cc: '+esc(e.cc):''}</td><td>${esc(e.channel)}</td><td style="font-size:11px;white-space:nowrap;">${deliveryCell(e.delivery)}</td></tr>`).join('')}</tbody></table>
-      </div>`}
-    </div>
   </div>`;
 }
 // v3 Phase-29：Follow-ups 页直接改一条待办（字段与案例编辑页的待办表单一致，保存只改这一条）
@@ -2771,33 +2907,42 @@ function taskEditorHtml(t){
       <button class="btn-secondary" style="padding:8px 16px;font-size:12.5px;" data-task-edit="${id}">Cancel</button>
     </div>`;
 }
-// 自动提醒日志的一行对应哪条待办：新记录带 taskId，旧记录按案例号 + 任务原文找
-function logTask(e){
-  const c = latestByCase().find(x=>x.swatId===e.swatId);
-  return c ? (c.followUps||[]).find(t=> e.taskId ? t.id===e.taskId : t.task===e.task) || null : null;
+// 分类由关键词自动判定（v3 Phase-18）；没命中任何分类的归 "Uncategorized"
+function followupCats(t){ const cats = taskCategories(t); return cats.length ? cats : ['Uncategorized']; }
+function pendingFeedbackCount(t){ return (t.feedback||[]).filter(f=>f.status==='pending').length; }
+// Follow-ups 页当前的筛选。v3 Phase-42：点顶部数字跳到 Database 时原样带过去，两边用同一个 followupItems 算，结果一致
+function followupFiltersNow(){
+  return {status:state.followupStatus, year:state.followupYear, tag:state.followupTag, owner:state.followupOwner, fn:state.followupFunction};
 }
+// Flatten: one row per TASK (a case can carry several), taken from each case's latest entry.
+// Default status: Open + Overdue; the Dashboard tiles open Closed too (v3 Phase-18).
+function followupItems(f){
+  const statusOk = t => f.status==='all' ? true : f.status==='active' ? (t.status==='Open'||t.status==='Overdue') : t.status===f.status;
+  const items = [];
+  latestByCase().forEach(c=>{
+    if(f.year && String(caseYear(c))!==String(f.year)) return;
+    (c.followUps||[]).forEach(t=>{
+      if(!statusOk(t)) return;
+      if(f.tag && !followupCats(t).includes(f.tag)) return;
+      if(f.owner && ownerLabel(t)!==f.owner) return;
+      if(f.fn && (t.ownerFunction||'')!==f.fn) return;
+      items.push({c, t});
+    });
+  });
+  return items;
+}
+// 顶部数字各自对应哪些待办：overdue = 已超期；feedback = 有等着审批的反馈
+function taskMatchesKind(t, kind){ return kind==='overdue' ? t.status==='Overdue' : pendingFeedbackCount(t)>0; }
 function renderFollowups(){
   const latest = latestByCase();
-  // Flatten: one row per TASK (a case can carry several). Default: Open + Overdue; the Dashboard tiles open Closed too (v3 Phase-18).
-  const statusOk = t => state.followupStatus==='all' ? true : state.followupStatus==='active' ? (t.status==='Open'||t.status==='Overdue') : t.status===state.followupStatus;
-  let items = [];
-  latest.forEach(c=>{
-    if(state.followupYear && String(caseYear(c))!==String(state.followupYear)) return;
-    (c.followUps||[]).forEach(t=>{ if(statusOk(t)) items.push({c, t}); });
-  });
-
-  // 分类由关键词自动判定（v3 Phase-18）；没命中任何分类的归 "Uncategorized"
-  const catsOf = t => { const cats = taskCategories(t); return cats.length ? cats : ['Uncategorized']; };
+  const items = followupItems(followupFiltersNow());
+  const catsOf = followupCats;
   const tagOpts = [...ACTION_CATEGORIES, 'Uncategorized'];
   // 负责人 / 职能选项取自全部待办（不随状态筛选变化），否则切到 Closed 时筛选框会消失、选中的值卡住
   const allTasks = latest.flatMap(c=>c.followUps||[]);
   const ownerOpts = uniq(allTasks.map(ownerLabel)).filter(Boolean).sort();
   const functionOpts = uniq(allTasks.map(t=>t.ownerFunction||'')).filter(Boolean).sort();
   const yearOpts = yearsPresent();
-
-  if(state.followupTag) items = items.filter(x=> catsOf(x.t).includes(state.followupTag));
-  if(state.followupOwner) items = items.filter(x=> ownerLabel(x.t)===state.followupOwner);
-  if(state.followupFunction) items = items.filter(x=> (x.t.ownerFunction||'')===state.followupFunction);
 
   items.sort((a,b)=>{
     const da = a.t.dueDate==='—' ? '9999-99-99' : a.t.dueDate;
@@ -2806,7 +2951,9 @@ function renderFollowups(){
   });
 
   const overdueCount = items.filter(x=>x.t.status==='Overdue').length;
-  const pendingFeedback = items.reduce((n,x)=> n + (x.t.feedback||[]).filter(f=>f.status==='pending').length, 0);
+  const pendingFeedback = items.reduce((n,x)=> n + pendingFeedbackCount(x.t), 0);
+  // v3 Phase-42：两个数字可点，跳到 Database 只看这些案例
+  const jump = (kind, cls, text) => `<button type="button" class="summary-link ${cls}" data-fu-jump="${kind}" title="Show these cases in the Database">${text}</button>`;
 
   return `
   <div class="pagehead">
@@ -2819,7 +2966,7 @@ function renderFollowups(){
     <select id="fFollowupTag"><option value="">Category: All</option>${tagOpts.map(c=>`<option ${state.followupTag===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
     ${(functionOpts.length || state.followupFunction) ? `<select id="fFollowupFunction"><option value="">Function: All</option>${uniq([...functionOpts, state.followupFunction]).filter(Boolean).map(o=>`<option ${state.followupFunction===o?'selected':''}>${esc(o)}</option>`).join('')}</select>` : ''}
     <select id="fFollowupOwner"><option value="">Owner: All</option>${ownerOpts.map(o=>`<option ${state.followupOwner===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
-    <div class="resultcount">${items.length} ${state.followupStatus==='active'?'open ':''}task${items.length!==1?'s':''}${overdueCount>0?` · <span style="color:var(--red);font-weight:600;">${overdueCount} overdue</span>`:''}${pendingFeedback>0?` · <span style="color:var(--amber);font-weight:600;">${pendingFeedback} feedback to approve</span>`:''}</div>
+    <div class="resultcount">${items.length} ${state.followupStatus==='active'?'open ':''}task${items.length!==1?'s':''}${overdueCount>0?` · ${jump('overdue', 'red', `${overdueCount} overdue`)}`:''}${pendingFeedback>0?` · ${jump('feedback', 'amber', `${pendingFeedback} feedback to approve`)}`:''}</div>
   </div>
 
   <div class="card" style="overflow-x:auto;">
@@ -3287,7 +3434,7 @@ function renderSubmit(){
   <div class="pagehead">
     <h1>Submit a Sourcing Case</h1>${infoTip(`Fill in the case directly — no Excel needed. It's routed to the SBS Procurement approver, who confirms or returns it for correction.`)}
   </div>
-  <div class="submit-info">${renderFxCard(true)}${renderRegistrationCard(true)}</div>
+  <div class="submit-info" id="submitSettings">${renderFxCard()}${renderRegistrationCard()}</div>
 
   <div class="card form-card">
     <h2>New Case Registration${infoTip(`Fields match what used to live in the weekly Excel. Once submitted, you'll be notified by email once it's reviewed.`)}</h2>
@@ -3325,16 +3472,7 @@ function renderSubmit(){
       <div class="form-field"><label>Parent PF (optional)${fieldTip('Definition still to be clarified.')}</label><input id="fParentPF" placeholder="e.g. CH01016"/></div>
       <div class="form-field"><label>Part Family Code (optional)${fieldTip('Definition still to be clarified.')}</label><input id="fPartFamilyCode"/></div>
 
-      <div class="form-field span2">
-        <label>Requested Committee Meeting Date *${fieldTip(`The committee meets every Wednesday. Registrations close ${esc(cutoffRuleLabel())} — after that, the earliest available date is automatically the following Wednesday.`)}</label>
-        <select id="fMeetingDate">${meetingOptionsHtml(false)}</select>
-        ${(state.isSysAdmin && blockedWednesday()) ? `
-        <label class="region-check" style="margin-top:8px;display:inline-flex;"><input type="checkbox" id="fLateException"/> Request an exception for this week's meeting (${esc(formatDateLong(blockedWednesday()))}) — the deadline has passed (only the Sourcing admin sees this option)</label>
-        <div id="lateReasonField" style="display:none;margin-top:8px;">
-          <label style="display:block;font-size:11.5px;font-weight:600;margin-bottom:4px;">Reason for the late registration *</label>
-          <textarea id="fLateReason" placeholder="e.g. customer escalation, SOP at risk — the Sourcing admin approves the exception when confirming the registration"></textarea>
-        </div>` : ''}
-      </div>
+      <div class="form-field span2" id="meetingDateField">${meetingDateFieldHtml()}</div>
 
       <div class="form-field span2"><label>Case Comments (optional)</label><textarea id="fDiscussionIn" placeholder="Background for the committee, e.g. no tooling budget available, current supplier — you can still edit this on the case page later"></textarea></div>
     </div>
@@ -3458,7 +3596,7 @@ function renderAccounts(){
     </tr>`).join('');
   return `
   <div class="pagehead">
-    <h1>Accounts</h1>${infoTip(`Everyone registers with their company email (${esc(domains)}) — name and email only, no password — and starts as a <b>User</b>: submit and view cases. Correct a name here when it is not the person's real name — new registrations use it as the presenter. <b>Manager</b> (purchasing / NPI manager): also confirm or return registrations, edit and delete cases, record decisions and follow-ups, send reminders. <b>Sourcing admin</b>: also exchange rates, registration deadline, reminder settings and this page; admins are the only accounts with a password (issued here when you promote someone).`)}
+    <h1>Accounts</h1>${infoTip(`Everyone registers with their company email (${esc(domains)}) — name and email only, no password — and starts as a <b>User</b>: submit and view cases. Correct a name here when it is not the person's real name — new registrations use it as the presenter. <b>Manager</b> (purchasing / NPI manager): also confirm or return registrations, edit and delete cases, record decisions and follow-ups, send reminders. <b>Sourcing admin</b>: also exchange rates and registration deadline (Edit on the Submit page), reminder settings (Follow-ups page) and this page; admins are the only accounts with a password (issued here when you promote someone).`)}
   </div>
   ${notice}
   <div class="card" style="overflow-x:auto;">
@@ -3895,6 +4033,8 @@ function infoItem(k,v){ return `<div class="info-item"><div class="k">${k}</div>
 let renderedView = null;
 function render(){
   state.formDirty = false;
+  // 汇率 / 截止卡的编辑状态只在提交页有效：离开提交页再回来是只读（v3 Phase-44）
+  if(state.view!=='submit'){ state.fxEditOpen = false; state.regEditOpen = false; }
   if(state.view==='detail' && !historyFor(state.selectedSwatId).length) state.view='database';
   if(state.view==='accounts' && !state.isSysAdmin) state.view='home';
   if(state.view!=='detail'){
@@ -3962,8 +4102,7 @@ function applyKpiFilter(key){
     state.followupYear = String(state.dashYear || '');
     render(); window.scrollTo(0,0); return;
   }
-  state.view='database'; state.searchQuery='';
-  state.filters = {year:'',weekFrom:'',weekTo:'',region:'',cluster:'',commodity:'',supplier:'',decision:'',status:''};
+  state.view='database'; clearDbFilters();
   if(key==='pending') state.filters.decision='PENDING';
   else if(key==='approved') state.filters.decision='APPROVED';
   else if(key==='rejected') state.filters.decision='REJECTED';
@@ -4049,7 +4188,7 @@ function wireEvents(){
   const hsi = document.getElementById('homeSearchInput');
   if(hsi){
     hsi.oninput = (e)=>{ };
-    hsi.onkeydown = (e)=>{ if(e.key==='Enter'){ state.searchQuery=hsi.value; state.view='database'; render(); } };
+    hsi.onkeydown = (e)=>{ if(e.key==='Enter'){ state.searchQuery=hsi.value; state.dbTaskFilter=null; state.view='database'; render(); } };
   }
   document.querySelectorAll('.activity-row').forEach((el,i)=>{
     // recent activity click -> open that case
@@ -4085,13 +4224,20 @@ function wireEvents(){
   bindExportButton('dbAgendaBtn', 'agenda', ()=>({ids: filteredDbRows().map(c=>c.id)}));
   bindExportButton('dbMinutesBtn', 'minutes', ()=>({ids: filteredDbRows().map(c=>c.id)}));
   const clearBtn = document.getElementById('clearFilters');
-  if(clearBtn) clearBtn.onclick = ()=>{
-    state.filters = {year:'',weekFrom:'',weekTo:'',region:'',cluster:'',commodity:'',supplier:'',decision:'',status:''};
-    state.searchQuery='';
-    render();
-  };
+  if(clearBtn) clearBtn.onclick = ()=>{ clearDbFilters(); render(); };
+  const taskFilterClear = document.getElementById('dbTaskFilterClear');
+  if(taskFilterClear) taskFilterClear.onclick = ()=>{ state.dbTaskFilter = null; render(); };
   document.querySelectorAll('tr[data-swat]').forEach(row=>{
-    row.onclick = ()=> goToDetail(row.dataset.swat);
+    row.onclick = ()=> openCaseFromDb(row.dataset.swat);
+  });
+  // v3 Phase-42：Follow-ups 顶部 "N overdue" / "N feedback to approve" → Database 只看这些案例（Follow-ups 的筛选一起带过去）
+  document.querySelectorAll('[data-fu-jump]').forEach(b=>{
+    b.onclick = ()=>{
+      clearDbFilters();
+      state.dbTaskFilter = {kind:b.dataset.fuJump, ...followupFiltersNow()};
+      state.view = 'database';
+      render(); window.scrollTo(0,0);
+    };
   });
 
   // Admin delete (two-step: ask → confirm)
@@ -4182,32 +4328,6 @@ function wireEvents(){
   document.querySelectorAll('[data-swat-link]').forEach(el=>{
     el.onclick = ()=> goToDetail(el.dataset.swatLink);
   });
-  const fxSave = document.getElementById('fxSave');
-  if(fxSave) fxSave.onclick = async ()=>{
-    if(!state.isSysAdmin || fxSave.disabled) return;
-    const g = id => ((document.getElementById(id)||{}).value||'').trim();
-    // 汇率按输入的文本原样发送，服务端用 Decimal 精确解析；空 = 清除该币种汇率
-    const rate = id => g(id) || null;
-    fxSave.disabled = true;
-    try{
-      const resp = await API.put('/api/fx-settings', {basis:g('fxBasis'), perEur:{USD:rate('fxRateUSD'), CNY:rate('fxRateCNY')}});
-      applySnapshot(resp.snapshot);
-    }catch(err){ fxSave.disabled = false; toast('⚠ '+(err.detail||err.message)); return; }
-    render();
-    const m = document.getElementById('fxMsg'); if(m) m.textContent = 'Saved — new submissions use these rates.';
-  };
-  const regSave = document.getElementById('regSave');
-  if(regSave) regSave.onclick = async ()=>{
-    if(!state.isSysAdmin || regSave.disabled) return;
-    const g = id => ((document.getElementById(id)||{}).value||'').trim();
-    regSave.disabled = true;
-    try{
-      const resp = await API.put('/api/registration-settings', {daysBefore:Number(g('regDaysBefore'))||2, cutoffTime:g('regCutoffTime')||'23:59', timezone:g('regTimezone')});
-      applySnapshot(resp.snapshot);
-    }catch(err){ regSave.disabled = false; toast('⚠ '+(err.detail||err.message)); return; }
-    render();
-    const m = document.getElementById('regMsg'); if(m) m.textContent = 'Saved — the Submit page now uses this deadline.';
-  };
   const rsSave = document.getElementById('rsSave');
   if(rsSave) rsSave.onclick = async ()=>{
     if(!state.isSysAdmin || rsSave.disabled) return;
@@ -4261,17 +4381,6 @@ function wireEvents(){
       if(state.followupEditId) state.remindOpenId = null;
       render();
       if(state.followupEditId) (document.getElementById('teTask_'+id)||{focus(){}}).focus();
-    };
-  });
-  document.querySelectorAll('[data-log-edit]').forEach(el=>{
-    el.onclick = ()=>{
-      // 日志里的待办可能被当前筛选藏起来了：清掉筛选再打开它
-      state.followupStatus = 'all'; state.followupYear = ''; state.followupTag = ''; state.followupOwner = ''; state.followupFunction = '';
-      state.followupEditId = el.dataset.logEdit; state.remindOpenId = null;
-      render();
-      const row = document.querySelector(`tr[data-task-row="${CSS.escape(state.followupEditId)}"]`);
-      if(row) row.scrollIntoView({block:'center'});
-      (document.getElementById('teTask_'+state.followupEditId)||{focus(){}}).focus();
     };
   });
   if(state.followupEditId) wireOwnerFunction('teOwner_'+state.followupEditId, 'teFunc_'+state.followupEditId);
@@ -4650,13 +4759,8 @@ function wireEvents(){
     if(st.existing){ h.style.color='var(--accent)'; h.textContent=`↩ ${st.id} is already in the Database (${st.priorEntries} previous entr${st.priorEntries===1?'y':'ies'}) — this registration will be linked to its history as a comeback.`; }
     else { h.style.color='var(--green)'; h.textContent=`✓ ${st.id} is not in the Database yet — it will be registered as a new case under this number.`; }
   };
-  const lateBox = document.getElementById('fLateException');
-  if(lateBox) lateBox.onchange = ()=>{
-    const sel = document.getElementById('fMeetingDate');
-    const reason = document.getElementById('lateReasonField');
-    if(sel) sel.innerHTML = meetingOptionsHtml(lateBox.checked);
-    if(reason) reason.style.display = lateBox.checked ? 'block' : 'none';
-  };
+  wireMeetingDateField();
+  wireSettingsCards();
   const qBPG = document.getElementById('qBPG');
   if(qBPG) qBPG.onchange = syncBpgWarning;
   const qFRA = document.getElementById('qFRA');

@@ -327,7 +327,7 @@ try{
     await view.context.close();
   });
 
-  await test('Exchange-rate card takes rates in the finance OP notation (1 EUR = X) and saves them as entered', async()=>{
+  await test('Exchange-rate card takes rates in the finance OP notation (1 EUR = X); the Sourcing admin edits it on the Submit page without losing the form', async()=>{
     let saved;
     const fxSettings = {basis:'', perEur:{}, updatedAt:''};
     const {page, context} = await fixture({api:async(route,path)=>{
@@ -337,22 +337,43 @@ try{
       await route.fulfill({json:{ok:true, snapshot:{...empty, fxSettings:{basis:saved.basis, perEur:{USD:saved.perEur.USD}, updatedAt:'Sep 24, 6:30 PM'}}}});
       return true;
     }});
+    // v3 Phase-44：Dashboard 不再有汇率卡；提交页的卡平时只读，admin 点 Edit 才能改
     await goTo(page, 'dashboard');
-    const card = await page.locator('#app').innerText();
+    assert.equal(await page.locator('h3:has-text("Exchange Rates to EUR")').count(), 0);
+    await goTo(page, 'submit');
+    await page.locator('#fCurrency').selectOption('USD');
+    assert.match(await page.locator('#fxHint').textContent(), /No USD rate is set yet/);
+    await page.locator('#fBundlePeak').fill('117');
+    assert.equal(await page.locator('#fxBasis').count(), 0);
+    await page.locator('[data-settings-edit="fx"]').click();
+    const card = await page.locator('#fxCard').innerText();
     assert.ok(card.includes('1 EUR = ? USD') && card.includes('1 EUR = ? CNY'), card);
+    assert.equal(await page.evaluate(()=>document.activeElement?.id), 'fxBasis');
     await page.locator('#fxBasis').fill('OP 2025 plan rates 2026');
     await page.locator('#fxRateUSD').fill('1.17');
     await page.locator('#fxSave').click();
     await page.waitForFunction(()=>document.getElementById('fxMsg')?.textContent.includes('Saved'));
     assert.deepEqual(saved,{basis:'OP 2025 plan rates 2026', perEur:{USD:'1.17', CNY:null}});
-    assert.equal(await page.locator('#fxRateUSD').inputValue(),'1.17');
-    // 提交页提示与预览按除法：117 USD ≈ €100
-    await goTo(page, 'submit');
-    await page.locator('#fCurrency').selectOption('USD');
+    // 保存后回到只读，显示新汇率；表单没被重画——已填的金额还在，提示与预览按新汇率（117 USD ≈ €100）
+    assert.equal(await page.locator('#fxRateUSD').count(), 0);
+    assert.deepEqual(await page.locator('#fxCard .v').allTextContents(), ['OP 2025 plan rates 2026','1.17','—']);
+    assert.equal(await page.locator('#fBundlePeak').inputValue(), '117');
     assert.match(await page.locator('#fxHint').textContent(),/1 EUR = 1\.17 USD \(OP 2025 plan rates 2026\)/);
-    await page.locator('#fBundlePeak').fill('117');
     assert.equal(await page.locator('#totalPeakDisplay').textContent(),'$117');
     assert.equal(await page.locator('#totalPeakEur').textContent(),'€100');
+    // Cancel 丢掉改动、不发请求
+    saved = undefined;
+    await page.locator('[data-settings-edit="fx"]').click();
+    await page.locator('#fxRateUSD').fill('9');
+    await page.locator('[data-settings-cancel="fx"]').click();
+    assert.equal(saved, undefined);
+    assert.deepEqual(await page.locator('#fxCard .v').allTextContents(), ['OP 2025 plan rates 2026','1.17','—']);
+    assert.equal(await page.evaluate(()=>document.activeElement?.dataset.settingsEdit), 'fx');
+    // 离开提交页再回来：卡片是只读
+    await page.locator('[data-settings-edit="fx"]').click();
+    await goTo(page, 'database');
+    await goTo(page, 'submit');
+    assert.equal(await page.locator('#fxRateUSD').count(), 0);
     await context.close();
   });
 
@@ -586,6 +607,7 @@ try{
       await goTo(other.page, 'submit');
       assert.equal(await other.page.locator('#fMeetingDate option').first().getAttribute('value'),'2026-12-30');
       assert.equal(await other.page.locator('#fLateException').count(),0, role.role);
+      assert.equal(await other.page.locator('[data-settings-edit]').count(),0, role.role);  // v3 Phase-44：只有 Sourcing admin 能改
       await other.context.close();
     }
     const {page, context} = await fixture({api:async(route,path)=>{
@@ -630,8 +652,14 @@ try{
     assert.ok(approvals.includes('Late registration — exception requested'), approvals);
     assert.ok(approvals.includes('Customer escalation'));
     assert.ok(approvals.includes('Presenter: Lingqing Hu'), approvals);  // v3 Phase-28：上会人不是提交人时写出来
+    // v3 Phase-44：截止规则在提交页的卡片上改（Dashboard 不再有这张卡）；保存只重画卡片和会议日期，已填的表单不丢
     await goTo(page, 'dashboard');
+    assert.equal(await page.locator('h3:has-text("Registration Deadline")').count(), 0);
+    await goTo(page, 'submit');
     assert.ok((await page.locator('h3:has-text("Registration Deadline") .info-tip').getAttribute('aria-label')).includes('Friday 18:00 (Europe/Berlin)'));
+    assert.equal(await page.locator('#regDaysBefore').count(), 0);
+    await page.locator('#pnPartNumber_0').fill('5678');
+    await page.locator('[data-settings-edit="reg"]').click();
     await page.locator('#regDaysBefore').selectOption('1');
     await page.locator('#regCutoffTime').fill('17:30');
     await page.locator('#regTimezone').fill('');
@@ -639,6 +667,12 @@ try{
     await page.waitForFunction(()=>document.getElementById('regMsg')?.textContent.includes('Saved'));
     assert.deepEqual(savedSettings,{daysBefore:1, cutoffTime:'17:30', timezone:''});
     assert.ok((await page.locator('h3:has-text("Registration Deadline") .info-tip').getAttribute('aria-label')).includes('Tuesday 17:30 (America/New_York)'));
+    assert.equal(await page.locator('#regDaysBefore').count(), 0);
+    assert.equal(await page.locator('#pnPartNumber_0').inputValue(), '5678');
+    // 新规则下本周三（12-23）还没截止：会议日期从 12-23 起，例外选项消失，字段提示同步
+    assert.equal(await page.locator('#fMeetingDate option').first().getAttribute('value'),'2026-12-23');
+    assert.equal(await page.locator('#fLateException').count(), 0);
+    assert.ok((await page.locator('label:has(~ #fMeetingDate) .info-tip').getAttribute('aria-label')).includes('Registrations close Tuesday 17:30 (America/New_York)'));
     await context.close();
   });
 
@@ -1977,7 +2011,7 @@ try{
     await context.close();
   });
 
-  await test('Follow-ups show owners by full name, edit a task in place (also from the reminder log) and fill in the owner\'s function', async()=>{
+  await test('Follow-ups show owners by full name, edit a task in place (no reminder log any more) and fill in the owner\'s function', async()=>{
     // v3 Phase-29（领导 2026-10-16）
     const puts = [];
     let current = null;
@@ -1997,8 +2031,7 @@ try{
         weekNum:40, caseNumber:1, meetingYear:2026, meetingDateISO:'2026-09-30', meetingDecision:'APPROVED', actionStatus:'Overdue',
         followUps:[task('T1','Open','andreas.huber1@zf-lifetec.com','Andreas Huber','Sales','2027-01-01'),
                    task('T2','Overdue','Robert Nieczyporuk','Robert Nieczyporuk','','2026-12-01')]});
-      applySnapshot({cases:[c], autoLog:[{id:'L1', when:'Dec 20, 12:42 AM', trigger:'Overdue by 19 days', swatId:'SWAT-A', taskId:'T2', task:'t T2',
-        to:'x@example.com', cc:'', channel:'Email + Teams', delivery:{email:'skipped', teams:'skipped'}}]});
+      applySnapshot({cases:[c]});
       return JSON.parse(JSON.stringify(c));
     });
     await goTo(page, 'followups');
@@ -2019,11 +2052,10 @@ try{
     assert.deepEqual(puts[0].body, {task:'Track cost recovery with MB (65K EUR)', tags:[], responsible:'andreas.huber1@zf-lifetec.com', ownerFunction:'Sales',
       dueDate:'2027-01-01', status:'Open', channel:'Email', notifyEmail:'x@example.com', cc:'', notes:''});
     assert.ok((await page.locator('#app').innerText()).includes('Track cost recovery with MB (65K EUR)'));
-    // 从自动提醒日志打开：筛选藏起来的待办也能改（日志里的 Edit 清掉筛选）
-    await page.locator('#fFollowupStatus').selectOption('Open');
-    assert.equal(await page.locator('#teTask_T2').count(), 0);
-    await page.locator('[data-log-edit="T2"]').click();
-    assert.equal(await page.locator('#fFollowupStatus').inputValue(), 'all');
+    // v3 Phase-43：自动提醒日志表已删（日志里的 Edit 一起删），提醒设置还在
+    assert.equal(await page.locator('text=Reminders sent automatically').count(), 0);
+    assert.equal(await page.locator('h3:has-text("Automatic Reminders")').count(), 1);
+    await page.locator('[data-task-edit="T2"]').first().click();
     assert.equal(await page.locator('#teTask_T2').inputValue(), 't T2');
     // 换成已知职能的人：职能自动带出
     await page.locator('#teOwner_T2').fill('andreas.huber1@zf-lifetec.com');
@@ -2351,6 +2383,77 @@ try{
     await page.locator('#saveCaseBtn').click();
     assert.ok((await page.locator('.block-warning').first().textContent()).includes('Final PPT / Supporting Document Link'));
     assert.equal(saves.length, 2);
+    await context.close();
+  });
+
+  await test('Follow-ups: "N overdue" / "N feedback to approve" open the Database on exactly those cases, and the case shows those tasks expanded (v3 Phase-42)', async()=>{
+    const {page, context} = await fixture({user:'manager'});
+    await page.evaluate(()=>{
+      const fb = {id:'FB-1', when:'Dec 18, 9:00 AM', by:'Test owner', text:'Samples shipped', files:[], status:'pending', notify:{to:'npi@zf.com', result:'sent'}, decision:null};
+      const task = (id, status, name, fn, due, extra={}) => ({id, task:'Task '+id, status, responsible:name, ownerName:name, ownerFunction:fn,
+        dueDate:due, tags:[], notifyEmail:'x@example.com', cc:'', channel:'Email + Teams', ...extra});
+      const base = {partDescription:'P', recommendedSupplier:'S', presenter:'O', cluster:'Metal', meetingYear:2026, meetingDecision:'APPROVED'};
+      applySnapshot({cases:[
+        mkCase({...base, id:'C-A', swatId:'SWAT-A', partNumber:'1', weekNum:40, caseNumber:1, meetingDateISO:'2026-09-30', actionStatus:'Overdue',
+          followUps:[task('T1','Overdue','Andreas Huber','Sales','2026-12-01'), task('T2','Open','Robert Nieczyporuk','','2027-01-15',{feedback:[fb]}),
+                     task('T3','Overdue','Robert Nieczyporuk','','2026-12-02')]}),
+        // SWAT-B 上过两次会：旧记录不进列表，只列最新那条（与 Follow-ups 一致）
+        mkCase({...base, id:'C-B0', swatId:'SWAT-B', partNumber:'2', weekNum:38, caseNumber:2, meetingDateISO:'2026-09-16', actionStatus:'Overdue',
+          followUps:[task('T4','Overdue','Andreas Huber','Sales','2026-12-03')]}),
+        mkCase({...base, id:'C-B', swatId:'SWAT-B', partNumber:'2', weekNum:41, caseNumber:1, meetingDateISO:'2026-10-07', actionStatus:'Overdue',
+          followUps:[task('T4','Overdue','Andreas Huber','Sales','2026-12-03')]}),
+        mkCase({...base, id:'C-C', swatId:'SWAT-C', partNumber:'3', weekNum:42, caseNumber:1, meetingDateISO:'2026-10-14', actionStatus:'Open',
+          followUps:[task('T5','Open','Andreas Huber','Sales','2027-01-20')]}),
+      ]});
+    });
+    const swats = ()=> page.locator('tr[data-swat]').evaluateAll(rs=>rs.map(r=>r.dataset.swat).sort());
+    const openRows = ()=> page.locator('tr.task-row.open').evaluateAll(rs=>rs.map(r=>r.dataset.taskExpand));
+    const chipText = ()=> page.locator('.task-filter-chip > span').textContent();
+    await goTo(page, 'followups');
+    assert.equal(await page.locator('.resultcount').innerText(), '5 open tasks · 3 overdue · 1 feedback to approve');
+
+    // 超期：Database 只列这些待办所在的案例，标签写明几个案例 / 几条待办
+    await page.locator('[data-fu-jump="overdue"]').click();
+    assert.equal(await page.evaluate(()=>state.view), 'database');
+    assert.equal(await chipText(), 'Overdue follow-ups · 2 cases (3 overdue tasks)');
+    assert.deepEqual(await swats(), ['SWAT-A','SWAT-B']);
+    assert.equal(await page.locator('.filters-bar .resultcount').innerText(), '2 cases');
+    // 点进案例：超期的两条自动展开，没超期的不展开
+    await page.locator('tr[data-swat="SWAT-A"]').click();
+    assert.deepEqual(await openRows(), ['T1','T3']);
+    assert.ok(await page.evaluate(()=>{ const r = document.querySelector('.task-table-wrap').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; }));
+    // Back to Database 回到同一份筛选；✕ 回到完整列表
+    await page.locator('#backToDb').click();
+    assert.deepEqual(await swats(), ['SWAT-A','SWAT-B']);
+    await page.locator('#dbTaskFilterClear').click();
+    assert.equal(await page.locator('.task-filter-chip').count(), 0);
+    assert.equal(await page.locator('tr[data-swat]').count(), 4);
+
+    // Follow-ups 上的负责人筛选一起带过去
+    await goTo(page, 'followups');
+    await page.locator('#fFollowupOwner').selectOption('Andreas Huber');
+    assert.equal(await page.locator('.resultcount').innerText(), '3 open tasks · 2 overdue');
+    await page.locator('[data-fu-jump="overdue"]').click();
+    assert.equal(await chipText(), 'Overdue follow-ups · 2 cases (2 overdue tasks) · Owner: Andreas Huber');
+    assert.deepEqual(await swats(), ['SWAT-A','SWAT-B']);
+    await page.locator('#clearFilters').click();
+    assert.equal(await page.locator('.task-filter-chip').count(), 0);
+
+    // 待审反馈：进案例后那一条展开，经理直接看到 Approve / Reject
+    await goTo(page, 'followups');
+    await page.locator('#fFollowupOwner').selectOption('');
+    await page.locator('[data-fu-jump="feedback"]').click();
+    assert.equal(await chipText(), 'Feedback to approve · 1 case (1 feedback to approve)');
+    assert.deepEqual(await swats(), ['SWAT-A']);
+    await page.evaluate(()=>state.taskOpenIds.clear());
+    await page.locator('tr[data-swat="SWAT-A"]').click();
+    assert.deepEqual(await openRows(), ['T2']);
+    assert.equal(await page.locator('#taskDetail_T2 [data-decision-open]').count(), 1);
+    // 实时算：反馈审批完，案例自己从列表掉出
+    await page.evaluate(()=>{ ALL_CASES.find(c=>c.id==='C-A').followUps[1].feedback[0].status='approved'; });
+    await page.locator('#backToDb').click();
+    assert.equal(await chipText(), 'Feedback to approve · 0 cases (0 feedback to approve)');
+    assert.equal(await page.locator('tr[data-swat]').count(), 0);
     await context.close();
   });
 

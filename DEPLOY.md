@@ -86,12 +86,12 @@ docker compose up -d --build
 
 EUR 改造之前登记的案例（含模板演示数据）没有币种信息、按美元显示。按财务 OP 汇率一次性换算成欧元，原美元金额保留为 "entered" 金额，案例记下所用汇率与换算时间；之后编辑仍按美元填写、按同一汇率折算。
 
-1. 管理员在 Dashboard 汇率卡片按 OP 表录入：Rate basis 填口径（如 `OP 2025 plan rates 2026`），`1 EUR = ? USD` 填 `1.17`，保存。
+1. 管理员在提交页顶部的汇率卡片上点 Edit，按 OP 表录入：Rate basis 填口径（如 `OP 2025 plan rates 2026`），`1 EUR = ? USD` 填 `1.17`，保存。
 2. 按上表"备份数据"做一次在线备份。
 3. 先预览（只统计，不写库）：`docker compose exec cockpit python -m app.migrations usd-to-eur`
 4. 在没人操作时执行：`docker compose exec cockpit python -m app.migrations usd-to-eur --apply`
 
-不想用 Dashboard 上的汇率，可加 `--per-eur 1.17 --basis "OP 2025 plan rates 2026"`。重复执行是安全的：已是欧元的记录不会再换算。
+不想用页面上录入的汇率，可加 `--per-eur 1.17 --basis "OP 2025 plan rates 2026"`。重复执行是安全的：已是欧元的记录不会再换算。
 
 ## 安全说明（v3 起：个人账号）
 
@@ -104,7 +104,7 @@ EUR 改造之前登记的案例（含模板演示数据）没有币种信息、�
 
 ## 提醒真实外发（邮件 + Teams）
 
-服务器容器 7×24 运行，每天自动执行提醒检查（启动时 + 每小时）：任务**到期当天**、以及**逾期后每 N 天**（规则在 Follow-ups 页可调）自动发送，无需任何人打开页面。日志中 Delivery 列显示每通道投递结果；未配置的通道显示 `skipped`，不会报错。
+服务器容器 7×24 运行，每天自动执行提醒检查（启动时 + 每小时）：任务**到期当天**、以及**逾期后每 N 天**（规则在 Follow-ups 页可调）自动发送，无需任何人打开页面。每次发送都记进服务器库里的提醒日志（含每通道投递结果，未配置的通道记 `skipped`，不会报错）；v3 Phase-43 起页面不再显示这份日志，Follow-ups 每行只显示 "Auto-reminded today ✓" / 下次自动提醒日期。
 
 除定时提醒外，**审批结果邮件**（管理员确认/退回登记时发给提交人——即提交页承诺的通知）也走同一条 SMTP 通道：未配置时同样记 `skipped`，Approvals 页 Recently Processed 列表可见每次通知的投递结果。
 
