@@ -170,7 +170,8 @@ class SubmissionIn(CommercialIn):
     partFamilyCode: Text = ""
     sourcingType: SourcingType = "New"
     recommendedSupplier: Text = ""
-    decisionLevel: DecisionLevel = "Level 2"
+    # v3 Phase-45：级别由服务端按欧元 Lifetime Spend 算，这里的值不作数；字段留着，旧页面带了照样能提交
+    decisionLevel: DecisionLevel = ""
     meetingDateISO: CalendarDate = ""
     meetingDateLabel: Text = ""
     meetingWeekNum: Annotated[int, Field(strict=True, ge=1, le=53)] | None = None

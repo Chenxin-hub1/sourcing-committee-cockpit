@@ -34,8 +34,8 @@ def manager(client, admin):
     return {"X-Session-Token": r.json()["token"]}
 
 
-def _confirmed_case(client, admin, number="swat 20999"):
-    r = client.post("/api/submissions", json={**VALID_SUBMISSION, "caseNo": number})
+def _confirmed_case(client, admin, number="swat 20999", **over):
+    r = client.post("/api/submissions", json={**VALID_SUBMISSION, "caseNo": number, **over})
     assert r.status_code == 200, r.text
     case = client.post(f"/api/submissions/{r.json()['subId']}/confirm", headers=admin).json()["case"]
     return _get_case(client, case["id"])
@@ -63,7 +63,7 @@ def test_single_problem_still_reads_as_one_message(client):
 
 
 def test_case_edit_lists_every_problem_at_once(client, admin):
-    case = _confirmed_case(client, admin)
+    case = _confirmed_case(client, admin, lifetimeSpend=2_000_000)  # v3 Phase-45：Level 2，要求演示文稿
     task = {"id": "FU-X1", "task": "t", "responsible": "A", "dueDate": "2027-01-01", "status": "Open", "notes": "", "tags": []}
     r = client.put(f"/api/cases/{case['id']}", headers=admin, json=_edit_payload(
         case, meetingDecision="APPROVED", region="", finalDocLink="not-a-url", followUps=[task]))
@@ -139,7 +139,7 @@ def test_no_tooling_involved_is_a_valid_tooling_payment(client, admin):
 
 def test_uploaded_presentation_file_satisfies_the_presentation_rule(client, admin, tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings(), "upload_dir", str(tmp_path / "uploads"))
-    case = _confirmed_case(client, admin)
+    case = _confirmed_case(client, admin, lifetimeSpend=2_000_000)  # v3 Phase-45：Level 2，要求演示文稿
     approve = _edit_payload(case, meetingDecision="APPROVED")
     r = client.put(f"/api/cases/{case['id']}", headers=admin, json=approve)
     assert r.status_code == 422 and "Sourcing Presentation" in r.json()["detail"]

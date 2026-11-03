@@ -584,6 +584,128 @@ try{
     await context.close();
   });
 
+  await test('Submit page sets the Decision Level from the bundle Lifetime Spend in EUR and the FRA gate follows it (v3 Phase-45)', async()=>{
+    let submitted;
+    const fxSettings = {basis:'OP 2026', perEur:{USD:'1.17'}, updatedAt:'Nov 3, 9:00 AM'};
+    const {page, context} = await fixture({user:'user', api:async(route,path)=>{
+      if(path==='/api/bootstrap'){ await route.fulfill({json:{...empty, fxSettings, currentUser:USER}}); return true; }
+      if(path!=='/api/submissions') return false;
+      submitted = route.request().postDataJSON();
+      await route.fulfill({json:{subId:'SUB-TEST', snapshot:{...empty, fxSettings}}});
+      return true;
+    }});
+    await goTo(page, 'submit');
+    const level = ()=>page.locator('#fDecisionLevelIn').inputValue();
+    const fraWarning = ()=>page.locator('#fraWarning').evaluate(el=>getComputedStyle(el).display);
+    // 不能手选：只读，没填金额时是 —
+    assert.equal(await page.locator('select#fDecisionLevelIn').count(), 0);
+    assert.equal(await page.locator('#fDecisionLevelIn').getAttribute('readonly'), '');
+    assert.equal(await level(), '—');
+    await page.locator('#fBundleLife').fill('2000000');
+    assert.equal(await level(), 'Level 2');
+    await page.locator('#qFRA').selectOption('No');
+    assert.equal(await fraWarning(), 'block');
+    // 门槛含下限：1,500,000 是 Level 2、1,499,999 是 Level 3；750,000 是 Level 3、749,999 是 Level 4
+    await page.locator('#fBundleLife').fill('1500000');
+    assert.equal(await level(), 'Level 2');
+    await page.locator('#fBundleLife').fill('1499999');
+    assert.equal(await level(), 'Level 3');
+    assert.equal(await fraWarning(), 'none', 'FRA "No" is fine below Level 2');
+    await page.locator('#fBundleLife').fill('750000');
+    assert.equal(await level(), 'Level 3');
+    await page.locator('#fBundleLife').fill('749999');
+    assert.equal(await level(), 'Level 4');
+    // 按换算后的欧元：1,800,000 USD / 1.17 ≈ €1,538,462 → Level 2；1,700,000 USD ≈ €1,452,991 → Level 3
+    await page.locator('#fCurrency').selectOption('USD');
+    await page.locator('#fBundleLife').fill('1800000');
+    assert.equal(await level(), 'Level 2');
+    assert.equal(await fraWarning(), 'block');
+    await page.locator('#fBundleLife').fill('1700000');
+    assert.equal(await level(), 'Level 3');
+    // 换回 EUR：同样的数字按欧元看是 Level 2
+    await page.locator('#fCurrency').selectOption('EUR');
+    assert.equal(await level(), 'Level 2');
+
+    // 提交：Level 2 没答 FRA 被拦；改成 Level 3 的金额就不要求，请求里不带 decisionLevel
+    for(const [id,value] of Object.entries({fExistingSwat:'SWAT-4501', pnSupplier_0:'Test supplier', pnProject_0:'MBEAL',
+      pnPartNumber_0:'1234', pnPartDescription_0:'Test part', fBundlePeak:'300000', fBundleLife:'2000000'})) await page.locator('#'+id).fill(value);
+    await page.locator('#fRegionIn input[value="EU"]').check();
+    await page.locator('#qFamily').selectOption('No');
+    await page.locator('#qECM').selectOption('No');
+    await fillCommercial(page);
+    await page.locator('#qFRA').selectOption('');
+    const banner = text => page.waitForFunction(t=>document.getElementById('submitBanner')?.textContent.includes(t), text);
+    await page.locator('#submitCaseBtn').click();
+    await banner('required for Level 2 cases');
+    assert.equal(submitted, undefined);
+    await page.locator('#fBundleLife').fill('1000000');
+    assert.equal(await level(), 'Level 3');
+    await page.locator('#submitCaseBtn').click();
+    await banner('SUB-TEST');
+    assert.equal(submitted.lifetimeSpend, 1000000);
+    assert.equal(submitted.fraAvailable, '');
+    assert.ok(!('decisionLevel' in submitted), JSON.stringify(submitted));
+    await context.close();
+  });
+
+  await test('Edit Case: the Decision Level follows the Lifetime Spend; only the Sourcing admin can choose another one (v3 Phase-45)', async()=>{
+    for(const role of ['manager', 'admin']){
+      let saved;
+      const {page, context} = await fixture({user:role, api:async(route,path)=>{
+        if(path==='/api/presentation-library'){ await route.fulfill({json:{ok:true, folder:'', files:[]}}); return true; }
+        if(path==='/api/cases/C-TEST' && route.request().method()==='PUT'){
+          saved = route.request().postDataJSON();
+          const after = await page.evaluate(()=>ALL_CASES[0]);
+          await route.fulfill({json:{ok:true, case:after, snapshot:{cases:[after]}}});
+          return true;
+        }
+        return false;
+      }});
+      // 历史上的例外：€2,760,000 记成 Level 3（2026-KW18 110000031312）
+      await seed(page, {spendCurrency:'EUR', peakYearSpend:400000, lifetimeSpend:2760000, decisionLevel:'Level 3'});
+      await page.evaluate(()=>goToDetail('SWAT-TEST'));
+      await page.locator('#editCaseBtn').click();
+      const select = page.locator('#editDecisionLevel'), hint = ()=>page.locator('#editLevelHint').textContent();
+      assert.equal(await select.isDisabled(), role==='manager', role);
+      assert.equal(await select.inputValue(), 'Level 3');
+      assert.equal(await hint(), 'By the thresholds this case would be Level 2 (Lifetime Spend €2,760,000).');
+      // 改金额：级别跟着门槛变，对上了提示消失；改回原金额回到原级别（例外保留）
+      await page.locator('#editBundleLife').fill('500000');
+      assert.equal(await select.inputValue(), 'Level 4');
+      assert.equal(await hint(), '');
+      await page.locator('#editBundleLife').fill('2760000');
+      assert.equal(await select.inputValue(), 'Level 3');
+      await page.locator('#editBundleLife').fill('1600000');
+      assert.equal(await select.inputValue(), 'Level 2');
+      if(role==='admin'){
+        // Sourcing admin 改完金额还能再选，提示说明门槛是多少
+        await select.selectOption('Level 3');
+        assert.equal(await hint(), 'By the thresholds this case would be Level 2 (Lifetime Spend €1,600,000).');
+      }
+      await page.locator('#saveCaseBtn').click();
+      await page.waitForFunction(()=>!state.detailEditMode);
+      assert.equal(saved.lifetimeSpend, 1600000);
+      if(role==='admin') assert.equal(saved.decisionLevel, 'Level 3');
+      else assert.ok(!('decisionLevel' in saved), 'a Manager save leaves the level to the server');
+      await context.close();
+    }
+
+    // 外币折算来的案例：按案例上记录的汇率换算（1 EUR = 1.25 USD：2,000,000 USD = €1,600,000）
+    const {page, context} = await fixture({user:'manager', api:async(route,path)=>{
+      if(path==='/api/presentation-library'){ await route.fulfill({json:{ok:true, folder:'', files:[]}}); return true; }
+      return false;
+    }});
+    await seed(page, {spendCurrency:'EUR', fx:{currency:'USD', perEur:'1.25', basis:'OP 2026'},
+      peakYearSpend:100000, peakYearSpendEntered:125000, lifetimeSpend:1200000, lifetimeSpendEntered:1500000, decisionLevel:'Level 3'});
+    await page.evaluate(()=>goToDetail('SWAT-TEST'));
+    await page.locator('#editCaseBtn').click();
+    assert.equal(await page.locator('#editBundleLife').inputValue(), '1500000');
+    assert.equal(await page.locator('#editLevelHint').textContent(), '');
+    await page.locator('#editBundleLife').fill('2000000');
+    assert.equal(await page.locator('#editDecisionLevel').inputValue(), 'Level 2');
+    await context.close();
+  });
+
   await test('Registration deadline follows admin settings and late registrations need an exception with a reason', async()=>{
     // 固定时间 2026-12-20（周日）12:00Z。默认规则：周一 23:59 —— 本周三 12/23 仍开放，没有例外入口
     const plain = await fixture({user:'user'});

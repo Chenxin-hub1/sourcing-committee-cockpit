@@ -780,6 +780,10 @@ const ACTION_CATEGORIES = ["CQA","Volume","Technical","Timing","Supplier strateg
 // 反馈 PPT 第 2、3 页：商务字段（金额按提交币种填写，服务端折算欧元；件价保留 4 位小数）
 const TOOLING_PAYMENTS = ["Lumpsum","MPC","No tooling involved"];  // v3 Phase-19：没有模具的案例
 const BPG_THRESHOLD_EUR = 3000000; // Lifetime Spend 超过 3 Mio EUR 必须有 BPG
+// v3 Phase-45：Decision Level 按欧元 Lifetime Spend 门槛定（BU Sourcing Meeting 幻灯片），与服务端 logic.decision_level_for 一致
+const DECISION_LEVEL_FLOORS_EUR = [[1500000,'Level 2'],[750000,'Level 3']];
+const DECISION_LEVEL_TIP = 'Set from the bundle Lifetime Spend in EUR: €1,500,000 and above → Level 2 (BU Sourcing Meeting); €750,000 to below €1,500,000 → Level 3; below €750,000 → Level 4.';
+function decisionLevelFor(eur){ const hit = DECISION_LEVEL_FLOORS_EUR.find(([floor])=>eur>=floor); return hit ? hit[1] : 'Level 4'; }
 // 反馈人 MM 模板（2026-09-24）：件价 / 模具费 / 产量按零件行填写；案例级只剩摊销总额
 const ROW_MONEY_KEYS = ["pcPriceCQA","supplierPriceLanded","toolingCQA","supplierToolingCost"];
 const ROW_INT_KEYS = ["averageVolume","lifetimeVolume"];
@@ -3036,6 +3040,45 @@ function bundleLifeOverBpg(){
   const life = Number((document.getElementById('fBundleLife')||{}).value)||0;
   return (rate ? eurPreview(life, cur) : life) > BPG_THRESHOLD_EUR;
 }
+// v3 Phase-45：登记页的 Decision Level 按换算后的欧元 Lifetime Spend 算；没填金额或没有汇率时为空（服务端同样计算）
+function submitDecisionLevel(){
+  const cur = submitCurrency(), rate = fxRate(cur);
+  const life = Number((document.getElementById('fBundleLife')||{}).value)||0;
+  return rate && life>0 ? decisionLevelFor(eurPreview(life, cur)) : '';
+}
+function syncDecisionLevel(){
+  const level = submitDecisionLevel(), el = document.getElementById('fDecisionLevelIn');
+  if(el) el.value = level || '—';
+  const hint = document.getElementById('decisionLevelHint');
+  if(hint) hint.textContent = level ? 'Set automatically from the bundle Lifetime Spend in EUR.' : 'Set automatically from the bundle Lifetime Spend.';
+  syncFraWarning();
+}
+// 编辑页按原币填写金额；换算成欧元用案例上记录的汇率（与服务端 logic.fx_of + to_eur 一致）
+function caseEurAmount(c, amount){
+  const fx = c && c.fx;
+  if(fx && fx.perEur) return Math.round(amount / Number(fx.perEur));
+  if(fx && fx.rate) return Math.round(amount * Number(fx.rate));
+  return Math.round(amount);
+}
+// 编辑页：录入的 Lifetime Spend（原币，与编辑框预填同一口径）改了就换算成欧元按门槛算；没改、清成 0 保留原级别
+// （服务端 logic.edit_decision_level 同一规则，Manager 的保存以服务端为准）
+function editAutoDecisionLevel(c, enteredLife){
+  const life = Number(enteredLife)||0;
+  const before = c.fx && c.lifetimeSpendEntered!==undefined && c.lifetimeSpendEntered!==null ? c.lifetimeSpendEntered : (c.lifetimeSpend||0);
+  return life>0 && life!==Number(before) ? decisionLevelFor(caseEurAmount(c, life)) : (c.decisionLevel||'');
+}
+// 选的级别和门槛对不上时提示一句（Sourcing admin 定的例外，或历史上的例外）
+function editLevelHintText(c, enteredLife, level){
+  const eur = caseEurAmount(c, Number(enteredLife)||0);
+  if(!(eur>0)) return '';
+  const byThreshold = decisionLevelFor(eur);
+  return byThreshold===level ? '' : `By the thresholds this case would be ${byThreshold} (Lifetime Spend ${fmtMoney(eur,'EUR')}).`;
+}
+// FRA 选 No 的红字只对 Level 2（≥ 1.5 Mio EUR）出现；金额、币种、FRA 答案变了都重算
+function syncFraWarning(){
+  const q = document.getElementById('qFRA'), w = document.getElementById('fraWarning');
+  if(q && w) w.style.display = (q.value==='No' && submitDecisionLevel()==='Level 2') ? 'block' : 'none';
+}
 // v3 Phase-36：BPG 选 No 且超过 3 Mio EUR 才出红字（之前选 No 就出，不看金额；提交时的检查一直是对的）
 function syncBpgWarning(){
   const q = document.getElementById('qBPG'), w = document.getElementById('bpgWarning');
@@ -3464,7 +3507,8 @@ function renderSubmit(){
 
     <div class="form-grid" style="margin-top:16px;">
       <div class="form-field"><label>Region * (select all that apply)</label>${regionChecks('fRegionIn','')}</div>
-      <div class="form-field"><label>Decision Level *</label><select id="fDecisionLevelIn">${DECISION_LEVELS.map(r=>`<option>${r}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Decision Level${fieldTip(DECISION_LEVEL_TIP+' The Sourcing admin can change it on the case page.')}</label><input id="fDecisionLevelIn" value="—" readonly/>
+        <div class="fx-hint" id="decisionLevelHint">Set automatically from the bundle Lifetime Spend.</div></div>
 
       <div class="form-field"><label>Product Family *</label><select id="fFamily">${FAMILY_OPTIONS.map(r=>`<option>${r}</option>`).join('')}</select></div>
       <div class="form-field"><label>Cluster *</label><select id="fClusterIn">${CLUSTERS.map(r=>`<option>${r}</option>`).join('')}</select></div>
@@ -3481,7 +3525,7 @@ function renderSubmit(){
       <h3>Commercial Information${infoTip(`Pc Price CQA, Supplier Price (landed), Tooling CQA, Supplier Tooling Cost and volumes are entered per part number in the Part Numbers section above, as in the committee's Excel.`)}</h3>
       <div class="form-grid">
         <div class="form-field"><label>Tooling Payment *</label><select id="fToolingPayment"><option value="">Select...</option>${TOOLING_PAYMENTS.map(o=>`<option>${o}</option>`).join('')}</select></div>
-        <div class="form-field"><label>FRA available?${fieldTip('Required for Level 2 cases.')}</label>${yesNoSelect('qFRA')}
+        <div class="form-field"><label>FRA available?${fieldTip('Required for Level 2 cases (bundle Lifetime Spend €1,500,000 and above).')}</label>${yesNoSelect('qFRA')}
           <div class="block-warning" id="fraWarning">⚠ This case cannot be registered: a Level 2 case requires an available FRA.</div></div>
         <div class="form-field span2"><label>BPG available?${fieldTip('Only needed when the total Lifetime Spend converts to more than €3,000,000.')}</label>${yesNoSelect('qBPG')}
           <div class="fx-hint" id="bpgHint"></div>
@@ -3882,7 +3926,12 @@ function renderDetail(){
           <div class="form-field"><label>Parent PF</label>${ef('editParentPF', b.parentPF)}</div>
           <div class="form-field"><label>Part Family Code</label>${ef('editPartFamilyCode', b.partFamilyCode)}</div>
           <div class="form-field"><label>Presenter</label>${ef('editPresenter', b.presenter)}</div>
-          <div class="form-field"><label>Decision Level</label>${esel('editDecisionLevel', b.decisionLevel, DECISION_LEVELS)}</div>
+          <div class="form-field"><label>Decision Level${fieldTip(DECISION_LEVEL_TIP+(state.isSysAdmin
+              ? ' Changing the Lifetime Spend sets it again; you can still choose another level.'
+              : ' Changing the Lifetime Spend sets it again. Only the Sourcing admin can choose another level.'))}</label>
+            <select class="edit-input" id="editDecisionLevel" ${state.isSysAdmin?'':'disabled'}>${(b.decisionLevel && c.decisionLevel ? [] : ['']).concat(DECISION_LEVELS)
+              .map(o=>`<option value="${o}" ${b.decisionLevel===o?'selected':''}>${o||'—'}</option>`).join('')}</select>
+            <div class="fx-hint" id="editLevelHint">${esc(editLevelHintText(c, b.lifetimeSpend, b.decisionLevel))}</div></div>
           <div class="form-field span2">
             <label>Final PPT / Supporting Document Link ${closingTasksClosesCase(b.meetingDecision) && rollupActionStatus(b.followUps)==='Closed'?'*':''}${fieldTip('Required once every follow-up action is Closed (that closes the case). Paste the SharePoint / OneDrive link — the file itself stays there.')}</label>
             ${ef('editFinalDocLink', b.finalDocLink||'')}
@@ -4113,7 +4162,6 @@ function applyKpiFilter(key){
 }
 
 function wireEvents(){
-  const val0 = id => (document.getElementById(id)||{}).value || '';
   document.querySelectorAll('.form-field').forEach(field=>{
     const label = field.querySelector('label');
     const control = field.querySelector('input[id], select[id], textarea[id]');
@@ -4588,6 +4636,14 @@ function wireEvents(){
     const hist = historyFor(state.selectedSwatId), cur = hist[Math.min(state.selectedEntryIndex, hist.length-1)];
     const out = document.getElementById('editMeetingWeek'); if(out) out.textContent = meetingWeekPreview(editMeetingDate.value, cur);
   };
+  // v3 Phase-45：改 Lifetime Spend 时 Decision Level 跟着门槛变（Sourcing admin 之后仍可再选）；选的和门槛对不上时提示
+  const editBundleLife = document.getElementById('editBundleLife'), editLevel = document.getElementById('editDecisionLevel');
+  if(editBundleLife && editLevel){
+    const hist = historyFor(state.selectedSwatId), cur = hist[Math.min(state.selectedEntryIndex, hist.length-1)];
+    const syncLevelHint = ()=>{ const h = document.getElementById('editLevelHint'); if(h) h.textContent = editLevelHintText(cur, editBundleLife.value, editLevel.value); };
+    editBundleLife.addEventListener('input', ()=>{ editLevel.value = editAutoDecisionLevel(cur, editBundleLife.value); syncLevelHint(); });
+    editLevel.addEventListener('change', syncLevelHint);
+  }
   // v3 Phase-37：选了清单里的 Commodity，Cluster 跟着变且锁定；Not specified / 原值时 Cluster 可选
   const editCommodity = document.getElementById('editCommodity');
   if(editCommodity) editCommodity.onchange = ()=>{
@@ -4689,7 +4745,9 @@ function wireEvents(){
     // Server is the authority: it re-runs the same three rules, merges, recomputes rollups and persists.
     saveCaseBtn.disabled = true; // 防双击（两条路径随后都会 render 重建按钮，无需手工恢复）
     try{
-      const resp = await API.put('/api/cases/'+encodeURIComponent(c.id), {...b, partNumbers: pnRead.rows});
+      const payload = {...b, partNumbers: pnRead.rows};
+      if(!state.isSysAdmin) delete payload.decisionLevel;  // v3 Phase-45：只有 Sourcing admin 能手选级别（服务端同样只认 admin 的）
+      const resp = await API.put('/api/cases/'+encodeURIComponent(c.id), payload);
       applySnapshot(resp.snapshot);
       // 改了周以后这条记录在时间线里的位置可能变了：跟着它走
       const newHist = historyFor(state.selectedSwatId), pos = newHist.findIndex(x=>x.id===c.id);
@@ -4737,6 +4795,7 @@ function wireEvents(){
         bpgHint.classList.toggle('missing', over);
       }
       syncBpgWarning();
+      syncDecisionLevel();
     }
     ['fBundlePeak','fBundleLife'].forEach(id=>{ const el = document.getElementById(id); if(el) el.oninput = recomputePnTotals; });
     const currencyEl = document.getElementById('fCurrency');
@@ -4764,9 +4823,7 @@ function wireEvents(){
   const qBPG = document.getElementById('qBPG');
   if(qBPG) qBPG.onchange = syncBpgWarning;
   const qFRA = document.getElementById('qFRA');
-  if(qFRA) qFRA.onchange = ()=>{ document.getElementById('fraWarning').style.display = (qFRA.value==='No' && val0('fDecisionLevelIn')==='Level 2') ? 'block' : 'none'; };
-  const fDecisionLevelIn = document.getElementById('fDecisionLevelIn');
-  if(fDecisionLevelIn) fDecisionLevelIn.onchange = ()=>{ if(qFRA) qFRA.onchange(); };
+  if(qFRA) qFRA.onchange = syncFraWarning;
   const qBelowCQA = document.getElementById('qBelowCQA');
   if(qBelowCQA) qBelowCQA.onchange = ()=>{ document.getElementById('cqaJustificationField').style.display = qBelowCQA.value==='No' ? 'block' : 'none'; };
   const qFamily = document.getElementById('qFamily');
@@ -4850,7 +4907,7 @@ function wireEvents(){
       if(!val('qBPG')) need('⚠ Lifetime Spend is above 3 Mio EUR — please answer whether a BPG is available.');
       else if(val('qBPG')==='No') need('⚠ This case cannot be registered: Lifetime Spend above 3 Mio EUR requires an available BPG.');
     }
-    if(val('fDecisionLevelIn')==='Level 2'){
+    if(submitDecisionLevel()==='Level 2'){
       if(!val('qFRA')) need('⚠ Please answer whether an FRA is available (required for Level 2 cases).');
       else if(val('qFRA')==='No') need('⚠ This case cannot be registered: a Level 2 case requires an available FRA.');
     }
@@ -4877,7 +4934,7 @@ function wireEvents(){
       peakYearSpend: bundlePeak, lifetimeSpend: bundleLife,  // 原币金额，由服务端折算
       region:checkedRegions('fRegionIn'), family:val('fFamily'),
       cluster:val('fClusterIn'), parentPF:val('fParentPF'), partFamilyCode:val('fPartFamilyCode'),
-      decisionLevel:val('fDecisionLevelIn'),
+      // v3 Phase-45：不再发 decisionLevel，服务端按欧元 Lifetime Spend 算
       meetingDateISO: meetingDateStr || localDateISO(meetingDateObj),
       meetingDateLabel: formatDateLong(meetingDateObj), meetingWeekNum: dateToWeekNum(meetingDateObj),
       comments: val('fDiscussionIn'), currency,

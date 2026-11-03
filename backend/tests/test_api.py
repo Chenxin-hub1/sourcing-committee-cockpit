@@ -177,7 +177,8 @@ def _get_case(client, row_id):
 
 
 def test_edit_three_rules(client, admin):
-    assert client.post("/api/submissions", json=VALID_SUBMISSION).status_code == 200
+    # v3 Phase-45：级别按金额算；规则 1 测的是 Level 2 案例（Level 4 不要求演示文稿）
+    assert client.post("/api/submissions", json={**VALID_SUBMISSION, "lifetimeSpend": 2_000_000}).status_code == 200
     assert client.post("/api/submissions/SUB-0002/confirm", headers=admin).status_code == 200
     case = _get_case(client, "C0023")  # confirm 新建的那条
     # 规则 1：非 Pending 决议缺演示链接

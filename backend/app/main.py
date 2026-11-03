@@ -503,7 +503,10 @@ async def create_submission(b: SubmissionIn, request: Request, user: LoggedIn) -
                             f"or ask the Sourcing admin to set the {b.currency} rate.")
         rows = logic.bundle_rows([p.model_dump() for p in b.partNumbers], b.model_dump())
         spend = logic.convert_spend(rows, fx, b.peakYearSpend, b.lifetimeSpend) if fx else None
-        problems += logic.commercial_problems(b.model_dump(), spend["lifetimeSpend"] if spend else None)
+        # v3 Phase-45：级别按换算后的欧元 Lifetime Spend 算，请求里的 decisionLevel 不作数（FRA 门槛跟着它）
+        level = logic.decision_level_for(spend["lifetimeSpend"]) if spend else ""
+        problems += logic.commercial_problems({**b.model_dump(), "decisionLevel": level},
+                                              spend["lifetimeSpend"] if spend else None)
         late, late_problem = _late_registration(state["registration"], b, user)
         if late_problem:
             problems.append(late_problem)
@@ -525,7 +528,7 @@ async def create_submission(b: SubmissionIn, request: Request, user: LoggedIn) -
             "region": b.region, "project": summary["project"], "family": b.family, "cluster": b.cluster,
             "parentPF": b.parentPF, "partFamilyCode": b.partFamilyCode,
             "sourcingType": summary["sourcingType"], "recommendedSupplier": summary["recommendedSupplier"],
-            "presenter": b.presenter or b.submitterName.strip(), "decisionLevel": b.decisionLevel,
+            "presenter": b.presenter or b.submitterName.strip(), "decisionLevel": level,
             # 金额存欧元；原币合计与所用汇率一并保存，之后改汇率不影响这条记录
             "peakYearSpend": spend["peakYearSpend"], "lifetimeSpend": spend["lifetimeSpend"], "leadTime": "",
             "peakYearSpendEntered": spend["peakYearSpendEntered"],
@@ -652,6 +655,9 @@ async def save_case(row_id: str, b: CaseEditIn, user: Manager) -> dict:
         if new_day is not None and new_day.isocalendar()[:2] != (logic.case_year(case), int(case.get("weekNum") or 0)) \
                 and user.get("role") != "admin":
             raise HTTPException(403, "Only the Sourcing admin can move a case to another week.")
+        # v3 Phase-45：只有 Sourcing admin 能手选级别，其他人改了金额按门槛重算；先定级别，演示文稿规则按它判断
+        edit["decisionLevel"] = logic.edit_decision_level(
+            case, edit, admin_choice=user.get("role") == "admin" and "decisionLevel" in b.model_fields_set)
         # v3 Phase-19：全部问题一次返回；案例上已有演示文件即满足"演示文稿"规则
         problems = logic.case_edit_problems(edit, imported=excel_import.is_imported(case), has_files=bool(case.get("files")))
         if commodity_problem := logic.commodity_problem(case, edit["commodity"]):

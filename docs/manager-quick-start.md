@@ -71,7 +71,7 @@ Viewing does not require login. Submitting does.
 | Please fill in Project, Sourcing Type and Recommended Supplier for every part number row | Each part number row needs its own project, type and supplier |
 | Please enter the bundle Peak Year Spend and Lifetime Spend | One total for the whole registration, both must be above 0 |
 | Lifetime Spend is above 3 Mio EUR — a BPG must be available | Answer BPG = Yes, otherwise the case cannot be registered |
-| A Level 2 case requires an available FRA | Answer FRA = Yes for Level 2 |
+| A Level 2 case requires an available FRA | The Lifetime Spend is €1,500,000 or more (Level 2) — answer FRA = Yes |
 | Registration for the … meeting closed on … | Deadline passed: pick the next Wednesday, or tick "Request an exception" and give a reason |
 | A Sourcing Decision cannot be saved without the Sourcing Presentation Link | Paste the SharePoint / OneDrive link of the presentation first |
 | Follow-up task n: enter a valid "Send reminder to" email | Every open task needs an owner email |
@@ -84,5 +84,6 @@ Viewing does not require login. Submitting does.
 - Uploaded files are renamed automatically to `YYYY.MM.DD Project Part-description PN, Supplier.ext`; the original name is still shown ("uploaded as …").
 - Amounts are stored in EUR. USD / CNY entries are converted with the OP rate shown at the top of the Submit page (the Sourcing admin changes it there with **Edit**); the entered amount stays visible. The registration deadline card next to it works the same way.
 - Week numbers are ISO calendar weeks (KW).
+- **Decision Level** is set from the bundle Lifetime Spend in EUR (BU Sourcing Meeting thresholds): €1,500,000 and above → Level 2, €750,000 to below €1,500,000 → Level 3, below €750,000 → Level 4. The submitter does not choose it. On Edit Case it follows the Lifetime Spend when the amount changes; only the Sourcing admin can choose a different level (for an exception), and the page notes when the level differs from the thresholds.
 - **Case Comments** on the case page hold the background for the committee (e.g. "No tooling budget available. CO current supplier Getac."), apart from the Sourcing Decision and the Committee Discussion. The person who registered the case, Managers and the Sourcing admin can edit them at any time with "Edit comments"; they are saved on their own, not with Edit Case.
 - **Import weekly committee Excel** (Home page, Sourcing admin only): drop the week's Agenda or Meeting Minutes files, or pick a stored historical file from the "Stored weekly files" dropdown ("Add all not yet imported" loads the whole 2025–2026 history in one go), tick the ones to import, press Import. The meeting date comes from the file name (KW39 23.09.2026); a file without a date asks for it. Importing the same week again replaces what was imported before. Imported cases show "Imported from …" and the original decision wording on the case page.

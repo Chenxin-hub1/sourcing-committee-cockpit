@@ -170,11 +170,12 @@ def test_project_type_and_supplier_follow_the_part_number_rows(client, admin):
 
 
 def test_fra_required_for_level_2_only(client):
-    r = _post(client, fraAvailable="")
+    # v3 Phase-45：级别按欧元 Lifetime Spend 算 —— ≥ 1.5 Mio 是 Level 2，SUBMISSION 的 873,000 是 Level 3
+    r = _post(client, lifetimeSpend=2_000_000, fraAvailable="")
     assert r.status_code == 422 and "FRA" in r.json()["detail"]
-    r = _post(client, fraAvailable="No")
+    r = _post(client, lifetimeSpend=2_000_000, fraAvailable="No")
     assert r.status_code == 422 and "FRA" in r.json()["detail"]
-    assert _post(client, decisionLevel="Level 3", fraAvailable="").status_code == 200
+    assert _post(client, fraAvailable="").status_code == 200
 
 
 def test_below_cqa_no_needs_justification(client):

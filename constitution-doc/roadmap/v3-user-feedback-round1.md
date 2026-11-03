@@ -31,6 +31,7 @@
 - 领导反馈（2026-10-29，待办版式）：案例详情页的 Follow-up Tasks 一行一条（任务加粗、负责人、截止日、状态），按纪要编号顺序；收起时不显示邮箱，点一行才展开收件人、备注和反馈审批；7、8 条待办一屏看得完，手机上不用左右滑。
 - 领导反馈（2026-10-29，Pending 案例的待办）：上过会但批准前还有待办的案例保持 Pending 也能保存待办；这些待办和其他待办一样进 Follow-ups、驾驶舱统计、提醒和纪要 Excel；Pending 案例的待办全关不算结案、不要求 Final PPT。
 - Teams 评论（2026-11-02 收到截图）：Follow-ups 顶部的 "N overdue" / "N feedback to approve" 可点，Database 只列这些待办所在的案例（Follow-ups 的筛选一起带过去），点进案例对应待办自动展开；Follow-ups 页不再有 "Reminders sent automatically" 日志表，日志也不再下发给浏览器；Dashboard 不再有汇率与登记截止卡，Sourcing admin 在提交页这两张卡上点 Edit 修改，保存不丢正在填的登记。
+- 用户 2026-11-03（BU Sourcing Meeting 门槛幻灯片）：Decision Level 按 bundle Lifetime Spend 换算成欧元自动定——≥ €1,500,000 为 Level 2、€750,000 至不到 €1,500,000 为 Level 3、不到 €750,000 为 Level 4；登记页不能手选，FRA 要求跟着算出的级别；编辑页改了金额级别跟着变，只有 Sourcing admin 能手选别的级别，级别与门槛对不上时页面提示；已有案例不动。
 
 ## Phase-1: 表单简化（反馈第一批）
 
@@ -403,5 +404,19 @@ Description: Carrie Wang（2026-10-30 周五）指着 Dashboard 底部 Sourcing 
 实现（2026-11-02，index.html）：Dashboard 去掉两张卡。`renderFxCard` / `renderRegistrationCard` 不再分 readonly 参数，按 `state.fxEditOpen` / `regEditOpen` 显示只读或输入框；卡头 `settingsHead` 对 Sourcing admin 多一个 Edit 和保存提示，编辑态下面是 Save + Cancel（Cancel 不发请求，焦点回到 Edit）。保存 / 取消只重画 `#submitSettings` 里的两张卡（`refreshSettingsCards` + `wireSettingsCards`），不整页 render，正在填的登记不丢；存汇率后调一次币种 onchange，提示与 EUR 预览按新汇率；存截止后 `refreshMeetingDateField` 重画会议日期一格（抽成 `meetingDateFieldHtml` / `wireMeetingDateField`，原选日期还在就保留，admin 例外选项按新截止出现或消失，字段说明同步）。离开提交页时编辑态复位。汇率卡在半宽卡里口径一栏占两份。Accounts 页说明、README、DEPLOY、manager-quick-start 改成"在提交页点 Edit"；Acceptance 里两条 "在 Dashboard 调整" 同步。
 
 验证（2026-11-02）：前端回归（汇率用例改到提交页：Dashboard 无卡、只读无输入框、Edit 聚焦口径、保存发原文、回到只读显示新值、已填金额保留且提示与 €100 预览更新、Cancel 不发请求、离开再回来是只读；截止用例改到提交页：保存后已填零件号保留、会议日期改从 12-23 起、例外选项消失、字段说明同步；User / Manager 看不到 Edit）；临时实例 8063 实物：1440px 只读 / 编辑 / 保存后三态（截图 `.playwright-mcp/phase44-*.png`），390px 无横向滚动。
+
+Spec: non-spec
+
+## Phase-45: Decision Level 按 Lifetime Spend 门槛自动算
+
+Status: `awaiting-acceptance`
+
+Description: 用户 2026-11-03 发来 BU Sourcing Meeting 门槛幻灯片（"2025-10 / BU Sourcing Meeting" 第 2 页 Sourcing Thresholds (€)：≥ 1.500k PV lifecycle → BU Sourcing Meeting；≥ 750k – < 1.500k → Level 3；< 750k → Level 4），问能不能按它自动算 Decision Level。PV lifecycle 对应 bundle Lifetime Spend（欧元）；BU Sourcing Meeting 就是系统与纪要模板里的 Level 2。随系统附带的历史周会 Excel 142 个案例里 139 个手填级别与门槛一致（不一致的 3 个：2025-KW38 110000032080 €1,811,100 填 L3、2025-KW47 110000032595 €1,462,604 填 L2、2026-KW18 110000031312 €2,760,000 填 L3）。用户同日定：登记页不再让 buyer 选，按换算后的欧元自动算；只有 Sourcing admin 能在案例编辑页手改；编辑页改了金额级别自动跟着变。汇率缺失时服务端本来就拒绝登记，不需要退回手选。已有案例不动。"只有 admin 能改"指 Sourcing admin（用户 2026-11-03 确认）：Manager 能编辑案例，但级别只能跟着金额变。
+
+实现（2026-11-03）：`logic.decision_level_for`（门槛含下限：正好 €1,500,000 是 Level 2、€750,000 是 Level 3）。登记：`create_submission` 按换算后的欧元 Lifetime Spend 定级别，请求里的 `decisionLevel` 不作数（字段保留，旧页面带了照样能提交），FRA 门槛按算出的级别判断；确认登记原样带进案例。编辑：`logic.edit_decision_level`——Sourcing admin 的请求带了非空级别就按 admin 选的；其他情况看录入的 Lifetime Spend（原币）改没改：改了按案例记录的汇率换算成欧元按门槛重算，没改或清成 0 保留原级别（历史例外、admin 改过的不会因为别人记录决议被冲掉；比原币不比欧元，因为 Phase-15 之前逐行换算的外币案例欧元合计可能差 1 欧元）；`save_case` 先定级别再过演示文稿规则（Phase-39 的 L4 豁免按最终级别，Manager 在请求里写 Level 4 绕不过去）。抽出 `logic.edit_spend_inputs` 供 `apply_case_edit` 与级别共用。前端（index.html）：登记页 Decision Level 改成只读框，随金额、币种、汇率保存实时显示，FRA 红字与提交前检查跟着算出的级别（`submitDecisionLevel` / `syncDecisionLevel` / `syncFraWarning`），请求不再带 `decisionLevel`；编辑页下拉框对 Manager 禁用、保存时不带级别，改 Bundle Lifetime Spend 时自动跟着门槛变（改回原金额回到原级别），选的和门槛对不上时下面一行写 "By the thresholds this case would be Level X (Lifetime Spend €…)"；级别为空的旧案例下拉框多一个 "—"，不再被悄悄存成 Level 2。字段 ⓘ 写明三档门槛；FRA 的 ⓘ 写明 €1,500,000。manager-quick-start 同步。未改：Excel 导入沿用文件里的级别（历史记录）；上线前已在审批队列里的登记单保留当时手选的级别。
+
+验证（2026-11-03）：pytest 647（新增 tests/test_phase45.py 19 项：门槛边界 6 个、请求里的级别不作数、旧页面不带级别、USD 按换算后欧元（1,800,000 USD @1.25 → L3、1,875,000 → 正好 €1.5 Mio → L2）、FRA 跟算出的级别、确认带入、Manager 选不了、Manager 改金额重算、不动金额保留 admin 例外、逐行换算的外币案例差 1 欧元不算改金额、清成 0 不猜、编辑按案例汇率、演示文稿规则按最终级别、admin 改金额同时手选以手选为准、admin 不带级别或带空值按门槛；旧测试 5 处改成真实的 Level 2 金额：原来靠 buyer 手选 Level 2 而金额只有 €200 / €873,000）、前端回归 59（新增 2 条：登记页只读、四个边界、USD 换算、FRA 红字跟随、Level 2 缺 FRA 被拦、请求不带级别；编辑页 Manager 禁用 / admin 可选、改金额跟着变、改回原金额回原级别、提示文字、Manager 保存不带级别、外币案例按 1.25 换算）、滚动回归 17、ruff；临时空库实例 8063（SharePoint / 邮件 / Teams 全关）实测：真实提交 €2,760,000 且请求写 Level 4 → 登记单与案例都是 Level 2；admin 在编辑页改成 Level 3 出提示、保存后服务端读回 Level 3；1440px 截图 `.playwright-mcp/phase45-*.png`，394px 两页无横向滚动。
+
+观察（幻灯片上有、领导没提，不在本 Phase）：BPG 门槛幻灯片写 "≥ 3.000k €"，系统是"超过 3,000,000"（Phase-7 特意定的"3 Mio 整不触发"），只差正好 3,000,000 这一个点；幻灯片对 Level 3 / 4 列了 FRA 仍须做的情形（对供应商依赖 > 30%、供应商 FG 差于 CCC），系统没有这些信息的字段。
 
 Spec: non-spec

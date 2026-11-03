@@ -83,6 +83,10 @@ SPEND_META_KEYS = ("spendCurrency", "fx", "peakYearSpendEntered", "lifetimeSpend
 
 # 反馈 PPT 第 2、3 页：商务字段。金额类按提交币种填写、折算欧元后存文本（保留 4 位小数），原币存 *Entered
 BPG_THRESHOLD_EUR = 3_000_000  # Lifetime Spend 超过这个数（欧元）必须有 BPG
+# v3 Phase-45：Decision Level 按 bundle Lifetime Spend（欧元）门槛定，来自 BU Sourcing Meeting 幻灯片（2025-10）
+# 的 Sourcing Thresholds (€)：≥ 1.500k PV lifecycle → BU Sourcing Meeting（即 Level 2）；≥ 750k → Level 3；其余 Level 4
+DECISION_LEVEL_FLOORS_EUR = ((1_500_000, "Level 2"), (750_000, "Level 3"))
+LOWEST_DECISION_LEVEL = "Level 4"
 # 反馈人 MM 模板（2026-09-24）：件价、模具费、产量按零件行记录；单零件记录同时放在顶层
 # （与 partNumber / peakYearSpend 的模板约定一致），多零件记录顶层置 None、以行为准。
 ROW_MONEY_KEYS = ("pcPriceCQA", "supplierPriceLanded", "toolingCQA", "supplierToolingCost")
@@ -401,6 +405,14 @@ def sync_row_commercial(record: dict, rows: list[dict]) -> None:
     single = rows[0] if len(rows) == 1 else None
     for key in ROW_COMMERCIAL_KEYS:
         record[key] = deepcopy(single.get(key)) if single is not None else None
+
+
+def decision_level_for(lifetime_spend_eur: int) -> str:
+    """v3 Phase-45：bundle Lifetime Spend（整欧元）→ Decision Level；门槛含下限（正好 1,500,000 是 Level 2）。"""
+    for floor, level in DECISION_LEVEL_FLOORS_EUR:
+        if lifetime_spend_eur >= floor:
+            return level
+    return LOWEST_DECISION_LEVEL
 
 
 def money_text(amount: Decimal) -> str:
@@ -811,6 +823,35 @@ def apply_task_edit(case: dict, task_id: str, fields: dict) -> dict:
     return task
 
 
+def edit_spend_inputs(c: dict, b: dict) -> tuple[int, int]:
+    """这次保存的 bundle Peak Year / Lifetime Spend（原币）：请求不带时原值不动（有汇率的案例用 *Entered）。"""
+    fx = c.get("fx")
+    peak_in, life_in = b.get("peakYearSpend"), b.get("lifetimeSpend")
+    if peak_in is None:
+        peak_in = (c.get("peakYearSpendEntered") if fx else c.get("peakYearSpend")) or 0
+    if life_in is None:
+        life_in = (c.get("lifetimeSpendEntered") if fx else c.get("lifetimeSpend")) or 0
+    return int(peak_in), int(life_in)
+
+
+def edit_decision_level(c: dict, b: dict, *, admin_choice: bool) -> str:
+    """v3 Phase-45：编辑保存后的 Decision Level。
+
+    admin_choice=True（Sourcing admin 的请求里带了非空级别）：按 admin 选的——页面上改金额时下拉框已自动跟着变，
+    admin 再改回别的就是有意定的例外。其他情况不认请求里的级别：录入的 Lifetime Spend（原币）改了就换算成欧元
+    按门槛重算；没改（或清成 0、金额未知）就保留原级别，历史例外和 admin 改过的不会因为别人记录决议被冲掉。
+    比原币不比欧元：Phase-15 之前逐行换算的外币案例，欧元合计可能和"合计一次换算"差 1 欧元。"""
+    if admin_choice and b.get("decisionLevel"):
+        return b["decisionLevel"]
+    _, life_in = edit_spend_inputs(c, b)
+    entered_before = c.get("lifetimeSpendEntered") if c.get("fx") else None
+    if entered_before is None:
+        entered_before = c.get("lifetimeSpend") or 0
+    if life_in > 0 and life_in != int(entered_before):
+        return decision_level_for(to_eur(life_in, fx_of(c.get("fx"))))
+    return c.get("decisionLevel") or ""
+
+
 def apply_case_edit(c: dict, b: dict, commercial: dict | None = None) -> None:
     """对应模板 saveCaseBtn 的 Object.assign 段：合并字段、汇总金额、重算 actionStatus。
 
@@ -822,14 +863,8 @@ def apply_case_edit(c: dict, b: dict, commercial: dict | None = None) -> None:
         c.update(commercial_fields(commercial, fx_of(fx)))
     # 编辑页按原币填写；沿用提交时记录的汇率，之后管理员改汇率不会悄悄改动这个案例。
     # 旧数据没有汇率：按 1 处理，金额原样，也不留 *Entered 痕迹。
-    # bundle 金额不带时原值不动（按原币：有汇率的案例用 *Entered）
-    peak_in = b.get("peakYearSpend")
-    life_in = b.get("lifetimeSpend")
-    if peak_in is None:
-        peak_in = int((c.get("peakYearSpendEntered") if fx else c.get("peakYearSpend")) or 0)
-    if life_in is None:
-        life_in = int((c.get("lifetimeSpendEntered") if fx else c.get("lifetimeSpend")) or 0)
-    spend = convert_spend(part_numbers, fx_of(fx), int(peak_in), int(life_in))
+    peak_in, life_in = edit_spend_inputs(c, b)
+    spend = convert_spend(part_numbers, fx_of(fx), peak_in, life_in)
     part_numbers = spend["partNumbers"]
     if fx:
         c["peakYearSpendEntered"] = spend["peakYearSpendEntered"]

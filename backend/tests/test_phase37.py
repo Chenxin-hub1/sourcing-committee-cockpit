@@ -100,7 +100,7 @@ def test_earlier_hand_edits_are_marked_once_while_the_vocabulary_is_unchanged():
 
 
 def test_level_4_case_can_record_a_decision_without_a_presentation(client, admin):
-    case = _confirmed_case(client, admin)
+    case = _confirmed_case(client, admin, lifetimeSpend=2_000_000)  # v3 Phase-45：按金额是 Level 2
     r = client.put(f"/api/cases/{case['id']}", headers=admin, json=_edit_payload(case, meetingDecision="APPROVED"))
     assert r.status_code == 422 and "Sourcing Presentation" in r.json()["detail"]
     r = client.put(f"/api/cases/{case['id']}", headers=admin,
