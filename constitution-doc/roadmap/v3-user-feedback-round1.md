@@ -32,6 +32,7 @@
 - 领导反馈（2026-10-29，Pending 案例的待办）：上过会但批准前还有待办的案例保持 Pending 也能保存待办；这些待办和其他待办一样进 Follow-ups、驾驶舱统计、提醒和纪要 Excel；Pending 案例的待办全关不算结案、不要求 Final PPT。
 - Teams 评论（2026-11-02 收到截图）：Follow-ups 顶部的 "N overdue" / "N feedback to approve" 可点，Database 只列这些待办所在的案例（Follow-ups 的筛选一起带过去），点进案例对应待办自动展开；Follow-ups 页不再有 "Reminders sent automatically" 日志表，日志也不再下发给浏览器；Dashboard 不再有汇率与登记截止卡，Sourcing admin 在提交页这两张卡上点 Edit 修改，保存不丢正在填的登记。
 - 用户 2026-11-03（BU Sourcing Meeting 门槛幻灯片）：Decision Level 按 bundle Lifetime Spend 换算成欧元自动定——≥ €1,500,000 为 Level 2、€750,000 至不到 €1,500,000 为 Level 3、不到 €750,000 为 Level 4；登记页不能手选，FRA 要求跟着算出的级别；编辑页改了金额级别跟着变，只有 Sourcing admin 能手选别的级别，级别与门槛对不上时页面提示；已有案例不动。
+- 用户 2026-11-11（Dashboard 截图）：Dashboard 的 Action Status 下面单独列出 Saving related / BPG related / CQA related 三个数字（所选年份或周里还没关闭的待办，按现有自动分类），有超期的标红并写出几条；点一个数字到 Follow-ups 页，只看该分类未关闭的待办。
 
 ## Phase-1: 表单简化（反馈第一批）
 
@@ -418,5 +419,17 @@ Description: 用户 2026-11-03 发来 BU Sourcing Meeting 门槛幻灯片（"202
 验证（2026-11-03）：pytest 647（新增 tests/test_phase45.py 19 项：门槛边界 6 个、请求里的级别不作数、旧页面不带级别、USD 按换算后欧元（1,800,000 USD @1.25 → L3、1,875,000 → 正好 €1.5 Mio → L2）、FRA 跟算出的级别、确认带入、Manager 选不了、Manager 改金额重算、不动金额保留 admin 例外、逐行换算的外币案例差 1 欧元不算改金额、清成 0 不猜、编辑按案例汇率、演示文稿规则按最终级别、admin 改金额同时手选以手选为准、admin 不带级别或带空值按门槛；旧测试 5 处改成真实的 Level 2 金额：原来靠 buyer 手选 Level 2 而金额只有 €200 / €873,000）、前端回归 59（新增 2 条：登记页只读、四个边界、USD 换算、FRA 红字跟随、Level 2 缺 FRA 被拦、请求不带级别；编辑页 Manager 禁用 / admin 可选、改金额跟着变、改回原金额回原级别、提示文字、Manager 保存不带级别、外币案例按 1.25 换算）、滚动回归 17、ruff；临时空库实例 8063（SharePoint / 邮件 / Teams 全关）实测：真实提交 €2,760,000 且请求写 Level 4 → 登记单与案例都是 Level 2；admin 在编辑页改成 Level 3 出提示、保存后服务端读回 Level 3；1440px 截图 `.playwright-mcp/phase45-*.png`，394px 两页无横向滚动。
 
 观察（幻灯片上有、领导没提，不在本 Phase）：BPG 门槛幻灯片写 "≥ 3.000k €"，系统是"超过 3,000,000"（Phase-7 特意定的"3 Mio 整不触发"），只差正好 3,000,000 这一个点；幻灯片对 Level 3 / 4 列了 FRA 仍须做的情形（对供应商依赖 > 30%、供应商 FG 差于 CCC），系统没有这些信息的字段。
+
+Spec: non-spec
+
+## Phase-46: Dashboard 单独列出 Saving / BPG / CQA 三类待办
+
+Status: `awaiting-acceptance`
+
+Description: 用户 2026-11-11 发来 Dashboard 截图："这里 follow up actions 能不能显示一下 saving related，BPG related，CQA related，帮忙筛选一下"。分类沿用 Phase-18 的关键词自动归类（八类里的 Saving / BPG / CQA），不新增字段。原话没说的两处按以下默认做，等用户确认：只数未关闭的（Open + Overdue），不数 Closed；只列这三类，其余五类仍在 Follow-ups 页的 Category 筛选里。
+
+实现（2026-11-11，index.html）：Action Status 三个格子下面加一行 "Open + Overdue Actions by Category"，三个格子 Saving related / BPG related / CQA related（`DASH_CATEGORIES`），范围跟 Dashboard 所选年份 / 周一致；一条待办落两类各算一次（ⓘ 写明）；有超期的格子红点并写 "· N overdue"，没有待办绿点。点格子走 `applyKpiFilter('cat:…')`：到 Follow-ups 页，Category = 该分类、Status = Open + Overdue、Year = Dashboard 所选年份。后端未改。
+
+验证（2026-11-11）：前端回归 60（新增 1 条：关闭的不算、落两类各算一次、超期标红与文字、换年份、点格子后 Follow-ups 的三个筛选与列出的待办）、滚动回归 17；临时实例 8063（本地库副本，SharePoint / 邮件 / Teams 全关）打开 Dashboard 三个格子在位、无横向滚动——本地库 2026 年没有待办，三个数都是 0，非零的样子是在浏览器里临时塞了 4 条待办看的（截图 `.playwright-mcp/phase46-dashboard.png`），真实数字要到服务器上看。pytest 未跑（没有改 Python）。
 
 Spec: non-spec

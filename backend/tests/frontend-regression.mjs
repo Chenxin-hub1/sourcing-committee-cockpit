@@ -1774,6 +1774,36 @@ try{
     await context.close();
   });
 
+  // v3 Phase-46：驾驶舱单独列出 Saving / BPG / CQA 三类未关闭的待办，点了去 Follow-ups 按分类看
+  await test('Dashboard counts open and overdue actions for Saving, BPG and CQA and opens them on Follow-ups', async()=>{
+    const {page, context} = await fixture();
+    await page.evaluate(()=>{
+      const base = {partNumber:'1', partDescription:'P', recommendedSupplier:'S', presenter:'O', cluster:'Metal', meetingDecision:'APPROVED'};
+      const task = (id, status, categories) => ({id, task:'t '+id, status, categories, responsible:'Ann', dueDate:'2027-01-01', tags:[], notifyEmail:'x@example.com'});
+      applySnapshot({cases:[
+        mkCase({...base, id:'C-1', swatId:'SWAT-A', weekNum:40, caseNumber:1, meetingYear:2026, meetingDateISO:'2026-09-30', actionStatus:'Overdue',
+          followUps:[task('T1','Open',['Saving']), task('T2','Overdue',['BPG','Saving']), task('T3','Closed',['CQA']), task('T4','Open',['Timing']), task('T5','Open',[])]}),
+        mkCase({...base, id:'C-2', swatId:'SWAT-B', weekNum:51, caseNumber:1, meetingYear:2025, meetingDateISO:'2025-12-17', actionStatus:'Open',
+          followUps:[task('T6','Open',['CQA'])]}),
+      ]});
+      state.dashYear = 2026; state.view='dashboard'; render();
+    });
+    const tiles = async ()=> page.evaluate(()=>[...document.querySelectorAll('.tile[data-kpi^="cat:"]')].map(t=>t.dataset.kpi.slice(4)+'='+t.querySelector('.num').textContent+'|'+t.querySelector('.lbl').textContent+'|'+t.querySelector('.rag').className.replace('rag ','')));
+    // 关闭的不算；一条待办落两类各算一次；有超期的格子标红并写出几条
+    assert.deepEqual(await tiles(), ['Saving=2|Saving related · 1 overdue|r', 'BPG=1|BPG related · 1 overdue|r', 'CQA=0|CQA related|g']);
+    await page.locator('#dashYearSelect').selectOption('2025');
+    assert.deepEqual(await tiles(), ['Saving=0|Saving related|g', 'BPG=0|BPG related|g', 'CQA=1|CQA related|y']);
+    await page.locator('#dashYearSelect').selectOption('2026');
+    await page.locator('.tile[data-kpi="cat:Saving"]').click();
+    assert.equal(await page.evaluate(()=>state.view), 'followups');
+    assert.equal(await page.locator('#fFollowupTag').inputValue(), 'Saving');
+    assert.equal(await page.locator('#fFollowupStatus').inputValue(), 'active');
+    assert.equal(await page.locator('#fFollowupYear').inputValue(), '2026');
+    const text = await page.locator('#app').innerText();
+    assert.ok(text.includes('2 open tasks · 1 overdue') && text.includes('t T1') && text.includes('t T2') && !text.includes('t T4'), text);
+    await context.close();
+  });
+
   await test('Case page lists uploaded files on one line each and attaches presentations from the server library', async()=>{
     const posted = [];
     let seeded;

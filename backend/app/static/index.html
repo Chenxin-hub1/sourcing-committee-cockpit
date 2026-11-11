@@ -2658,6 +2658,7 @@ function dashScope(){
   const periodCases = state.dashPeriod==='week' ? yearCases.filter(c=>c.weekNum===state.dashWeek) : latestByCase(yearCases);
   return {years, yearCases, allWeeks, periodCases, label: state.dashPeriod==='week' ? wk(state.dashWeek, state.dashYear) : String(state.dashYear)};
 }
+const DASH_CATEGORIES = ['Saving','BPG','CQA']; // v3 Phase-46：驾驶舱单独列出的三个待办分类
 function renderDashboard(){
   const {years, yearCases, allWeeks, periodCases, label} = dashScope();
 
@@ -2670,6 +2671,12 @@ function renderDashboard(){
   const tasks = caseTasks(periodCases);
   const openTasks = tasks.filter(x=>x.t.status==='Open'), overdueTasks = tasks.filter(x=>x.t.status==='Overdue');
   const openA = openTasks.length, overdueA = overdueTasks.length, closedA = tasks.filter(x=>x.t.status==='Closed').length;
+  // v3 Phase-46：还没关的待办里 Saving / BPG / CQA 各有几条（一条待办可落多类，各算一次）；点了去 Follow-ups 按该分类看
+  const activeTasks = [...openTasks, ...overdueTasks];
+  const catTile = cat => {
+    const hits = activeTasks.filter(x=>followupCats(x.t).includes(cat)), late = hits.filter(x=>x.t.status==='Overdue').length;
+    return tile(`${esc(cat)} related${late ? ` · ${late} overdue` : ''}`, hits.length, late ? 'r' : hits.length ? 'y' : 'g', 'cat:'+cat);
+  };
   const ownerKey = x => ownerLabel(x.t) || '—';
   const functionKey = x => x.t.ownerFunction || 'Function not set';
   const chart = (title, items, keyFn, empty) => {
@@ -2717,6 +2724,11 @@ function renderDashboard(){
     ${tile('Open', openA, 'y', 'open')}
     ${tile('Overdue', overdueA, overdueA>0?'r':'g', 'overdue')}
     ${tile('Closed', closedA, 'g', 'closedaction')}
+  </div>
+
+  <div class="breakdown-row-title">Open + Overdue Actions by Category · ${esc(label)}${infoTip('Follow-up actions that are not closed yet, by category. The category comes from the task text and tags, so one action can count in more than one category. Click a number to see those actions on the Follow-ups page.')}</div>
+  <div class="tile-row three">
+    ${DASH_CATEGORIES.map(catTile).join('')}
   </div>
 
   <div class="breakdown-grid" style="margin-top:18px;">
@@ -4145,6 +4157,12 @@ function canRefresh(){
     && !document.activeElement?.matches('input, textarea, select');
 }
 function applyKpiFilter(key){
+  if(key.startsWith('cat:')){  // v3 Phase-46：Dashboard 的分类格子 → Follow-ups 按分类看未关闭的待办
+    state.view='followups'; state.followupOwner=''; state.followupFunction='';
+    state.followupTag = key.slice(4); state.followupStatus = 'active';
+    state.followupYear = String(state.dashYear || '');
+    render(); window.scrollTo(0,0); return;
+  }
   if(key==='open' || key==='overdue' || key==='closedaction'){
     state.view='followups'; state.followupTag=''; state.followupOwner=''; state.followupFunction='';
     state.followupStatus = key==='open' ? 'Open' : key==='overdue' ? 'Overdue' : 'Closed';
