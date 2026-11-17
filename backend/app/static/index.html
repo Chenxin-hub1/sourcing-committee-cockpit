@@ -148,26 +148,10 @@
     .shell .sidenav.is-collapsed button .sn-node::after{display:none;}
     .shell .sidenav button.active .sn-node{box-shadow:none;}
   }
-  /* Database 表格列多（领导：一列不删、正常屏幕不出横向滚动条），窗口不到 1440px 时侧边栏让位给表格 */
-  @media(max-width:1439px){
-    body .shell.is-wide{flex-direction:column;align-items:stretch;}
-    body .shell.is-wide .sidenav{position:static;width:auto;height:auto;display:flex;flex-direction:row;gap:2px;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);padding:6px 12px 0;}
-    body .shell.is-wide .sidenav[hidden]{display:none;}
-    body .shell.is-wide .sidenav .sn-title{display:none;}
-    body .shell.is-wide .sidenav button{flex:none;width:auto;margin:0;gap:8px;border-radius:7px 7px 0 0;border-bottom:3px solid transparent;padding:7px 12px 6px;}
-    body .shell.is-wide .sidenav button.active{background:transparent;border-bottom-color:var(--accent);}
-    body .shell.is-wide .sidenav button::after{display:none;}
-    body .shell.is-wide .sidenav .sn-node{width:20px;height:20px;font-size:10px;}
-    body .shell.is-wide .sidenav .sn-meta,body .shell.is-wide .sidenav .sn-collapse{display:none;}
-    body .shell.is-wide .sidenav.is-collapsed{width:auto;padding:6px 12px 0;}
-    body .shell.is-wide .sidenav.is-collapsed .sn-text{display:flex;}
-    body .shell.is-wide .sidenav.is-collapsed button .sn-node::after{display:none;}
-    body .shell.is-wide .sidenav button.active .sn-node{box-shadow:none;}
-  }
-  /* 手机：横向标签再收紧，三个步骤放得下（:is 让优先级与上面 Database 的规则持平，靠先后顺序生效） */
+  /* 手机：横向标签再收紧，三个步骤放得下 */
   @media(max-width:480px){
-    body .shell:is(.is-wide,:not(.is-wide)) .sidenav{padding:6px 6px 0;}
-    body .shell:is(.is-wide,:not(.is-wide)) .sidenav button{padding:7px 8px 6px;gap:6px;font-size:12.5px;}
+    .shell .sidenav,.shell .sidenav.is-collapsed{padding:6px 6px 0;}  /* 收起状态的优先级更高，一并写上 */
+    .shell .sidenav button{padding:7px 8px 6px;gap:6px;font-size:12.5px;}
   }
   /* Database 页：列一个不删（领导 2026-09-30），改为用满窗口宽度 + 紧凑单元格，正常屏幕不出横向滚动条 */
   .page.wide{max-width:none;}
@@ -2144,20 +2128,16 @@ const NAV_GROUPS = {
     ['submit','Submit Case','Register a case for the weekly committee'],
     ['approvals','Approval','Confirm or return registrations'],
     ['followups','Follow-ups','Track the actions decided in the meeting']]},
-  data:{label:'Data', items:[
-    ['database','Database','Every case, with filters and exports'],
-    ['dashboard','Dashboard','Status and statistics by year or week']]},
 };
+// v3 Phase-47（用户 2026-11-17）：Dashboard 移出 Data 组，成为顶部导航按钮，排在 Data 右边；
+// Data 组只剩 Database，于是 Data 也改成直接按钮：点了进 Database。两页都不带侧边栏（和 Home 一样整页宽）
 // 线条图标：14px，颜色跟随文字（currentColor）
 const svgIcon = d=>`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICONS = {
-  table: svgIcon('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 10v10"/>'),
-  chart: svgIcon('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
   download: svgIcon('<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>'),
   sheet: svgIcon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'),
 };
-const NAV_ICONS = {database:ICONS.table, dashboard:ICONS.chart};
-const navLastView = {workflow:'submit', data:'database'};
+const navLastView = {workflow:'submit'};
 // 侧边栏收起为窄条：每台电脑自己的偏好，存浏览器本地（读不到就默认展开）
 let navCollapsed = false;
 try{ navCollapsed = localStorage.getItem('sc_nav_collapsed')==='1'; }catch(e){}
@@ -2175,8 +2155,6 @@ function navMeta(view, pendingCount){
     if(!open && !overdue) return 'No open tasks';
     return [open ? `${open} open` : '', overdue ? `<span class="sn-warn">${overdue} overdue</span>` : ''].filter(Boolean).join(' · ');
   }
-  if(view==='database') return `${ALL_CASES.length} case${ALL_CASES.length===1?'':'s'}`;
-  if(view==='dashboard'){ const years = yearsPresent(); return `${state.dashYear || years[years.length-1] || weekYear()} overview`; }  // 还没打开过 Dashboard 时按它的默认年份
   return '';
 }  // 回到某组时打开上次看的那页
 // 字段说明用小号：fieldTip('…') 放在 <label> 里字段名后面
@@ -2197,7 +2175,6 @@ function placeInfoPop(tip){
 document.addEventListener('mouseover', e=>placeInfoPop(e.target.closest?.('.info-tip')));
 document.addEventListener('focusin', e=>placeInfoPop(e.target.closest?.('.info-tip')));
 function navGroupOf(view){
-  if(view==='detail') return 'data';
   return Object.keys(NAV_GROUPS).find(g=>NAV_GROUPS[g].items.some(([k])=>k===view)) || null;
 }
 function groupLanding(group, pendingCount){
@@ -2223,21 +2200,21 @@ function goToView(view){
 function renderNav(){
   const pendingCount = SUBMISSIONS.filter(s=>s.status==='Waiting for Registration Confirmation').length;
   const group = navGroupOf(state.view);
-  if(group && state.view!=='detail') navLastView[group] = state.view;
+  if(group) navLastView[group] = state.view;
   const badge = g=>g==='workflow'&&pendingCount>0 ? `<span class="count-badge" title="${pendingCount} waiting for confirmation">${pendingCount}</span>` : '';
   const groupBtn = g=>`<button data-nav-group="${g}" class="${group===g?'active':''}">${NAV_GROUPS[g].label}${badge(g)}</button>`;
   document.getElementById('navtabs').innerHTML =
-    `<button data-nav="home" class="${state.view==='home'?'active':''}">Home</button>${groupBtn('workflow')}${groupBtn('data')}`
+    `<button data-nav="home" class="${state.view==='home'?'active':''}">Home</button>${groupBtn('workflow')}<button data-nav="database" class="${state.view==='database'||state.view==='detail'?'active':''}">Data</button><button data-nav="dashboard" class="${state.view==='dashboard'?'active':''}">Dashboard</button>`
     + (state.isSysAdmin ? `<button data-nav="accounts" class="${state.view==='accounts'?'active':''}">Accounts</button>` : '');
   const side = document.getElementById('sidenav');
-  side.hidden = !group || state.view==='detail';
+  side.hidden = !group;
   if(!side.hidden){
     side.setAttribute('aria-label', NAV_GROUPS[group].label);
     side.classList.toggle('is-sequence', group==='workflow');  // 只有流程组画步骤连线
     side.classList.toggle('is-collapsed', navCollapsed);
     side.innerHTML = `<div class="sn-title">${NAV_GROUPS[group].label}</div>` + NAV_GROUPS[group].items.map(([k,l,hint],i)=>{
       const count = k==='approvals' && pendingCount>0 ? `<span class="count-badge" title="${pendingCount} waiting for confirmation">${pendingCount}</span>` : '';
-      const node = group==='workflow' ? i+1 : NAV_ICONS[k];
+      const node = i+1;  // 步骤号（侧边栏现在只有 Case Workflow 组）
       const meta = navMeta(k, pendingCount);
       // 说明不常驻（用户：板块描述要精简），悬停时以提示框显示；收起时提示框带上名称与状态
       const tip = navCollapsed ? `${l} — ${meta.replace(/<[^>]*>/g,'')}` : hint;
@@ -4115,7 +4092,6 @@ function render(){
   renderNav();
   const app = document.getElementById('app');
   app.classList.toggle('wide', state.view==='database');
-  app.parentElement.classList.toggle('is-wide', state.view==='database');
   if(state.view==='home') app.innerHTML = renderHome();
   else if(state.view==='database') app.innerHTML = renderDatabase();
   else if(state.view==='dashboard') app.innerHTML = renderDashboard();

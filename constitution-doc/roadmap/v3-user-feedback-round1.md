@@ -433,3 +433,15 @@ Description: 用户 2026-11-11 发来 Dashboard 截图："这里 follow up actio
 验证（2026-11-11）：前端回归 60（新增 1 条：关闭的不算、落两类各算一次、超期标红与文字、换年份、点格子后 Follow-ups 的三个筛选与列出的待办）、滚动回归 17；临时实例 8063（本地库副本，SharePoint / 邮件 / Teams 全关）打开 Dashboard 三个格子在位、无横向滚动——本地库 2026 年没有待办，三个数都是 0，非零的样子是在浏览器里临时塞了 4 条待办看的（截图 `.playwright-mcp/phase46-dashboard.png`），真实数字要到服务器上看。pytest 未跑（没有改 Python）。
 
 Spec: non-spec
+
+## Phase-47: Dashboard 移到顶部导航放在 Data 旁边，Data 直接进 Database
+
+Status: `awaiting-acceptance`
+
+Description: 用户 2026-11-17 发来顶部导航截图："Can we move the dashboard to the top, next to the "data""。Dashboard 从 Data 侧边栏移出，成为顶部导航的一个按钮，排在 Data 右边。Data 组因此只剩 Database 一项，用户同日定：点 Data 直接进 Database、不显示侧边栏，和 Dashboard 一样。顶部现在是 Home / Case Workflow / Data / Dashboard（/ Accounts），只有 Case Workflow 还带侧边栏。
+
+实现（2026-11-17，index.html）：`NAV_GROUPS` 只留 workflow 组；顶部 Data 改成 `data-nav="database"` 直接按钮（在 Database 页和案例详情页高亮），后面加 `data-nav="dashboard"` 按钮。删掉只为 Data 侧边栏服务的代码：Database / Dashboard 的侧边栏图标与状态行（"142 cases"、"2026 overview"），以及窗口不到 1440px 时 Database 侧边栏让位给表格的 `is-wide` 样式（Database 没有侧边栏了）；手机宽度下流程侧边栏收紧的样式改成不依赖 `is-wide`。后端未改。
+
+验证（2026-11-17）：前端回归 60（导航那条改为：顶部顺序 Home / Case Workflow / Data / Dashboard / Accounts，点 Data、Dashboard 各自高亮且无侧边栏，1280px 宽的 Database 无侧边栏而 Submit 仍有，案例详情高亮 Data）、滚动回归 17（键盘 Tab 依次走到 Data、Dashboard 按钮且在导航条内可见）；临时实例 8063（本地库副本，SharePoint / 邮件 / Teams 全关）截图核对 Dashboard 页与 Data 页（`.playwright-mcp/phase47-dashboard.png`、`phase47-data.png`）。pytest 未跑（没有改 Python）。
+
+Spec: non-spec

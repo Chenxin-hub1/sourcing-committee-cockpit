@@ -24,8 +24,9 @@ const errors = [];
 let passed = 0;
 
 // v3 Phase-26：Submit / Approval / Follow-ups 在 Case Workflow 组，Database / Dashboard 在 Data 组 —— 侧边栏没显示就先点组名
-const NAV_GROUP_OF = {submit:'workflow', approvals:'workflow', followups:'workflow', database:'data', dashboard:'data'};
+const NAV_GROUP_OF = {submit:'workflow', approvals:'workflow', followups:'workflow', };  // v3 Phase-47：Data（Database）与 Dashboard 是顶部直接按钮，不在侧边栏
 async function goTo(page, view){
+  if(!NAV_GROUP_OF[view]) return page.locator(`#navtabs [data-nav="${view}"]`).click();  // 顶部直接按钮
   const item = page.locator(`#sidenav [data-nav="${view}"]`);
   if(!(await item.isVisible())) await page.locator(`[data-nav-group="${NAV_GROUP_OF[view]}"]`).click();
   await item.click();
@@ -1629,12 +1630,12 @@ try{
     await context.close();
   });
 
-  await test('Top navigation groups pages into Case Workflow and Data with a sidebar; section notes open on hover', async()=>{
+  await test('Top navigation: Case Workflow has a sidebar, Data and Dashboard open directly; section notes open on hover', async()=>{
     const {page, context} = await fixture({user:'admin'});
     await page.setViewportSize({width:1500, height:900});
     const top = ()=>page.locator('#navtabs button').allTextContents();
     const side = ()=>page.locator('#sidenav button .sn-label').allTextContents();
-    assert.deepEqual(await top(), ['Home','Case Workflow','Data','Accounts']);
+    assert.deepEqual(await top(), ['Home','Case Workflow','Data','Dashboard','Accounts']);  // v3 Phase-47：Dashboard 排在 Data 右边
     assert.equal(await page.locator('#sidenav').isVisible(), false);  // 首页没有侧边栏
     await page.locator('[data-nav-group="workflow"]').click();
     assert.equal(await page.evaluate(()=>state.view), 'submit');
@@ -1661,16 +1662,16 @@ try{
     await page.locator('[data-nav="home"]').click();
     await page.locator('[data-nav-group="workflow"]').click();
     assert.equal(await page.evaluate(()=>state.view), 'approvals');
-    // Data：默认 Database，再回来时打开上次看的页面
-    await page.locator('[data-nav-group="data"]').click();
+    // v3 Phase-47：Data 直接进 Database、Dashboard 直接进 Dashboard，两页都不带侧边栏，高亮各自的按钮
+    const active = ()=>page.locator('#navtabs button.active').allTextContents();
+    await page.locator('#navtabs [data-nav="database"]').click();
     assert.equal(await page.evaluate(()=>state.view), 'database');
-    assert.deepEqual(await side(), ['Database','Dashboard']);
-    assert.equal(await page.locator('#sidenav').evaluate(el=>el.classList.contains('is-sequence')), false);  // Data 没有先后，不连线
-    assert.equal(await page.locator('#sidenav .sn-node svg').count(), 2);
-    await page.locator('#sidenav [data-nav="dashboard"]').click();
-    await page.locator('[data-nav="home"]').click();
-    await page.locator('[data-nav-group="data"]').click();
+    assert.deepEqual(await active(), ['Data']);
+    assert.equal(await page.locator('#sidenav').isHidden(), true);
+    await page.locator('#navtabs [data-nav="dashboard"]').click();
     assert.equal(await page.evaluate(()=>state.view), 'dashboard');
+    assert.deepEqual(await active(), ['Dashboard']);
+    assert.equal(await page.locator('#sidenav').isHidden(), true);
     // 板块说明收进 ⓘ：平时不显示，悬停才出现；读屏软件能从 aria-label 读到
     await goTo(page, 'database');
     assert.equal(await page.locator('.pagehead p').count(), 0);
@@ -1679,13 +1680,11 @@ try{
     assert.match(await tip.getAttribute('aria-label'), /consolidated automatically/);
     await tip.hover();
     assert.equal(await tip.locator('.info-pop').isVisible(), true);
-    // Database 窗口不到 1440px：侧边栏让位给表格，变成上方横向标签；其他页面仍在左侧
-    const layout = ()=>page.evaluate(()=>getComputedStyle(document.querySelector('.shell')).flexDirection);
-    assert.equal(await layout(), 'row');
+    // Database 没有侧边栏（v3 Phase-47），窗口窄时表格也不用给侧边栏让位
     await page.setViewportSize({width:1280, height:900});
-    assert.equal(await layout(), 'column');
-    await goTo(page, 'dashboard');
-    assert.equal(await layout(), 'row');
+    assert.equal(await page.locator('#sidenav').isHidden(), true);
+    await goTo(page, 'submit');
+    assert.equal(await page.locator('#sidenav').isVisible(), true);  // Case Workflow 仍有侧边栏
     // 案例详情不显示侧边栏，顶部高亮 Data
     await goTo(page, 'database');
     await page.locator('#app tbody tr[data-swat]').first().click();

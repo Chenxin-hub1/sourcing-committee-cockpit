@@ -62,7 +62,7 @@ async function screenshot(page,name){
 }
 
 // v3 Phase-26：组内页面先点组名（Case Workflow / Data），再点侧边栏
-const NAV_GROUP_OF = {submit:'workflow', approvals:'workflow', followups:'workflow', database:'data', dashboard:'data'};
+const NAV_GROUP_OF = {submit:'workflow', approvals:'workflow', followups:'workflow', };  // v3 Phase-47：Data（Database）与 Dashboard 是顶部直接按钮，不在侧边栏
 async function navigate(page,view){
   const item = page.locator(`#sidenav [data-nav="${view}"]`);
   if(NAV_GROUP_OF[view] && !(await item.isVisible())) await page.locator(`[data-nav-group="${NAV_GROUP_OF[view]}"]`).click();
@@ -232,18 +232,18 @@ try{
     for(const width of [390,701,768,1024]){
       await page.setViewportSize({width,height:844});
       await page.locator('[data-nav="home"]').focus();
-      for(const selector of ['[data-nav="home"]','[data-nav-group="workflow"]','[data-nav-group="data"]']){
+      for(const selector of ['[data-nav="home"]','[data-nav-group="workflow"]','#navtabs [data-nav="database"]','#navtabs [data-nav="dashboard"]']){
         const visible = await page.evaluate(selector=>{
           const button=document.querySelector(selector);
           const rect=button.getBoundingClientRect(),nav=document.getElementById('navtabs').getBoundingClientRect();
           return document.activeElement===button && rect.left>=nav.left-1 && rect.right<=nav.right+1;
         },selector);
         assert.ok(visible,`Focused ${selector} tab must be visible at ${width}px`);
-        if(selector!=='[data-nav-group="data"]') await page.keyboard.press('Tab');
+        if(selector!=='#navtabs [data-nav="dashboard"]') await page.keyboard.press('Tab');
       }
     }
     await page.keyboard.press('Enter');
-    assert.equal(await page.evaluate(()=>state.view),'database');  // Data 组默认打开 Database
+    assert.equal(await page.evaluate(()=>state.view),'dashboard');
   });
 
   await test('Native mobile swipes pan navigation in both directions without activation',{mobile:true,width:390,height:844},async(page,context)=>{
