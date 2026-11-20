@@ -189,7 +189,7 @@ python -m app.migrations graph-check --write-test   # 另在文档库 Sourcing C
 | PartNumber | 单行文本 | 首个零件号；多个时 `12345678 (+2)` |
 | PartDescription | 单行文本 | 首个零件描述 |
 | RecommendedSupplier | 单行文本 | 推荐供应商 |
-| Region / Project / Cluster / SourcingType / DecisionLevel | 单行文本 | 对应提交字段；Region 可多选，写成 `EU + NA` |
+| Region / Project / Cluster / SourcingType / DecisionLevel | 单行文本 | 对应提交字段；Region 可多选（AP / EU / NA / CLS，v3 Phase-48 加 CLS），写成 `EU + NA` |
 | PeakYearSpend / LifetimeSpend | 数字 | 合计金额（EUR，按提交时的 OP 汇率折算，1 EUR = X 外币、做除法；原币与汇率只存在驾驶舱里） |
 | Status | 单行文本 | 提交时状态（后续不回写） |
 | Submitter / SubmitterEmail / SubmittedAt / MeetingDate | 单行文本 | 提交人与会议信息 |

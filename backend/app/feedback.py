@@ -59,10 +59,11 @@ def decide(case: dict, task: dict, fb: dict, user: dict, decision: str, remark: 
         if final_doc_link and not logic.valid_http_url(final_doc_link):
             return "The Final PPT / Supporting Document Link must be a full URL (starting with http:// or https://)."
         others_closed = all(t.get("status") == "Closed" for t in case.get("followUps") or [] if t is not task)
+        # v3 Phase-50：链接、案例上的结案文件，或这条反馈本身带的附件（会议纪要、邮件），任一即可
         if (logic.closing_tasks_closes_case(case.get("meetingDecision")) and others_closed
-                and not (final_doc_link or (case.get("finalDocLink") or "").strip())):
+                and not logic.has_final_doc(case, final_doc_link) and not fb.get("files")):
             return ("Approving this closes the last open follow-up, which closes the case — "
-                    "enter the Final PPT / Supporting Document Link first.")
+                    "enter the Final PPT / Supporting Document Link or attach the file first.")
         if final_doc_link:
             case["finalDocLink"] = final_doc_link
         task["status"] = "Closed"

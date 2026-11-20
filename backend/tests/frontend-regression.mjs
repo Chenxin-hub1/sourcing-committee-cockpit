@@ -870,7 +870,7 @@ try{
       await page.locator('#fRegion').selectOption(region);
       return page.evaluate(()=>document.querySelector('.resultcount').textContent);
     };
-    assert.deepEqual(await page.locator('#fRegion option').allTextContents(),['Region: All','AP','EU','NA']);
+    assert.deepEqual(await page.locator('#fRegion option').allTextContents(),['Region: All','AP','EU','NA','CLS']);
     assert.equal(await shown('EU'),'2 cases');
     assert.equal(await shown('NA'),'1 case');
     assert.equal(await shown('AP'),'1 case');
@@ -2605,6 +2605,222 @@ try{
     await page.locator('#backToDb').click();
     assert.equal(await chipText(), 'Feedback to approve · 0 cases (0 feedback to approve)');
     assert.equal(await page.locator('tr[data-swat]').count(), 0);
+    await context.close();
+  });
+
+  // 页面时钟：2026-12-20（周日，服务器时区 America/New_York）。本周 = 只剩今天；下周 = 12-21 ~ 12-27；
+  // 7 天内 = 12-20 ~ 12-26；8–14 天 = 12-27 ~ 2027-01-02
+  const fuTask = (id, status, due, extra={}) => ({id, task:'Task '+id, status, responsible:'Andreas Huber', ownerName:'Andreas Huber',
+    ownerFunction:'Sales', dueDate:due, tags:[], notifyEmail:'x@example.com', cc:'', channel:'Email + Teams', ...extra});
+  const fuBase = {partDescription:'P', recommendedSupplier:'S', presenter:'O', cluster:'Metal', meetingYear:2026, meetingDecision:'APPROVED',
+    sourcingPresentationLink:'https://zf.sharepoint.com/p.pptx'};
+
+  await test('Follow-ups filter by Region (incl. CLS) and by due date; the filters travel to the Database (v3 Phase-48 / 49)', async()=>{
+    const {page, context} = await fixture({user:'user'});
+    await page.evaluate(({fuBase, tasks})=>{
+      applySnapshot({cases:[
+        mkCase({...fuBase, id:'C-CLS', swatId:'SWAT-CLS', partNumber:'1', weekNum:40, caseNumber:1, region:'EU + CLS', actionStatus:'Overdue', followUps:tasks.cls}),
+        mkCase({...fuBase, id:'C-AP', swatId:'SWAT-AP', partNumber:'2', weekNum:40, caseNumber:2, region:'AP', actionStatus:'Open', followUps:tasks.ap}),
+      ]});
+    }, {fuBase, tasks:{
+      cls:[fuTask('T-PAST','Overdue','2026-12-01'), fuTask('T-NONE','Open','—'), fuTask('T-TODAY','Open','2026-12-20')],
+      ap:[fuTask('T-NEXT','Open','2026-12-23'), fuTask('T-EMPTY','Open',''), fuTask('T-LATER','Open','2027-02-01'), fuTask('T-2WK','Open','2026-12-28')],
+    }});
+    await goTo(page, 'followups');
+    const rows = ()=> page.locator('tr[data-task-row]').evaluateAll(rs=>rs.map(r=>r.dataset.taskRow));
+    assert.deepEqual(await page.locator('#fFollowupRegion option').allTextContents(), ['Region: All','AP','EU','NA','CLS']);
+    assert.deepEqual(await page.locator('#fFollowupDue option').allTextContents(), ['Due: All','No due date','Past due date',
+      'Due this week (Dec 20)','Due next week (Dec 21 – Dec 27)','Due in 7 days (Dec 20 – Dec 26)','Due in 8–14 days (Dec 27 – Jan 2)']);
+    assert.deepEqual(await page.locator('#fFollowupDue optgroup').evaluateAll(gs=>gs.map(g=>[g.label, g.children.length])),
+      [['By calendar week',2],['By days from today',2]]);
+    // 截止日升序，没有截止日（"—" 或空）排最后
+    assert.deepEqual(await rows(), ['T-PAST','T-TODAY','T-NEXT','T-2WK','T-LATER','T-NONE','T-EMPTY']);
+    assert.equal(await page.locator('tr[data-task-row="T-NONE"] td:nth-child(6)').innerText(), '—');
+    assert.equal(await page.locator('tr[data-task-row="T-EMPTY"] td:nth-child(6)').innerText(), '—');
+    assert.equal(await page.locator('[data-due-edit]').count(), 0, 'A User cannot change due dates');
+    // 地区按所属案例的 Region：EU + CLS 的案例在 CLS 和 EU 下都出现
+    await page.locator('#fFollowupRegion').selectOption('CLS');
+    assert.deepEqual(await rows(), ['T-PAST','T-TODAY','T-NONE']);
+    await page.locator('#fFollowupRegion').selectOption('EU');
+    assert.deepEqual(await rows(), ['T-PAST','T-TODAY','T-NONE']);
+    await page.locator('#fFollowupRegion').selectOption('NA');
+    assert.equal(await page.locator('tr[data-task-row]').count(), 0);
+    await page.locator('#fFollowupRegion').selectOption('');
+    for(const [due, want] of [['none',['T-NONE','T-EMPTY']], ['past',['T-PAST']], ['week',['T-TODAY']], ['next',['T-NEXT']],
+                              ['d7',['T-TODAY','T-NEXT']], ['d14',['T-2WK']]]){
+      await page.locator('#fFollowupDue').selectOption(due);
+      assert.deepEqual(await rows(), want, due);
+    }
+    // 两个筛选一起带到 Database 的超期列表
+    await page.locator('#fFollowupDue').selectOption('past');
+    await page.locator('#fFollowupRegion').selectOption('CLS');
+    await page.locator('[data-fu-jump="overdue"]').click();
+    assert.equal(await page.locator('.task-filter-chip > span').textContent(), 'Overdue follow-ups · 1 case (1 overdue task) · Region: CLS · Past due date');
+    // 从 Dashboard 的格子进 Follow-ups 时清掉地区与截止日筛选
+    await page.evaluate(()=>applyKpiFilter('open'));
+    assert.deepEqual(await page.evaluate(()=>[state.followupRegion, state.followupDue]), ['', '']);
+    await context.close();
+  });
+
+  await test('Managers change a due date right in the Due cell on Follow-ups and on the case page (v3 Phase-49)', async()=>{
+    const puts = [];
+    let snapshotCases;
+    const {page, context} = await fixture({user:'manager', api:async(route, path)=>{
+      const m = path.match(/^\/api\/tasks\/([^/]+)\/due-date$/);
+      if(!m) return false;
+      const body = route.request().postDataJSON();
+      puts.push([route.request().method(), m[1], body]);
+      const cases = JSON.parse(JSON.stringify(snapshotCases));
+      const t = cases[0].followUps.find(x=>x.id===m[1]);
+      t.dueDate = body.dueDate; t.status = body.dueDate && body.dueDate < '2026-12-20' ? 'Overdue' : 'Open';
+      snapshotCases = cases;
+      await route.fulfill({json:{ok:true, task:t, snapshot:{cases}}});
+      return true;
+    }});
+    snapshotCases = await page.evaluate(({fuBase, tasks})=>{
+      applySnapshot({cases:[mkCase({...fuBase, id:'C-D', swatId:'SWAT-D', partNumber:'1', weekNum:40, caseNumber:1, actionStatus:'Open', followUps:tasks})]});
+      return JSON.parse(JSON.stringify(ALL_CASES));
+    }, {fuBase, tasks:[fuTask('T1','Open',''), fuTask('T2','Open','2027-01-10'), fuTask('T3','Closed','2026-11-01')]});
+    await goTo(page, 'followups');
+    await page.locator('#fFollowupStatus').selectOption('all');
+    assert.equal(await page.locator('[data-due-edit="T1"]').innerText(), 'Set date');
+    assert.equal(await page.locator('[data-due-edit="T3"]').count(), 0, 'Closed tasks keep a plain date');
+    await page.locator('[data-due-edit="T1"]').click();
+    assert.equal(await page.evaluate(()=>canRefresh()), false, 'Editing a due date pauses the automatic refresh');
+    await page.locator('#dueInput_T1').fill('2027-01-15');
+    await page.locator('[data-due-save="T1"]').click();
+    await page.locator('[data-due-edit="T1"]').waitFor();
+    assert.deepEqual(puts.at(-1), ['PUT', 'T1', {dueDate:'2027-01-15'}], 'Only the due date is sent');
+    assert.equal(await page.locator('[data-due-edit="T1"]').innerText(), '2027-01-15');
+    assert.match(await page.locator('#scToast').textContent(), /Due date set to 2027-01-15/);
+    // Esc 放弃，不发请求
+    await page.locator('[data-due-edit="T2"]').click();
+    await page.locator('#dueInput_T2').fill('2026-12-01');
+    await page.locator('#dueInput_T2').press('Escape');  // 第一下关掉点开时弹出的日历（浏览器原生）
+    await page.locator('#dueInput_T2').press('Escape');  // 第二下放弃修改
+    assert.equal(await page.evaluate(()=>document.activeElement?.dataset.dueEdit), 'T2', 'Focus returns to the Due button');
+    assert.equal(puts.length, 1);
+    assert.equal(await page.locator('[data-due-edit="T2"]').innerText(), '2027-01-10');
+    // 案例详情页：点 Due 不会展开 / 收起这一行，Enter 保存；改成过去的日期变 Overdue
+    await page.evaluate(()=>goToDetail('SWAT-D'));
+    await page.locator('tr.task-row[data-task-expand="T2"] [data-due-edit="T2"]').click();
+    assert.equal(await page.locator('tr.task-row.open').count(), 0);
+    await page.locator('#dueInput_T2').fill('2026-12-01');
+    await page.locator('#dueInput_T2').press('Escape');  // 先关掉弹出的日历，日期框里的值还在
+    await page.locator('#dueInput_T2').press('Enter');
+    await page.locator('[data-due-edit="T2"]').waitFor();
+    assert.deepEqual(puts.at(-1), ['PUT', 'T2', {dueDate:'2026-12-01'}]);
+    assert.match(await page.locator('tr.task-row[data-task-expand="T2"] td.task-due').getAttribute('class'), /due-overdue/);
+    // 清空即清掉截止日
+    await page.locator('[data-due-edit="T2"]').click();
+    await page.locator('#dueInput_T2').fill('');
+    await page.locator('[data-due-save="T2"]').click();
+    await page.locator('[data-due-edit="T2"]').waitFor();
+    assert.deepEqual(puts.at(-1), ['PUT', 'T2', {dueDate:''}]);
+    assert.equal(await page.locator('[data-due-edit="T2"]').innerText(), 'Set date');
+    await context.close();
+  });
+
+  await test('Closing the last follow-up accepts an uploaded file instead of a link: approval panel, Edit Case and the detail page (v3 Phase-50)', async()=>{
+    const calls = [];
+    let cases;
+    const file = (id, name)=>({id, name, size:10, uploadedBy:'NPI Person', uploadedAt:'Dec 20, 9:00 AM', store:'local'});
+    const {page, context} = await fixture({user:'manager', api:async(route, path)=>{
+      const method = route.request().method();
+      if(path==='/api/cases/C-F/final-files' && method==='POST'){
+        const name = new URL(route.request().url()).searchParams.get('name');
+        calls.push(['upload', name]);
+        cases = JSON.parse(JSON.stringify(cases));
+        (cases[0].finalDocFiles ||= []).push(file('F-'+calls.length, name));
+        await route.fulfill({json:{ok:true, file:cases[0].finalDocFiles.at(-1), case:cases[0], snapshot:{cases}}});
+        return true;
+      }
+      if(path.startsWith('/api/cases/C-F/final-files/') && method==='DELETE'){
+        calls.push(['delete', path.split('/').at(-1)]);
+        cases = JSON.parse(JSON.stringify(cases));
+        cases[0].finalDocFiles = cases[0].finalDocFiles.filter(f=>f.id!==path.split('/').at(-1));
+        await route.fulfill({json:{ok:true, case:cases[0], snapshot:{cases}}});
+        return true;
+      }
+      if(path==='/api/tasks/T2/feedback/FB-2/decision'){
+        calls.push(['decide', route.request().postDataJSON()]);
+        cases = JSON.parse(JSON.stringify(cases));
+        const t = cases[0].followUps[1];
+        t.status = 'Closed'; t.feedback[0].status = 'approved'; t.closure = {when:'Dec 20', by:'NPI Person', feedbackId:'FB-2'};
+        cases[0].actionStatus = 'Closed';
+        await route.fulfill({json:{ok:true, feedback:t.feedback[0], case:cases[0], snapshot:{cases}}});
+        return true;
+      }
+      if(path==='/api/cases/C-F' && method==='PUT'){
+        calls.push(['save', route.request().postDataJSON()]);
+        await route.fulfill({json:{ok:true, case:cases[0], snapshot:{cases}}});
+        return true;
+      }
+      return false;
+    }});
+    const fb = (id, files=[])=>({id, when:'Dec 19, 9:00 AM', by:'Test owner', text:'Re-presented KW40, see meeting minutes', files, status:'pending', notify:null, decision:null});
+    cases = await page.evaluate(({fuBase, tasks})=>{
+      applySnapshot({cases:[mkCase({...fuBase, id:'C-F', swatId:'SWAT-F', partNumber:'1', weekNum:40, caseNumber:1, actionStatus:'Open', followUps:tasks})]});
+      return JSON.parse(JSON.stringify(ALL_CASES));
+    }, {fuBase, tasks:[fuTask('T1','Closed','2026-12-01'), fuTask('T2','Open','2027-01-10', {feedback:[fb('FB-2')]})]});
+    await page.evaluate(()=>{ state.taskOpenIds.add('T2'); goToDetail('SWAT-F'); });
+    assert.match(await page.locator('.info-item:has-text("Final PPT / Supporting Document")').innerText(), /Not yet provided — required before the case can be closed \(a link or a file\)/);
+    await page.locator('[data-decision-open="FB-2"]').click();
+    const panel = page.locator('#fbDecision_FB-2');
+    assert.match(await panel.locator('label:has-text("Final PPT / Supporting Document")').innerText(), /\*/);
+    assert.match(await panel.innerText(), /attach the file — e\.g\. the meeting minutes or the email/);
+    // 选了 .exe 被拦，不发请求
+    await page.locator('#fbFinalFiles_FB-2').setInputFiles([{name:'tool.exe', mimeType:'application/octet-stream', buffer:Buffer.from('x')}]);
+    await panel.locator('[data-decision="approved"]').click();
+    assert.match(await page.locator('#fbDecErr_FB-2').textContent(), /tool\.exe: only PowerPoint, PDF, Excel, Word or Outlook email/);
+    assert.equal(calls.length, 0);
+    // 会议纪要 + 证明邮件：先存成案例的结案文件，再批准，链接留空
+    await page.locator('#fbFinalFiles_FB-2').setInputFiles([
+      {name:'KW40 MM.xlsx', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer:Buffer.from('x')},
+      {name:'Re closure.msg', mimeType:'application/vnd.ms-outlook', buffer:Buffer.from('x')}]);
+    await panel.locator('[data-decision="approved"]').click();
+    await page.locator('#fbDecision_FB-2').waitFor({state:'detached'});
+    assert.deepEqual(calls, [['upload','KW40 MM.xlsx'], ['upload','Re closure.msg'], ['decide', {decision:'approved', remark:'', finalDocLink:''}]]);
+    const finalCell = page.locator('.info-item:has-text("Final PPT / Supporting Document")');
+    assert.deepEqual(await finalCell.locator('.file-list a').allTextContents(), ['KW40 MM.xlsx','Re closure.msg']);
+
+    // 编辑页：链接栏下面列出结案文件、可删、可再加；没有链接也能保存全关的案例
+    await page.locator('#editCaseBtn').click();
+    assert.doesNotMatch(await page.locator('label:has-text("Final PPT / Supporting Document Link")').innerText(), /\*/);
+    page.once('dialog', d=>d.accept());
+    await page.locator('[data-final-remove="F-1"]').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-final-remove="F-1"]'));
+    assert.deepEqual(calls.at(-1), ['delete','F-1']);
+    await page.locator('#finalFileInput').setInputFiles([{name:'Final.pdf', mimeType:'application/pdf', buffer:Buffer.from('x')}]);
+    await page.waitForFunction(()=>document.querySelectorAll('[data-final-remove]').length===2);
+    assert.deepEqual(calls.at(-1), ['upload','Final.pdf']);
+    await page.locator('#saveCaseBtn').click();
+    await page.waitForFunction(()=>!state.detailEditMode);
+    assert.equal(calls.at(-1)[0], 'save');
+    assert.equal(calls.at(-1)[1].finalDocLink, '');
+    await context.close();
+  });
+
+  await test('An approval where the feedback already carries a file needs nothing more, and the detail page shows that evidence (v3 Phase-50)', async()=>{
+    const {page, context} = await fixture({user:'manager'});
+    await page.evaluate(({fuBase, tasks})=>{
+      applySnapshot({cases:[mkCase({...fuBase, id:'C-G', swatId:'SWAT-G', partNumber:'1', weekNum:40, caseNumber:1, actionStatus:'Open', followUps:tasks})]});
+      state.taskOpenIds.add('T2'); goToDetail('SWAT-G');
+    }, {fuBase, tasks:[fuTask('T2','Open','2027-01-10', {feedback:[{id:'FB-9', when:'Dec 19', by:'Test owner', text:'Done', status:'pending', decision:null, notify:null,
+        files:[{id:'F-9', name:'proof.msg', size:10, uploadedBy:'Test owner', uploadedAt:'Dec 19'}]}]})]});
+    await page.locator('[data-decision-open="FB-9"]').click();
+    const panel = page.locator('#fbDecision_FB-9');
+    assert.doesNotMatch(await panel.locator('label:has-text("Final PPT / Supporting Document")').innerText(), /\*/);
+    assert.match(await panel.innerText(), /The file attached to this feedback counts as the supporting document\./);
+    // 关闭后（closure 指向这条反馈），详情页的 Final PPT 格列出这份附件
+    await page.evaluate(()=>{
+      const c = ALL_CASES.find(x=>x.id==='C-G'), t = c.followUps[0];
+      t.status = 'Closed'; t.feedback[0].status = 'approved'; t.closure = {when:'Dec 20', by:'NPI Person', feedbackId:'FB-9'}; c.actionStatus = 'Closed';
+      state.decisionOpenId = null; render();
+    });
+    const cell = page.locator('.info-item:has-text("Final PPT / Supporting Document")');
+    assert.match(await cell.innerText(), /Evidence attached to the approved follow-up feedback/);
+    assert.deepEqual(await cell.locator('.file-list a').allTextContents(), ['proof.msg']);
     await context.close();
   });
 

@@ -24,6 +24,8 @@ from .config import get_settings
 
 ACTION_TAGS = ["Cost", "Volume", "Timing", "Quality", "Capacity", "Commercial Terms", "Compliance / Documentation"]
 # 反馈 PPT 第 4 页：待办的固定分类（编辑页只提供这八个；ACTION_TAGS 是种子数据里的旧标签，旧任务上保留显示）
+# 案例地区，按这个顺序存成 "AP + EU + NA + CLS"。v3 Phase-48（领导 2026-11-20）：加 CLS，排在最后，旧数据的写法不变
+REGION_CODES = ("AP", "EU", "NA", "CLS")
 ACTION_CATEGORIES = ["CQA", "Volume", "Technical", "Timing", "Supplier strategy", "BPG", "Saving", "Further VAVE"]
 # v3 Phase-18（领导：去掉手点分类，回到自由文本标签，由系统按关键词归类）。
 # 规则：任务 / 标签 / 备注里出现关键词即归入该分类；一个待办可落多类，顺序按 ACTION_CATEGORIES。
@@ -545,6 +547,27 @@ def closing_tasks_closes_case(decision: str | None) -> bool:
     return decision != "PENDING"
 
 
+def closing_evidence(case: dict) -> list[dict]:
+    """v3 Phase-50：关闭待办时被批准的那条反馈带的附件（会议纪要、邮件等），同样算结案凭证。"""
+    out: list[dict] = []
+    for task in case.get("followUps") or []:
+        closing_id = (task.get("closure") or {}).get("feedbackId")
+        for fb in task.get("feedback") or []:
+            if closing_id and fb.get("id") == closing_id:
+                out.extend(fb.get("files") or [])
+    return out
+
+
+def has_final_files(case: dict) -> bool:
+    """v3 Phase-50：案例上传过结案文件（finalDocFiles），或关闭待办的反馈带了附件。"""
+    return bool(case.get("finalDocFiles")) or bool(closing_evidence(case))
+
+
+def has_final_doc(case: dict, link: str = "") -> bool:
+    """规则 2 满足与否：这次给的链接、案例已有的链接，或上面的文件，任一即可（v3 Phase-50 之前只认链接）。"""
+    return bool(link.strip() or (case.get("finalDocLink") or "").strip() or has_final_files(case))
+
+
 def email_for(name: str | None) -> str:
     if not name:
         return ""
@@ -703,11 +726,13 @@ def seed_presentation_links(cases: list[dict]) -> None:
 # ============================= 详情编辑：三条规则与合并 =============================
 
 
-def case_edit_problems(b: dict, *, imported: bool = False, has_files: bool = False) -> list[str]:
+def case_edit_problems(b: dict, *, imported: bool = False, has_files: bool = False,
+                       has_final_files: bool = False) -> list[str]:
     """编辑保存的全部问题（v3 Phase-19：一次列全，不再修一条弹一条），文案与前端 saveCaseBtn 一致。
 
     imported=True（v3 Phase-17，从周会 Excel 导入的历史案例）：Excel 里没有演示文稿链接，规则 1 不强求。
-    has_files=True（v3 Phase-19）：案例上已有上传 / 挂接的演示文件，等同于提供了演示文稿，规则 1 满足。"""
+    has_files=True（v3 Phase-19）：案例上已有上传 / 挂接的演示文件，等同于提供了演示文稿，规则 1 满足。
+    has_final_files=True（v3 Phase-50）：案例上已有结案文件或关闭待办的反馈附件，规则 2 满足。"""
     out: list[str] = []
     presentation = (b.get("sourcingPresentationLink") or "").strip()
     final_doc = (b.get("finalDocLink") or "").strip()
@@ -728,18 +753,21 @@ def case_edit_problems(b: dict, *, imported: bool = False, has_files: bool = Fal
     for i, task in enumerate(follow_ups, start=1):
         if task.get("status") != "Closed" and not (task.get("notifyEmail") or "").strip():
             out.append(f'Follow-up task {i}: enter a valid "Send reminder to" email, so the reminder reaches someone.')
-    # 规则 2：全部待办 Closed（案例闭环）必须有最终文件链接；Pending 案例不算结案（v3 Phase-41）。
-    if closing_tasks_closes_case(b.get("meetingDecision")) and rollup_action_status(follow_ups) == "Closed" and not final_doc:
+    # 规则 2：全部待办 Closed（案例闭环）必须有最终文件——链接或上传的文件（v3 Phase-50）；Pending 案例不算结案（v3 Phase-41）。
+    if (closing_tasks_closes_case(b.get("meetingDecision")) and rollup_action_status(follow_ups) == "Closed"
+            and not final_doc and not has_final_files):
         out.append("All follow-up actions are now Closed, which closes the case — "
-                   "enter the Final PPT / Supporting Document Link first.")
+                   "enter the Final PPT / Supporting Document Link or attach the file first.")
     if final_doc and not valid_http_url(final_doc):
         out.append("The Final PPT / Supporting Document Link must be a full URL (starting with http:// or https://).")
     return out
 
 
-def validate_case_edit(b: dict, *, imported: bool = False, has_files: bool = False) -> str | None:
+def validate_case_edit(b: dict, *, imported: bool = False, has_files: bool = False,
+                       has_final_files: bool = False) -> str | None:
     """全部问题换行连接；None 表示通过。"""
-    return "\n".join(case_edit_problems(b, imported=imported, has_files=has_files)) or None
+    return "\n".join(case_edit_problems(b, imported=imported, has_files=has_files,
+                                         has_final_files=has_final_files)) or None
 
 
 def year_week(case: dict) -> tuple[int | None, int]:
@@ -789,8 +817,9 @@ def _settle_task(task: dict, previous: dict, today: str) -> None:
         if key in previous:
             task[key] = deepcopy(previous[key])
     days_until = _days_until_due(today, task.get("dueDate"))
-    if task.get("status") in ("Open", "Overdue") and days_until is not None:
-        task["status"] = "Overdue" if days_until < 0 else "Open"
+    if task.get("status") in ("Open", "Overdue"):
+        # 没有截止日就谈不上逾期：清空截止日后回到 Open（与 set_task_due_date 一致）
+        task["status"] = "Overdue" if days_until is not None and days_until < 0 else "Open"
     task["categories"] = categorize_task(task)  # v3 Phase-18：分类由关键词判定，标签是自由文本
 
 
@@ -806,10 +835,19 @@ def task_edit_problems(case: dict, task_id: str, fields: dict) -> list[str]:
         out.append('Enter a valid "Send reminder to" email, so the reminder reaches someone.')
     tasks = [fields if t.get("id") == task_id else t for t in case.get("followUps") or []]
     if (closing_tasks_closes_case(case.get("meetingDecision")) and rollup_action_status(tasks) == "Closed"
-            and not (case.get("finalDocLink") or "").strip()):
-        out.append("This closes the last open follow-up of the case — enter the Final PPT / Supporting Document Link "
-                   "on the case page first (Edit Case), then close this task.")
+            and not has_final_doc(case)):
+        out.append("This closes the last open follow-up of the case — add the Final PPT / Supporting Document "
+                   "(link or file) on the case page first (Edit Case), then close this task.")
     return out
+
+
+def set_task_due_date(case: dict, task: dict, due: str) -> None:
+    """v3 Phase-49：只改截止日；未关闭的按新日期重判 Open / Overdue（没有截止日即 Open），重算案例 actionStatus。"""
+    task["dueDate"] = due if due and due != "—" else ""
+    if task.get("status") != "Closed":
+        days_until = _days_until_due(today_iso(), task["dueDate"])
+        task["status"] = "Overdue" if days_until is not None and days_until < 0 else "Open"
+    case["actionStatus"] = rollup_action_status(case["followUps"])
 
 
 def apply_task_edit(case: dict, task_id: str, fields: dict) -> dict:
@@ -984,10 +1022,11 @@ def is_case_submitter(case: dict, submissions: list[dict], email: str) -> bool:
 
 
 def iter_attachments(cases: list[dict], submissions: list[dict]):
-    """全部附件记录：案例与登记单的 files，加待办反馈的证据（v3 Phase-14）。登记单确认后同一条记录也在案例上。"""
+    """全部附件记录：案例与登记单的 files、案例的结案文件（v3 Phase-50），加待办反馈的证据（v3 Phase-14）。登记单确认后同一条记录也在案例上。"""
     for record in (*cases, *submissions):
         yield from record.get("files") or []
     for case in cases:
+        yield from case.get("finalDocFiles") or []  # v3 Phase-50：结案文件
         for task in case.get("followUps") or []:
             for fb in task.get("feedback") or []:
                 yield from fb.get("files") or []
@@ -1036,6 +1075,10 @@ def run_daily_reminder_check(cases: list[dict], settings: dict, log: list[dict],
                 continue
             days_until = _days_until_due(today, t.get("dueDate"))
             if days_until is None:
+                # 没有截止日就谈不上逾期：旧数据里停在 Overdue 的改回 Open（用户 2026-11-20 定）；也不发提醒
+                if t.get("status") == "Overdue":
+                    t["status"] = "Open"
+                    changed.add(c["id"])
                 continue
             if days_until < 0 and t.get("status") == "Open":
                 t["status"] = "Overdue"

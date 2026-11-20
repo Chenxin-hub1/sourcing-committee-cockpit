@@ -32,6 +32,7 @@
 - 领导反馈（2026-10-29，Pending 案例的待办）：上过会但批准前还有待办的案例保持 Pending 也能保存待办；这些待办和其他待办一样进 Follow-ups、驾驶舱统计、提醒和纪要 Excel；Pending 案例的待办全关不算结案、不要求 Final PPT。
 - Teams 评论（2026-11-02 收到截图）：Follow-ups 顶部的 "N overdue" / "N feedback to approve" 可点，Database 只列这些待办所在的案例（Follow-ups 的筛选一起带过去），点进案例对应待办自动展开；Follow-ups 页不再有 "Reminders sent automatically" 日志表，日志也不再下发给浏览器；Dashboard 不再有汇率与登记截止卡，Sourcing admin 在提交页这两张卡上点 Edit 修改，保存不丢正在填的登记。
 - 用户 2026-11-03（BU Sourcing Meeting 门槛幻灯片）：Decision Level 按 bundle Lifetime Spend 换算成欧元自动定——≥ €1,500,000 为 Level 2、€750,000 至不到 €1,500,000 为 Level 3、不到 €750,000 为 Level 4；登记页不能手选，FRA 要求跟着算出的级别；编辑页改了金额级别跟着变，只有 Sourcing admin 能手选别的级别，级别与门槛对不上时页面提示；已有案例不动。
+- 领导反馈（2026-11-20，截图转述）：Follow-ups 页能按地区（AP / EU / NA / CLS，按所属案例的 Region）和截止日（No due date / Past due date；按日历周 Due this week / Due next week；按从今天起的天数 Due in 7 days / Due in 8–14 days）筛选；Manager 在 Follow-ups 页与案例详情页的 Due 格子里直接改截止日；关最后一条待办（结案）时贴链接或上传文件（会议纪要、Outlook 邮件等）都行，被批准的反馈本身带附件也算。
 - 用户 2026-11-11（Dashboard 截图）：Dashboard 的 Action Status 下面单独列出 Saving related / BPG related / CQA related 三个数字（所选年份或周里还没关闭的待办，按现有自动分类），有超期的标红并写出几条；点一个数字到 Follow-ups 页，只看该分类未关闭的待办。
 
 ## Phase-1: 表单简化（反馈第一批）
@@ -443,5 +444,41 @@ Description: 用户 2026-11-17 发来顶部导航截图："Can we move the dashb
 实现（2026-11-17，index.html）：`NAV_GROUPS` 只留 workflow 组；顶部 Data 改成 `data-nav="database"` 直接按钮（在 Database 页和案例详情页高亮），后面加 `data-nav="dashboard"` 按钮。删掉只为 Data 侧边栏服务的代码：Database / Dashboard 的侧边栏图标与状态行（"142 cases"、"2026 overview"），以及窗口不到 1440px 时 Database 侧边栏让位给表格的 `is-wide` 样式（Database 没有侧边栏了）；手机宽度下流程侧边栏收紧的样式改成不依赖 `is-wide`。后端未改。
 
 验证（2026-11-17）：前端回归 60（导航那条改为：顶部顺序 Home / Case Workflow / Data / Dashboard / Accounts，点 Data、Dashboard 各自高亮且无侧边栏，1280px 宽的 Database 无侧边栏而 Submit 仍有，案例详情高亮 Data）、滚动回归 17（键盘 Tab 依次走到 Data、Dashboard 按钮且在导航条内可见）；临时实例 8063（本地库副本，SharePoint / 邮件 / Teams 全关）截图核对 Dashboard 页与 Data 页（`.playwright-mcp/phase47-dashboard.png`、`phase47-data.png`）。pytest 未跑（没有改 Python）。
+
+Spec: non-spec
+
+## Phase-48: 地区加 CLS，Follow-ups 页按地区筛选
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-11-20（截图转述）："能不能在follow ups to track这一页……加上region EU, AP, NA, CLS to filter"。用户 2026-11-20 定：待办按所属案例的 Region 归地区；CLS 加成第 4 个案例地区（登记页、编辑页可勾，推翻 2026-09-29 "CLS 不加区域"），老案例要有人手动补勾 CLS 才筛得出来；所有 Manager 都能审批、改全部地区的待办（不按地区分权限）。
+
+实现（2026-11-20）：地区常量收到 `logic.REGION_CODES = ("AP", "EU", "NA", "CLS")`，CLS 排最后，旧数据的 "EU + NA" 写法不变；`schemas._regions`、纪要排序 `exports.REGION_ORDER`、周会 Excel 导入 `excel_import.normalize_region` / `merge_regions` 都用它（Excel 里写 CLS 的地区也认得，项目名 "CLS8 Program" 不算）。前端 `REGIONS` 加 CLS，登记页 / 编辑页的地区勾选框、Database 的 Region 筛选、Dashboard 按地区计数随之多一项。Follow-ups 筛选栏在 Owner 后加 "Region: All"（`state.followupRegion`，按所属案例的 Region 包含匹配，`followupItems` 与 Database 跳转共用），点顶部数字跳 Database 时带过去、标签写 "Region: CLS"；从 Dashboard 格子进 Follow-ups 时清掉。权限未改。
+
+验证（2026-11-20，三个 Phase 一起）：pytest 661（含编辑页清空截止日、每日检查都把没截止日的 Overdue 改回 Open）（新增 tests/test_phase48_50.py 14 项）、前端回归 64（新增 4 条，改 1 条）、滚动回归 17、ruff 全过；临时实例 8063（本地库副本，SharePoint / 邮件 / Teams 全关）实物：SWAT-10555 改成 EU + CLS 后 Follow-ups 选 CLS 只剩它；Due 格子 "Set date" 点开存成 2026-12-04；只上传 `KW40 MM.xlsx` 与一封 `.msg`、链接留空批准最后一条待办，案例 Closed，详情页 Final PPT 格列出两份文件；394px 宽案例页与 Follow-ups 无横向滚动（截图 `.playwright-mcp/phase48-followups-cls.png`、`phase49-due-editing.png`、`phase50-detail-final-files.png`）。
+
+Spec: non-spec
+
+## Phase-49: 截止日直接点改、按截止日筛选
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-11-20（截图转述）："regional mangers可以 approve 并且 update due date……approve好像有了，是不是能update due date"；截图圈出详情页待办表里全是 "—" 的 Due 列。现状：Manager 在 Follow-ups 页点 Edit 就能改截止日（Phase-29）。用户 2026-11-20 定：Follow-ups 页与案例详情页的 Due 格子 Manager 直接点日期改，再加一个截止日筛选。筛选的档位：先是我默认的四档（No due date / Past due date / Due this week / Due next week，周一起算，"本周" 指今天到周日、不含已超期的）；用户 2026-11-20 看了解释后要“按周”和“按天数”都有，选定一个下拉框分两组：By calendar week（本周 / 下周）、By days from today（Due in 7 days = 今天起 0～6 天、Due in 8–14 days = 7～13 天），每档后面写出具体日期（如 "Due this week (Nov 20 – Nov 22)"）。
+
+实现（2026-11-20）：新接口 `PUT /api/tasks/{id}/due-date {dueDate}`（Manager 及以上，`TaskDueDateIn`）只改截止日一个字段——不像 Edit 那样带整条待办，旧页面的其他字段不会覆盖别人刚改的；`logic.set_task_due_date` 未关闭的按新日期重判 Open / Overdue（清掉截止日回到 Open）；用户 2026-11-20 让顺手修编辑页的老问题：`logic._settle_task` 原来没有截止日就不重判，编辑页清空截止日后停在 Overdue，现在同样回到 Open；服务器上已有几条没截止日却停在 Overdue 的旧待办（用户 2026-11-20 在服务器 Follow-ups 页看到），用户让把每日检查也改了：`run_daily_reminder_check`（及前端 `runDailyReminderCheck`）遇到没有截止日的 Overdue 改回 Open、重算案例 actionStatus，不发提醒。每日检查按参考时区一天一次，部署当天已跑过的话第二天生效；想立刻生效可让 Sourcing admin 在 Reminders 页点一次保存设置（会强制重跑，不改开关），已关闭的保持 Closed，重算案例 actionStatus。不查收件邮箱（只改日期不影响提醒能否发出）。前端 `dueCellHtml`：Manager 看到可点的日期（没有日期显示 "Set date"，铅笔用 CSS 画，格子文字仍是纯日期），点了变成日期框并弹出浏览器日历，Save / Enter 保存、Cancel / Esc 放弃（日历开着时第一下 Esc / Enter 先关日历），焦点回到日期按钮；编辑中暂停每小时刷新；普通用户与已关闭的待办只显示日期。案例详情页点 Due 不会展开 / 收起这一行。Follow-ups 筛选栏加 "Due: All"（`state.followupDue`，`DUE_FILTERS` / `dueMatches`），同样带到 Database 标签。顺带：排序与显示把空字符串的截止日也当 "—"（之前空值排在最前、显示空白）。
+
+验证（2026-11-20，三个 Phase 一起）：pytest 661（含编辑页清空截止日、每日检查都把没截止日的 Overdue 改回 Open）（新增 tests/test_phase48_50.py 14 项）、前端回归 64（新增 4 条，改 1 条）、滚动回归 17、ruff 全过；临时实例 8063（本地库副本，SharePoint / 邮件 / Teams 全关）实物：SWAT-10555 改成 EU + CLS 后 Follow-ups 选 CLS 只剩它；Due 格子 "Set date" 点开存成 2026-12-04；只上传 `KW40 MM.xlsx` 与一封 `.msg`、链接留空批准最后一条待办，案例 Closed，详情页 Final PPT 格列出两份文件；394px 宽案例页与 Follow-ups 无横向滚动（截图 `.playwright-mcp/phase48-followups-cls.png`、`phase49-due-editing.png`、`phase50-detail-final-files.png`）。
+
+Spec: non-spec
+
+## Phase-50: 关最后一条待办（结案）可上传文件代替链接
+
+Status: `awaiting-acceptance`
+
+Description: 领导 2026-11-20（截图转述）："这个case followup action我怎么点不了approve"；"如果有好几个action item的话，close到最后一个action就会出现这个问题，我没办法上传文件比如Meeting minutes，或者邮件证明close，点不了按钮关不了"。原因：批准最后一条未关闭的待办等于结案，规则 2 要求先填 `http(s)://` 开头的 Final PPT / Supporting Document Link，审批框里没有上传文件的地方。用户 2026-11-20 定：链接或上传文件都行——审批框与案例编辑页都能直接上传文件（PPT / PDF / Excel / Word / Outlook 邮件 .msg / .eml，存进案例），或被批准的这条反馈本身带了附件，都算满足；贴链接照旧可以。
+
+实现（2026-11-20）：案例记录新增 `finalDocFiles`（文件记录，与演示文件 `files` 分开，不当演示文稿用）。接口 `POST /api/cases/{rowId}/final-files`（Manager 及以上，类型同反馈凭证 `files.FEEDBACK_EXTENSIONS`，保留原文件名不按案例改名，每案例最多 10 个）与 `DELETE …/final-files/{fileId}`（已结案的案例删掉唯一的最终文件时 422，先补链接或别的文件）；存放、下载、删除案例时一并删除都沿用 Phase-5 / 27（`iter_attachments` 带上结案文件）。规则 2 的判断统一成 `logic.has_final_doc`：这次的链接、案例已有的链接、`finalDocFiles`，或关闭待办时被批准的反馈带的附件（`closing_evidence`），任一即可；案例编辑（`case_edit_problems(has_final_files=…)`）、Follow-ups 单条编辑（`task_edit_problems`，提示改成 "add … (link or file) on the case page"）、反馈审批（`feedback.decide`，另认这条反馈自己的附件）三处共用。前端：审批框的 Final PPT 栏改成链接框 + "or attach" 文件选择（`finalDocDecisionHtml`），已有最终文件或反馈带附件时不再标星并写明原因；点 Approve 先逐个上传成结案文件再批准，非法类型前端先拦。编辑页 Final PPT 链接下面列出结案文件（可 Remove）、关闭待办的反馈附件，和 "Attach file…"（上传即生效，未保存的编辑不丢，同 Phase-19）；保存前的规则 2 检查同步。详情页 "Final PPT / Supporting Document" 格列出链接、结案文件与关闭时的反馈附件（`finalDocViewHtml`）。manager-quick-start 同步。
+
+验证（2026-11-20，三个 Phase 一起）：pytest 661（含编辑页清空截止日、每日检查都把没截止日的 Overdue 改回 Open）（新增 tests/test_phase48_50.py 14 项）、前端回归 64（新增 4 条，改 1 条）、滚动回归 17、ruff 全过；临时实例 8063（本地库副本，SharePoint / 邮件 / Teams 全关）实物：SWAT-10555 改成 EU + CLS 后 Follow-ups 选 CLS 只剩它；Due 格子 "Set date" 点开存成 2026-12-04；只上传 `KW40 MM.xlsx` 与一封 `.msg`、链接留空批准最后一条待办，案例 Closed，详情页 Final PPT 格列出两份文件；394px 宽案例页与 Follow-ups 无横向滚动（截图 `.playwright-mcp/phase48-followups-cls.png`、`phase49-due-editing.png`、`phase50-detail-final-files.png`）。
 
 Spec: non-spec

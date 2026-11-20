@@ -50,12 +50,13 @@ Viewing does not require login. Submitting does.
 - **Save Changes**. **Dashboard → Minutes** exports the minutes plus an Actions sheet.
 
 **Follow-ups page**
-- Open and overdue tasks across all cases. Filter by status, year, category, function or owner.
+- Open and overdue tasks across all cases. Filter by status, year, category, function, owner, **region** (the case's Region: AP, EU, NA or CLS) or **due date** (no due date, past due date; by calendar week — due this week, due next week; or by days from today — due in 7 days, due in 8–14 days. Each option shows its dates).
 - Owners are shown by full name: the account name when the owner is a registered email, otherwise the name read from the email (andreas.huber1@… → Andreas Huber). Reminders still go to the email.
 - Click **n overdue** or **n feedback to approve** in the summary line at the top: the Database lists just those cases (your Follow-ups filters carry over; ✕ on the label shows all cases again). Opening a case from that list shows those tasks expanded, with **Approve / Reject** right there.
 - **Edit** on a row changes that one task in place — no need to open the case.
+- To change only the due date, click the date (or **Set date**) in the Due column — here or in the case's follow-up table — pick a date and **Save**. Clearing it removes the due date.
 - Anyone can post progress on a task (text + attachment, e.g. an Outlook .msg). You get "n feedback to approve": **Approve** closes the task, **Reject** needs a remark and keeps it open.
-- Closing the last open task closes the case and asks for the **Final PPT / Supporting Document Link**.
+- Closing the last open task closes the case and asks for the **Final PPT / Supporting Document**: paste the link, or attach the file right there (PowerPoint, PDF, Excel, Word or Outlook .msg / .eml — e.g. the meeting minutes or the email confirming the closure). If the feedback you approve already has an attachment, that counts too.
 - **Send reminder** sends a manual reminder to the owner. Until IT connects the mail relay, reminders are logged as "skipped" and nothing is sent — chase by email meanwhile.
 
 ## 4. Messages you may see

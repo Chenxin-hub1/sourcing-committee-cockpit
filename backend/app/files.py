@@ -98,8 +98,8 @@ def upload_root() -> Path:
     return Path(get_settings().upload_dir)
 
 
-def check_room(record: dict) -> None:
-    if len(record.get("files") or []) >= MAX_FILES_PER_RECORD:
+def check_room(record: dict, key: str = "files") -> None:
+    if len(record.get(key) or []) >= MAX_FILES_PER_RECORD:
         raise HTTPException(422, f"A registration can carry at most {MAX_FILES_PER_RECORD} files. "
                                  "Remove one before adding another.")
 

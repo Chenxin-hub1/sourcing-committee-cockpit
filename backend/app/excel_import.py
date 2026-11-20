@@ -309,12 +309,12 @@ def normalize_level(text: str) -> str:
 
 def normalize_region(text: str) -> str:
     upper = _clean(text).upper()
-    codes = [c for c in ("AP", "EU", "NA") if re.search(rf"\b{c}\b", upper)]
+    codes = [c for c in logic.REGION_CODES if re.search(rf"\b{c}\b", upper)]
     return " + ".join(codes) if codes else _line(text)
 
 
 def merge_regions(values: list[str]) -> str:
-    codes = [c for c in ("AP", "EU", "NA") if any(re.search(rf"\b{c}\b", v.upper()) for v in values)]
+    codes = [c for c in logic.REGION_CODES if any(re.search(rf"\b{c}\b", v.upper()) for v in values)]
     return " + ".join(codes) if codes else next((v for v in values if v), "")
 
 

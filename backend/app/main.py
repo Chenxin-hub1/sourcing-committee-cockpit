@@ -58,6 +58,7 @@ from .schemas import (
     RejectIn,
     ReminderSettingsIn,
     SubmissionIn,
+    TaskDueDateIn,
     TaskEditIn,
     UserUpdateIn,
 )
@@ -659,7 +660,9 @@ async def save_case(row_id: str, b: CaseEditIn, user: Manager) -> dict:
         edit["decisionLevel"] = logic.edit_decision_level(
             case, edit, admin_choice=user.get("role") == "admin" and "decisionLevel" in b.model_fields_set)
         # v3 Phase-19：全部问题一次返回；案例上已有演示文件即满足"演示文稿"规则
-        problems = logic.case_edit_problems(edit, imported=excel_import.is_imported(case), has_files=bool(case.get("files")))
+        # v3 Phase-50：案例上已有结案文件（或关闭待办的反馈附件）即满足"最终文件"规则
+        problems = logic.case_edit_problems(edit, imported=excel_import.is_imported(case), has_files=bool(case.get("files")),
+                                            has_final_files=logic.has_final_files(case))
         if commodity_problem := logic.commodity_problem(case, edit["commodity"]):
             problems.append(commodity_problem)
         # 只有请求真的带了商务字段才覆盖（model_fields_set），旧客户端 / 只改决议的保存不动它们
@@ -762,6 +765,19 @@ async def save_task(task_id: str, b: TaskEditIn) -> dict:
         await service.upsert_case(session, case)
         await session.commit()
         return {"ok": True, "task": edited, "snapshot": service.snapshot(state)}
+
+
+@app.put("/api/tasks/{task_id}/due-date", dependencies=[Depends(require_manager)])
+async def save_task_due_date(task_id: str, b: TaskDueDateIn) -> dict:
+    """v3 Phase-49：Due 格子里直接改截止日。只动这一个字段（不带整条待办，免得旧页面的其他字段覆盖别人刚改的），
+    未关闭的待办按新日期重判 Open / Overdue，清掉截止日回到 Open。"""
+    async with SessionLocal() as session, _write_lock:
+        state = await service.load_state(session)
+        case, task = _find_task(state, task_id)
+        logic.set_task_due_date(case, task, b.dueDate)
+        await service.upsert_case(session, case)
+        await session.commit()
+        return {"ok": True, "task": task, "snapshot": service.snapshot(state)}
 
 
 @app.post("/api/action-items/extract", dependencies=[Depends(require_manager)])
@@ -991,6 +1007,52 @@ async def delete_case_file(row_id: str, file_id: str) -> dict:
             if any(f.get("id") == file_id for f in sub.get("files") or []):
                 sub["files"] = [f for f in sub["files"] if f.get("id") != file_id]
                 await service.upsert_submission(session, sub)
+        await session.commit()
+        snap = service.snapshot(state)
+    await files.remove(record)
+    return {"ok": True, "case": case, "snapshot": snap}
+
+
+@app.post("/api/cases/{row_id}/final-files")
+async def upload_final_file(row_id: str, request: Request, user: Manager, name: str = Query(max_length=300)) -> dict:
+    """v3 Phase-50：结案文件（最终 PPT、会议纪要、证明邮件等），与 Final PPT 链接二选一满足规则 2。
+    类型与待办反馈的凭证相同（另允许 Outlook 邮件），保留原文件名，不按案例改名。"""
+    clean = files.checked_name(name, files.FEEDBACK_EXTENSIONS)
+    async with SessionLocal() as session, _write_lock:
+        case = next((c for c in (await service.load_state(session))["cases"] if c["id"] == row_id), None)
+        if case is None:
+            raise HTTPException(404, f"Case row {row_id} not found.")
+        files.check_room(case, "finalDocFiles")
+    tmp, size = await files.receive(request)
+    record = await files.store(tmp, clean, size, request.headers.get("content-type", ""), case.get("swatId", ""), user["name"])
+    async with SessionLocal() as session, _write_lock:
+        state = await service.load_state(session)
+        case = next((c for c in state["cases"] if c["id"] == row_id), None)
+        if case is None or len(case.get("finalDocFiles") or []) >= files.MAX_FILES_PER_RECORD:
+            await files.remove(record)
+            raise HTTPException(409, f"Case row {row_id} changed while the file was uploading. Please reload and try again.")
+        case.setdefault("finalDocFiles", []).append(record)
+        await service.upsert_case(session, case)
+        await session.commit()
+        return {"ok": True, "file": record, "case": case, "snapshot": service.snapshot(state)}
+
+
+@app.delete("/api/cases/{row_id}/final-files/{file_id}", dependencies=[Depends(require_manager)])
+async def delete_final_file(row_id: str, file_id: str) -> dict:
+    """v3 Phase-50：删一份结案文件；已结案的案例删了就没有任何最终文件时拒绝（先补链接或别的文件）。"""
+    async with SessionLocal() as session, _write_lock:
+        state = await service.load_state(session)
+        case = next((c for c in state["cases"] if c["id"] == row_id), None)
+        record = next((f for f in (case or {}).get("finalDocFiles") or [] if f.get("id") == file_id), None)
+        if case is None or record is None:
+            raise HTTPException(404, "File not found on this case.")
+        left = {**case, "finalDocFiles": [f for f in case["finalDocFiles"] if f.get("id") != file_id]}
+        if (logic.closing_tasks_closes_case(case.get("meetingDecision"))
+                and logic.rollup_action_status(case.get("followUps")) == "Closed" and not logic.has_final_doc(left)):
+            raise HTTPException(422, "This case is closed and this is its only final document — add the "
+                                     "Final PPT / Supporting Document Link or another file before removing it.")
+        case["finalDocFiles"] = left["finalDocFiles"]
+        await service.upsert_case(session, case)
         await session.commit()
         snap = service.snapshot(state)
     await files.remove(record)

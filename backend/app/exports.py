@@ -203,7 +203,7 @@ def _write_formula(ws, r: int, col: int, formula: str, fmt: str | None) -> None:
 # v3 Phase-28（领导 2026-10-15）：每周内 L2 → L3 → L4（L4 只是 for info，不用会上 review）→ 未填级别，
 # 同级按地区 AP → EU → NA → 未填；多区域案例按勾选里最靠前的地区归组
 LEVEL_ORDER = ("Level 2", "Level 3", "Level 4")
-REGION_ORDER = ("AP", "EU", "NA")
+REGION_ORDER = logic.REGION_CODES
 
 
 def _rank(value: str, order: tuple[str, ...]) -> int:

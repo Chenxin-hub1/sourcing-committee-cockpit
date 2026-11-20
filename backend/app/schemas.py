@@ -18,6 +18,8 @@ from pydantic import (
     model_validator,
 )
 
+from . import logic
+
 MAX_SAFE_INTEGER = 2**53 - 1
 EMAIL_RE = re.compile(r'^[^@\s<>,;:"\\]+@[^@\s<>,;:"\\]+\.[^@\s<>,;:"\\]+$')
 
@@ -43,7 +45,7 @@ def _email(value: str) -> str:
     return value
 
 
-REGION_CODES = ("AP", "EU", "NA")
+REGION_CODES = logic.REGION_CODES
 
 
 def _regions(value: object) -> str:
@@ -59,7 +61,7 @@ def _regions(value: object) -> str:
     picked = {p.strip() for p in parts if p.strip()}
     unknown = picked - set(REGION_CODES)
     if unknown:
-        raise ValueError(f"Unknown region: {', '.join(sorted(unknown))}. Use AP, EU or NA.")
+        raise ValueError(f"Unknown region: {', '.join(sorted(unknown))}. Use AP, EU, NA or CLS.")
     return " + ".join(code for code in REGION_CODES if code in picked)
 
 
@@ -242,6 +244,12 @@ class TaskEditIn(FollowUpIn):
     """v3 Phase-29：Follow-ups 页单条编辑；待办 id 取自路径。"""
 
     id: Text = ""
+
+
+class TaskDueDateIn(In):
+    """v3 Phase-49：只改一条待办的截止日（Follow-ups 页 / 案例详情页的 Due 格子）；空 = 清掉截止日。"""
+
+    dueDate: Annotated[Text, AfterValidator(_due_date)] = ""
 
 
 class CaseEditIn(CommercialIn):
